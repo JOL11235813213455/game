@@ -1,0 +1,9 @@
+services:
+  game:
+    build: .
+    env_file: .env
+    # Uncomment below to enable display forwarding on Linux (for running pygame in Docker)
+    # environment:
+    #   - DISPLAY=${DISPLAY}
+    # volumes:
+    #   - /tmp/.X11-unix:/tmp/.X11-unix

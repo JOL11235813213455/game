@@ -1,0 +1,15 @@
+iniconfig==2.3.0
+numpy==2.4.4
+packaging==26.0
+pandas==3.0.1
+pillow==12.1.1
+pluggy==1.6.0
+pygame-ce==2.5.7
+Pygments==2.20.0
+pyscroll==2.31
+pytest==9.0.2
+python-dateutil==2.9.0.post0
+python-dotenv==1.2.2
+PyTMX==3.32
+ruff==0.15.8
+six==1.17.0
