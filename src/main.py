@@ -11,7 +11,6 @@ SCREEN_HEIGHT = int(os.getenv("SCREEN_HEIGHT", 720))
 FPS = 300  # int(os.getenv("FPS", 60))
 DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 
-
 BLOCK_SIZE = 40
 MOVE_DELAY = 150  # ms between grid steps when key is held
 
