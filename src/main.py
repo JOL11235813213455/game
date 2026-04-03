@@ -5,8 +5,9 @@ import random
 import pygame
 from dotenv import load_dotenv
 
-from class_maps import Map, MapKey, Tile
-from class_creature import Creature
+from classes.maps import Map, MapKey, Tile
+from classes.creature import Creature
+from classes.npc import NPC
 
 load_dotenv()
 
@@ -24,7 +25,6 @@ COLOR_NESTED    = (180, 140, 60)
 COLOR_EXIT      = (75, 115, 195)   # inverse of COLOR_NESTED
 COLOR_PLAYER    = (100, 180, 255)
 COLOR_GRID      = (50, 50, 50)
-
 
 def make_map(cols, rows, nested_map=None):
     tiles = {}
@@ -79,8 +79,16 @@ def main():
     nested_map = make_map(cols, rows)
     game_map = make_map(cols, rows, nested_map=nested_map)
 
-    player = Creature(current_map=game_map)
-    player.x, player.y = game_map.entrance
+    from classes.creature import Stat
+
+    def on_level_up(creature, old_level, new_level):
+        creature.stats[Stat.MHP] = creature.stats.get(Stat.MHP, 100) + 10
+        creature.stats[Stat.CHP] = creature.stats.get(Stat.MHP, 100)
+
+    player = Creature(current_map=game_map, location=MapKey(0, *game_map.entrance, 0))
+    player.on_level_up.append(on_level_up)
+
+    npc = NPC(current_map=game_map, location=MapKey(0, *game_map.exit, 0))
 
     last_move = 0
 
@@ -105,10 +113,19 @@ def main():
                 player.move(dx, dy, cols, rows)
                 last_move = now
 
+        for npc in NPC.all():
+            if npc.current_map is player.current_map:
+                npc.update(now, cols, rows)
+
         screen.fill((30, 30, 30))
         draw_map(screen, player.current_map, cols, rows, BLOCK_SIZE, has_parent=bool(player.map_stack))
 
-        player_rect = pygame.Rect(player.x * BLOCK_SIZE, player.y * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE)
+        for npc in NPC.all():
+            if npc.current_map is player.current_map:
+                npc_rect = pygame.Rect(npc.location.x * BLOCK_SIZE, npc.location.y * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE)
+                pygame.draw.rect(screen, (220, 80, 80), npc_rect)
+
+        player_rect = pygame.Rect(player.location.x * BLOCK_SIZE, player.location.y * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE)
         pygame.draw.rect(screen, COLOR_PLAYER, player_rect)
 
         if DEBUG:

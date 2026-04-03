@@ -1,31 +1,28 @@
 from __future__ import annotations
 from collections import namedtuple
 from enum import Enum
-import weakref
+from classes.trackable import Trackable
+from classes.inventory import Inventory
 
 MapKey = namedtuple("MapKey",["w","x","y","z"],defaults=[0,0,0,0])
 
-class Tile:
-    _instances = weakref.WeakSet()
+class Tile(Trackable):
     def __init__(
         self
         ,map:Map=None
         ,walkable:bool=True
         ,covered:bool=False
         ,walls_nesw:tuple=(0,0,0,0)
+        ,items:list=[]
         ):
-        Tile._instances.add(self)
+        super().__init__()
         self.walkable=walkable
         self.covered=covered
         self.walls_nesw=walls_nesw
         self.nested_map: Map = map
-        
-    @classmethod
-    def all(cls):
-        return list(cls._instances)
+        self.inventory = Inventory(items=items)
 
-class Map:
-    _instances = weakref.WeakSet()
+class Map(Trackable):
     def __init__(
         self
         ,tile_set: dict[MapKey, Tile] = {}
@@ -36,20 +33,7 @@ class Map:
         ,y_minmax: tuple[int, int] = (-16, 16)
         ,z_minmax: tuple[int, int] = (-16, 16)
         ):
+        super().__init__()
         self.tiles = tile_set
         self.entrance = entrance
         self.exit = exit
-    
-    @classmethod
-    def all(cls):
-        return list(cls._instances)
-    
-    def go_west(
-        self
-        ,start_tile
-        ,end_tile
-        ):
-        pass
-
-
-
