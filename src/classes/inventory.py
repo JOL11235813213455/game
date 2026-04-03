@@ -45,6 +45,7 @@ _ITEM_DEFAULTS = dict(
     ,poison         = False
     ,equippable     = True
     ,slots          = [Slot.HAND_L]
+    ,slot_count     = 1
     ,consumable     = False
     ,stackable      = False
     ,quantity       = 1

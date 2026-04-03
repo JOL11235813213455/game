@@ -1,7 +1,7 @@
 from __future__ import annotations
 from enum import Enum
 import random
-from classes.maps import Map, MapKey
+from classes.maps import Map, MapKey, BOUND_TRAVERSABLE, DIRECTION_BOUNDS
 from classes.inventory import Inventory
 from classes.trackable import Trackable
 from classes.levels import level_from_exp, cumulative_exp
@@ -12,6 +12,7 @@ class Stat(Enum):
     EXP             = 'cumulative xp'
     MHP             = 'max health'
     CHP             = 'health'
+
     STR             = 'strength'
     INT             = 'intelligence'
     LCK             = 'luck'
@@ -25,24 +26,31 @@ def level_up_heal(creature, old_level, new_level):
     con = creature.stats.get(Stat.CON, 0)
     roll = random.randint(1, hd) + con
     creature.stats[Stat.MHP] = creature.stats.get(Stat.MHP, 0) + roll
-    creature.stats[Stat.CHP] = int(creature.stats[Stat.MHP] * 0.75)
+    creature.stats[Stat.CHP] = int(creature.stats[Stat.MHP] * 1)
 
 class Creature(Trackable):
     def __init__(
         self
         ,current_map: Map
         ,location: MapKey = MapKey()
+        ,name: str = None
+        ,species: str = None
         ,stats: dict = {}
         ,items: list = []
         ):
         super().__init__()
         self.current_map = current_map
         self.location = location
-        self.stats = {**stats}
+        self.name = name
+        self.species = species
+        from data.species import SPECIES
+        species_stats = SPECIES.get(species, {}) if species else {}
+        self.stats = {Stat.MHP: 1, Stat.CHP: 1, **species_stats, **stats}
         self._reconcile_exp_level()
         self.inventory = Inventory(items=items)
         self.map_stack: list[tuple[Map, MapKey]] = []
         self.on_level_up: list[callable] = [level_up_heal]
+        self.hostile = False
 
     def _reconcile_exp_level(self):
         has_exp = Stat.EXP in self.stats
@@ -67,9 +75,17 @@ class Creature(Trackable):
     def move(self, dx: int, dy: int, cols: int, rows: int):
         nx = max(0, min(cols - 1, self.location.x + dx))
         ny = max(0, min(rows - 1, self.location.y + dy))
+        current_tile = self.current_map.tiles.get(self.location)
         target = self.current_map.tiles.get(MapKey(self.location.w, nx, ny, self.location.z))
-        if target and target.walkable:
-            self.location = self.location._replace(x=nx, y=ny)
+        if not (target and target.walkable):
+            return
+        if current_tile and (dx, dy) in DIRECTION_BOUNDS:
+            exit_attr, entry_attr = DIRECTION_BOUNDS[(dx, dy)]
+            exit_bound = getattr(current_tile.bounds, exit_attr)
+            entry_bound = getattr(target.bounds, entry_attr)
+            if not BOUND_TRAVERSABLE[exit_bound] or not BOUND_TRAVERSABLE[entry_bound]:
+                return
+        self.location = self.location._replace(x=nx, y=ny)
 
     def enter(self):
         tile = self.current_map.tiles.get(self.location)
@@ -80,7 +96,6 @@ class Creature(Trackable):
             return True
         return False
 
-
     def exit(self):
         entrance = MapKey(0, *self.current_map.entrance, 0)
         if self.location == entrance:
@@ -88,19 +103,3 @@ class Creature(Trackable):
                 self.current_map, self.location = self.map_stack.pop()
                 return True
         return False
-
-    def transfer_item(self, item, source: Inventory, target: Inventory):
-        tile = self.current_map.tiles.get(self.location)
-        accessible = [self.inventory]
-        if tile:
-            accessible.append(tile.inventory)
-            for creature in Creature.all():
-                if creature is not self and creature.current_map is self.current_map and creature.location == self.location:
-                    accessible.append(creature.inventory)
-        if source not in accessible or target not in accessible:
-            return False
-        if item not in source.items:
-            return False
-        source.items.remove(item)
-        target.items.append(item)
-        return True

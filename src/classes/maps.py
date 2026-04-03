@@ -6,19 +6,52 @@ from classes.inventory import Inventory
 
 MapKey = namedtuple("MapKey",["w","x","y","z"],defaults=[0,0,0,0])
 
+class Bound(Enum):
+    NONE        = None
+    WALL        = 'wall'
+    OPENING     = 'opening'
+    DOOR_OPEN   = 'door_open'
+    DOOR_CLOSED = 'door_closed'
+    GATE_OPEN   = 'gate_open'
+    GATE_CLOSED = 'gate_closed'
+
+Bounds = namedtuple("Bounds",["n","s","e","w","ne","nw","se","sw"],defaults=[Bound.NONE]*8)
+
+BOUND_TRAVERSABLE: dict[Bound, bool] = {
+    Bound.NONE:         True
+    ,Bound.OPENING:     True
+    ,Bound.DOOR_OPEN:   True
+    ,Bound.DOOR_CLOSED: False
+    ,Bound.GATE_OPEN:   True
+    ,Bound.GATE_CLOSED: False
+    ,Bound.WALL:        False
+    }
+
+# Maps (dx,dy) to (exit_attr_on_current, entry_attr_on_target)
+DIRECTION_BOUNDS: dict[tuple, tuple[str, str]] = {
+    ( 0,-1): ('n','s')
+    ,( 0, 1): ('s','n')
+    ,( 1, 0): ('e','w')
+    ,(-1, 0): ('w','e')
+    ,( 1,-1): ('ne','sw')
+    ,(-1,-1): ('nw','se')
+    ,( 1, 1): ('se','nw')
+    ,(-1, 1): ('sw','ne')
+    }
+
 class Tile(Trackable):
     def __init__(
         self
         ,map:Map=None
         ,walkable:bool=True
         ,covered:bool=False
-        ,walls_nesw:tuple=(0,0,0,0)
+        ,bounds:Bounds=Bounds()
         ,items:list=[]
         ):
         super().__init__()
         self.walkable=walkable
         self.covered=covered
-        self.walls_nesw=walls_nesw
+        self.bounds=bounds
         self.nested_map: Map = map
         self.inventory = Inventory(items=items)
 
@@ -27,7 +60,6 @@ class Map(Trackable):
         self
         ,tile_set: dict[MapKey, Tile] = {}
         ,entrance: tuple[int, int] = (0, 0)
-        ,exit: tuple[int, int] = (0, 0)
         ,w_minmax: tuple[int, int] = (0, 0)
         ,x_minmax: tuple[int, int] = (-16, 16)
         ,y_minmax: tuple[int, int] = (-16, 16)
@@ -36,4 +68,3 @@ class Map(Trackable):
         super().__init__()
         self.tiles = tile_set
         self.entrance = entrance
-        self.exit = exit

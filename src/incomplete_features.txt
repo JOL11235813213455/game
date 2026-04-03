@@ -1,0 +1,30 @@
+INCOMPLETE FEATURES
+===================
+
+TILE (classes/maps.py)
+- bounds (Bounds namedtuple): declared but not yet used in rendering or movement logic
+- covered: declared but has no effect on gameplay
+
+MAP (classes/maps.py)
+- w_minmax, x_minmax, y_minmax, z_minmax: accepted as constructor params but never assigned or enforced
+
+CREATURE STATS (classes/creature.py)
+- STR, INT, LCK, PER, CHR, AGL: defined in Stat enum but have no effect on any mechanic
+- CON: used in level_up_heal but never set on any creature by default
+- HD: used in level_up_heal but never set on any creature by default
+
+ITEMS (classes/inventory.py)
+- damage, defense: defined but no combat system to consume them
+- health: defined but no consume/use mechanic
+- poison: defined but no poison mechanic
+- durability / durability_current: defined but never decremented or checked
+- value, weight: defined but no economy or encumbrance system
+- equippable, slots: no equip/unequip logic exists
+- consumable, stackable, quantity: mechanics not implemented
+
+CREATURE METHODS (classes/creature.py)
+- transfer_item(): implemented but never called in main.py
+
+NPC (classes/npc.py)
+- _instances WeakSet redeclaration is redundant — Trackable handles this via __init_subclass__
+- _think() only does random movement — no pathfinding, aggro, patrol, or dialogue
