@@ -2,16 +2,12 @@ INCOMPLETE FEATURES
 ===================
 
 TILE (classes/maps.py)
-- bounds (Bounds namedtuple): declared but not yet used in rendering or movement logic
-- covered: declared but has no effect on gameplay
-
-MAP (classes/maps.py)
+- covered: declared but has no effect on gameplay or rendering
 - w_minmax, x_minmax, y_minmax, z_minmax: accepted as constructor params but never assigned or enforced
 
 CREATURE STATS (classes/creature.py)
-- STR, INT, LCK, PER, CHR, AGL: defined in Stat enum but have no effect on any mechanic
-- CON: used in level_up_heal but never set on any creature by default
-- HD: used in level_up_heal but never set on any creature by default
+- STR, INT, LCK, PER, CHR, AGL: set via species stat blocks but consumed by no mechanic
+- hostile: added to Creature but nothing reads it; no aggro or combat system
 
 ITEMS (classes/inventory.py)
 - damage, defense: defined but no combat system to consume them
@@ -19,7 +15,7 @@ ITEMS (classes/inventory.py)
 - poison: defined but no poison mechanic
 - durability / durability_current: defined but never decremented or checked
 - value, weight: defined but no economy or encumbrance system
-- equippable, slots: no equip/unequip logic exists
+- equippable, slots, slot_count: no equip/unequip logic exists
 - consumable, stackable, quantity: mechanics not implemented
 
 CREATURE METHODS (classes/creature.py)
@@ -28,3 +24,10 @@ CREATURE METHODS (classes/creature.py)
 NPC (classes/npc.py)
 - _instances WeakSet redeclaration is redundant — Trackable handles this via __init_subclass__
 - _think() only does random movement — no pathfinding, aggro, patrol, or dialogue
+- name/species fields exist on Creature but NPC never uses them for behavior
+
+SAVE/LOAD (save.py)
+- load() will crash if save.pkl does not exist; no error handling
+
+SPRITES (data/sprites.py / main.py)
+- player_sprite and npc_sprite are built at startup but not rebuilt after load(); sprites still render correctly but are decoupled from the restored player object

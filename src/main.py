@@ -9,8 +9,8 @@ from classes.maps import Map, MapKey, Tile
 from classes.creature import Creature, Stat
 from classes.npc import NPC
 from classes.levels import exp_for_level
-from data.sprites import make_surface, PLAYER_PIXELS, PLAYER_PALETTE, NPC_PIXELS, NPC_PALETTE
 from save import save, load
+from data.db import load as load_db
 
 load_dotenv()
 
@@ -97,6 +97,7 @@ def draw_menu(surface, selected):
 
 
 def main():
+    load_db()
     pygame.init()
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
     pygame.display.set_caption("Game")
@@ -111,9 +112,6 @@ def main():
     player = Creature(current_map=game_map, location=MapKey(0, *game_map.entrance, 0), stats={Stat.CON: 10})
 
     npc = NPC(current_map=game_map)
-
-    player_sprite = make_surface(PLAYER_PIXELS, PLAYER_PALETTE, BLOCK_SIZE)
-    npc_sprite    = make_surface(NPC_PIXELS,    NPC_PALETTE,    BLOCK_SIZE)
 
     font = pygame.font.SysFont(None, 28)
     last_move = 0
@@ -175,11 +173,11 @@ def main():
         screen.fill((30, 30, 30))
         draw_map(screen, player.current_map, cols, rows, BLOCK_SIZE, has_parent=bool(player.map_stack))
 
-        for npc in NPC.all():
-            if npc.current_map is player.current_map:
-                screen.blit(npc_sprite, (npc.location.x * BLOCK_SIZE, npc.location.y * BLOCK_SIZE))
-
-        screen.blit(player_sprite, (player.location.x * BLOCK_SIZE, player.location.y * BLOCK_SIZE))
+        renderables = [player] + [npc for npc in NPC.all() if npc.current_map is player.current_map]
+        for obj in sorted(renderables, key=lambda o: o.z_index):
+            surface = obj.make_surface(BLOCK_SIZE)
+            if surface:
+                screen.blit(surface, (obj.location.x * BLOCK_SIZE, obj.location.y * BLOCK_SIZE))
 
         lvl = player.stats.get(Stat.LVL, 0)
         chp = player.stats.get(Stat.CHP, 0)

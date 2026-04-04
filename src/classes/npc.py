@@ -3,9 +3,10 @@ from classes.creature import Creature, Stat
 from classes.maps import Map, MapKey
 import random
 
-
 class NPC(Creature):
-    _instances = __import__('weakref').WeakSet()
+    _instances  = __import__('weakref').WeakSet()
+    sprite_name = 'npc'
+    z_index     = 2
 
     def __init__(
         self

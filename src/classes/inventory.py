@@ -1,6 +1,7 @@
 from __future__ import annotations
 from enum import Enum
 from classes.trackable import Trackable
+from classes.world_object import WorldObject
 
 
 class ItemType(Enum):
@@ -53,7 +54,8 @@ _ITEM_DEFAULTS = dict(
     ,durability_current = 100
     )
 
-class Item(Trackable):
+class Item(WorldObject):
+    z_index = 1
     def __init__(self, **kwargs):
         super().__init__()
         for key, value in kwargs.items():

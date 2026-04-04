@@ -3,7 +3,7 @@ from enum import Enum
 import random
 from classes.maps import Map, MapKey, BOUND_TRAVERSABLE, DIRECTION_BOUNDS
 from classes.inventory import Inventory
-from classes.trackable import Trackable
+from classes.world_object import WorldObject
 from classes.levels import level_from_exp, cumulative_exp
 
 class Stat(Enum):
@@ -28,7 +28,10 @@ def level_up_heal(creature, old_level, new_level):
     creature.stats[Stat.MHP] = creature.stats.get(Stat.MHP, 0) + roll
     creature.stats[Stat.CHP] = int(creature.stats[Stat.MHP] * 1)
 
-class Creature(Trackable):
+class Creature(WorldObject):
+    sprite_name = 'player'
+    z_index     = 3
+
     def __init__(
         self
         ,current_map: Map
@@ -38,9 +41,7 @@ class Creature(Trackable):
         ,stats: dict = {}
         ,items: list = []
         ):
-        super().__init__()
-        self.current_map = current_map
-        self.location = location
+        super().__init__(current_map=current_map, location=location)
         self.name = name
         self.species = species
         from data.species import SPECIES
