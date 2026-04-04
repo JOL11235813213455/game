@@ -18,8 +18,7 @@ DB_PATH = str(Path(__file__).parent / 'src' / 'data' / 'game.db')
 # ---------------------------------------------------------------------------
 # Hardcoded enum values (keep editor self-contained)
 # ---------------------------------------------------------------------------
-ITEM_TYPES   = ['weapon', 'armor', 'consumable', 'key', 'misc']
-STATES       = ['solid', 'liquid', 'gas', 'plasma']
+ITEM_CLASSES = ['item', 'stackable', 'consumable', 'ammunition', 'equippable', 'weapon', 'wearable']
 SLOTS        = ['head', 'neck', 'shoulders', 'chest', 'back', 'wrists', 'hands',
                 'waist', 'legs', 'feet', 'ring_l', 'ring_r', 'hand_l', 'hand_r']
 STATS        = ['strength', 'constitution', 'intelligence', 'agility',
@@ -33,6 +32,18 @@ STAT_LABELS  = {
     'charisma':      'CHR',
     'luck':          'LCK',
     'hit dice':      'HD',
+}
+
+# Fields shown per item class (in addition to base fields shown for all)
+CLASS_FIELDS = {
+    'item':        [],
+    'stackable':   ['max_stack_size', 'quantity'],
+    'consumable':  ['max_stack_size', 'quantity', 'duration'],
+    'ammunition':  ['max_stack_size', 'quantity', 'damage', 'destroy_on_use_probability'],
+    'equippable':  ['slots', 'slot_count', 'durability_max', 'durability_current', 'render_on_creature'],
+    'weapon':      ['slots', 'slot_count', 'durability_max', 'durability_current', 'render_on_creature',
+                    'damage', 'attack_time_ms', 'directions', 'range', 'ammunition_type'],
+    'wearable':    ['slots', 'slot_count', 'durability_max', 'durability_current', 'render_on_creature'],
 }
 
 GRID_COLS    = 8
@@ -145,28 +156,34 @@ class SpritePreview(tk.Canvas):
 # ---------------------------------------------------------------------------
 
 class ItemsTab(ttk.Frame):
+
+    # All possible field widgets; shown/hidden based on selected class
+    _ALL_FIELDS = [
+        'key', 'name', 'description', 'weight', 'value', 'inventoriable',
+        'max_stack_size', 'quantity', 'duration', 'destroy_on_use_probability',
+        'damage', 'slots', 'slot_count', 'durability_max', 'durability_current',
+        'render_on_creature', 'attack_time_ms', 'directions', 'range',
+        'ammunition_type', 'sprite',
+    ]
+
     def __init__(self, parent):
         super().__init__(parent)
-        self._building = False
         self._build_ui()
         self.refresh_list()
 
-    # ---- UI construction --------------------------------------------------
-
     def _build_ui(self):
-        # Split pane: left list, right form
         pane = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
         pane.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
 
-        # --- Left list panel ---
-        left = ttk.Frame(pane, width=180)
+        # --- Left list ---
+        left = ttk.Frame(pane, width=200)
         pane.add(left, weight=0)
 
         ttk.Label(left, text='Items').pack(anchor='w')
         list_frame = ttk.Frame(left)
         list_frame.pack(fill=tk.BOTH, expand=True)
 
-        self.listbox = tk.Listbox(list_frame, exportselection=False, width=22)
+        self.listbox = tk.Listbox(list_frame, exportselection=False, width=24)
         sb = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=self.listbox.yview)
         self.listbox.configure(yscrollcommand=sb.set)
         self.listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -179,7 +196,7 @@ class ItemsTab(ttk.Frame):
         ttk.Button(btn_row, text='Save',   command=self._save).pack(side=tk.LEFT, padx=2)
         ttk.Button(btn_row, text='Delete', command=self._delete).pack(side=tk.LEFT, padx=2)
 
-        # --- Right form panel ---
+        # --- Right scrollable form ---
         right_outer = ttk.Frame(pane)
         pane.add(right_outer, weight=1)
 
@@ -191,159 +208,177 @@ class ItemsTab(ttk.Frame):
 
         self.form = ttk.Frame(canvas)
         self._form_window = canvas.create_window((0, 0), window=self.form, anchor='nw')
+        self.form.bind('<Configure>', lambda e: canvas.configure(scrollregion=canvas.bbox('all')))
+        canvas.bind('<Configure>', lambda e: canvas.itemconfig(self._form_window, width=e.width))
 
-        def _on_form_configure(e):
-            canvas.configure(scrollregion=canvas.bbox('all'))
-        def _on_canvas_configure(e):
-            canvas.itemconfig(self._form_window, width=e.width)
-
-        self.form.bind('<Configure>', _on_form_configure)
-        canvas.bind('<Configure>', _on_canvas_configure)
-
-        self._canvas = canvas
         self._build_form()
 
     def _build_form(self):
         f = self.form
-        row = 0
+        self._rows = {}   # field_name → (label_widget, widget_frame)
 
-        def label_entry(text, var, r):
-            ttk.Label(f, text=text).grid(row=r, column=0, sticky='w', padx=6, pady=2)
-            ttk.Entry(f, textvariable=var, width=30).grid(row=r, column=1, sticky='ew', padx=6, pady=2)
+        def add_row(field, label_text, widget_fn):
+            lbl = ttk.Label(f, text=label_text)
+            frm = ttk.Frame(f)
+            widget_fn(frm)
+            self._rows[field] = (lbl, frm)
 
-        # Text fields
+        # Class selector always visible at top
+        ttk.Label(f, text='Class', font=('TkDefaultFont', 9, 'bold')).grid(
+            row=0, column=0, sticky='w', padx=6, pady=4)
+        self.v_class = tk.StringVar(value='item')
+        cls_cb = ttk.Combobox(f, textvariable=self.v_class, values=ITEM_CLASSES,
+                              state='readonly', width=18)
+        cls_cb.grid(row=0, column=1, sticky='w', padx=6, pady=4)
+        cls_cb.bind('<<ComboboxSelected>>', lambda e: self._refresh_visible_fields())
+        self._class_row_count = 1
+
+        # Base fields
         self.v_key         = tk.StringVar()
         self.v_name        = tk.StringVar()
         self.v_description = tk.StringVar()
-        self.v_value       = tk.StringVar(value='0')
         self.v_weight      = tk.StringVar(value='0')
-        self.v_damage      = tk.StringVar(value='0')
-        self.v_defense     = tk.StringVar(value='0')
-        self.v_health      = tk.StringVar(value='0')
-        self.v_slot_count  = tk.StringVar(value='1')
+        self.v_value       = tk.StringVar(value='0')
+        self.v_inventoriable = tk.BooleanVar(value=True)
+
+        add_row('key',         'Key',         lambda p: ttk.Entry(p, textvariable=self.v_key, width=30).pack(anchor='w'))
+        add_row('name',        'Name',        lambda p: ttk.Entry(p, textvariable=self.v_name, width=30).pack(anchor='w'))
+        add_row('description', 'Description', lambda p: ttk.Entry(p, textvariable=self.v_description, width=40).pack(anchor='w'))
+        add_row('weight',      'Weight',      lambda p: ttk.Entry(p, textvariable=self.v_weight, width=10).pack(anchor='w'))
+        add_row('value',       'Value',       lambda p: ttk.Entry(p, textvariable=self.v_value, width=10).pack(anchor='w'))
+        add_row('inventoriable', 'Inventoriable', lambda p: ttk.Checkbutton(p, variable=self.v_inventoriable).pack(anchor='w'))
+
+        # Stackable fields
+        self.v_max_stack   = tk.StringVar(value='99')
         self.v_quantity    = tk.StringVar(value='1')
-        self.v_durability  = tk.StringVar(value='100')
-        self.v_dur_cur     = tk.StringVar(value='100')
+        add_row('max_stack_size', 'Max Stack',  lambda p: ttk.Entry(p, textvariable=self.v_max_stack, width=10).pack(anchor='w'))
+        add_row('quantity',       'Quantity',   lambda p: ttk.Entry(p, textvariable=self.v_quantity, width=10).pack(anchor='w'))
 
-        label_entry('Key',          self.v_key,         row); row += 1
-        label_entry('Name',         self.v_name,        row); row += 1
-        label_entry('Description',  self.v_description, row); row += 1
+        # Consumable
+        self.v_duration = tk.StringVar(value='0')
+        add_row('duration', 'Duration', lambda p: ttk.Entry(p, textvariable=self.v_duration, width=10).pack(anchor='w'))
 
-        # item_type dropdown
-        ttk.Label(f, text='Item Type').grid(row=row, column=0, sticky='w', padx=6, pady=2)
-        self.v_item_type = tk.StringVar(value=ITEM_TYPES[0])
-        ttk.Combobox(f, textvariable=self.v_item_type, values=ITEM_TYPES,
-                     state='readonly', width=20).grid(row=row, column=1, sticky='w', padx=6, pady=2)
-        row += 1
+        # Ammunition
+        self.v_destroy_prob = tk.StringVar(value='1.0')
+        add_row('destroy_on_use_probability', 'Destroy Prob.', lambda p: ttk.Entry(p, textvariable=self.v_destroy_prob, width=10).pack(anchor='w'))
 
-        # state dropdown
-        ttk.Label(f, text='State').grid(row=row, column=0, sticky='w', padx=6, pady=2)
-        self.v_state = tk.StringVar(value=STATES[0])
-        ttk.Combobox(f, textvariable=self.v_state, values=STATES,
-                     state='readonly', width=20).grid(row=row, column=1, sticky='w', padx=6, pady=2)
-        row += 1
+        # Equippable fields
+        self.v_slot_count       = tk.StringVar(value='1')
+        self.v_durability_max   = tk.StringVar(value='100')
+        self.v_durability_cur   = tk.StringVar(value='100')
+        self.v_render_on_creature = tk.BooleanVar(value=False)
 
-        label_entry('Value',             self.v_value,      row); row += 1
-        label_entry('Weight',            self.v_weight,     row); row += 1
-        label_entry('Damage',            self.v_damage,     row); row += 1
-        label_entry('Defense',           self.v_defense,    row); row += 1
-        label_entry('Health',            self.v_health,     row); row += 1
-        label_entry('Slot Count',        self.v_slot_count, row); row += 1
-        label_entry('Quantity',          self.v_quantity,   row); row += 1
-        label_entry('Durability',        self.v_durability, row); row += 1
-        label_entry('Durability Current',self.v_dur_cur,    row); row += 1
+        # Slots — checkboxes
+        self.slot_vars: dict[str, tk.BooleanVar] = {s: tk.BooleanVar() for s in SLOTS}
+        def _build_slots(p):
+            cols = 3
+            for i, slot in enumerate(SLOTS):
+                ttk.Checkbutton(p, text=slot, variable=self.slot_vars[slot]).grid(
+                    row=i // cols, column=i % cols, sticky='w', padx=4)
+        add_row('slots',             'Slots',             _build_slots)
+        add_row('slot_count',        'Slot Count',        lambda p: ttk.Entry(p, textvariable=self.v_slot_count, width=10).pack(anchor='w'))
+        add_row('durability_max',    'Durability Max',    lambda p: ttk.Entry(p, textvariable=self.v_durability_max, width=10).pack(anchor='w'))
+        add_row('durability_current','Durability Cur.',   lambda p: ttk.Entry(p, textvariable=self.v_durability_cur, width=10).pack(anchor='w'))
+        add_row('render_on_creature','Render on Creature',lambda p: ttk.Checkbutton(p, variable=self.v_render_on_creature).pack(anchor='w'))
 
-        # Checkboxes
-        self.v_poison      = tk.BooleanVar()
-        self.v_equippable  = tk.BooleanVar(value=True)
-        self.v_consumable  = tk.BooleanVar()
-        self.v_stackable   = tk.BooleanVar()
+        # Weapon fields
+        self.v_damage         = tk.StringVar(value='0')
+        self.v_attack_time    = tk.StringVar(value='500')
+        self.v_directions     = tk.StringVar(value='["front"]')
+        self.v_range          = tk.StringVar(value='1')
+        self.v_ammo_type      = tk.StringVar()
+        add_row('damage',         'Damage',         lambda p: ttk.Entry(p, textvariable=self.v_damage, width=10).pack(anchor='w'))
+        add_row('attack_time_ms', 'Attack Time ms', lambda p: ttk.Entry(p, textvariable=self.v_attack_time, width=10).pack(anchor='w'))
+        add_row('directions',     'Directions',     lambda p: ttk.Entry(p, textvariable=self.v_directions, width=30).pack(anchor='w'))
+        add_row('range',          'Range',          lambda p: ttk.Entry(p, textvariable=self.v_range, width=10).pack(anchor='w'))
+        add_row('ammunition_type','Ammo Type',      lambda p: ttk.Entry(p, textvariable=self.v_ammo_type, width=20).pack(anchor='w'))
 
-        chk_frame = ttk.Frame(f)
-        chk_frame.grid(row=row, column=0, columnspan=2, sticky='w', padx=6, pady=2); row += 1
-        ttk.Checkbutton(chk_frame, text='Poison',     variable=self.v_poison).pack(side=tk.LEFT, padx=4)
-        ttk.Checkbutton(chk_frame, text='Equippable', variable=self.v_equippable).pack(side=tk.LEFT, padx=4)
-        ttk.Checkbutton(chk_frame, text='Consumable', variable=self.v_consumable).pack(side=tk.LEFT, padx=4)
-        ttk.Checkbutton(chk_frame, text='Stackable',  variable=self.v_stackable).pack(side=tk.LEFT, padx=4)
-
-        # Slots multi-select
-        ttk.Label(f, text='Slots').grid(row=row, column=0, sticky='nw', padx=6, pady=2)
-        slot_frame = ttk.Frame(f)
-        slot_frame.grid(row=row, column=1, sticky='w', padx=6, pady=2); row += 1
-        self.slots_lb = tk.Listbox(slot_frame, selectmode=tk.MULTIPLE,
-                                   height=7, width=16, exportselection=False)
-        slots_sb = ttk.Scrollbar(slot_frame, orient=tk.VERTICAL, command=self.slots_lb.yview)
-        self.slots_lb.configure(yscrollcommand=slots_sb.set)
-        self.slots_lb.pack(side=tk.LEFT)
-        slots_sb.pack(side=tk.LEFT, fill=tk.Y)
-        for s in SLOTS:
-            self.slots_lb.insert(tk.END, s)
-
-        # Sprite selector + preview
-        ttk.Label(f, text='Sprite').grid(row=row, column=0, sticky='w', padx=6, pady=2)
-        sprite_frame = ttk.Frame(f)
-        sprite_frame.grid(row=row, column=1, sticky='w', padx=6, pady=2); row += 1
-
+        # Sprite
         self.v_sprite = tk.StringVar()
         self._sprite_names = [''] + fetch_sprite_names()
-        self.sprite_cb = ttk.Combobox(sprite_frame, textvariable=self.v_sprite,
-                                      values=self._sprite_names, state='readonly', width=18)
-        self.sprite_cb.pack(side=tk.LEFT, padx=(0, 8))
-        self.sprite_preview = SpritePreview(sprite_frame, size=PREVIEW_SIZE)
-        self.sprite_preview.pack(side=tk.LEFT)
-        self.sprite_cb.bind('<<ComboboxSelected>>', self._on_sprite_change)
+        def _build_sprite(p):
+            self.sprite_cb = ttk.Combobox(p, textvariable=self.v_sprite,
+                                          values=self._sprite_names, state='readonly', width=18)
+            self.sprite_cb.pack(side=tk.LEFT, padx=(0, 8))
+            self.sprite_preview = SpritePreview(p, size=PREVIEW_SIZE)
+            self.sprite_preview.pack(side=tk.LEFT)
+            self.sprite_cb.bind('<<ComboboxSelected>>', self._on_sprite_change)
+        add_row('sprite', 'Sprite', _build_sprite)
 
         f.columnconfigure(1, weight=1)
+        self._refresh_visible_fields()
 
-    # ---- helpers ----------------------------------------------------------
+    def _refresh_visible_fields(self):
+        cls = self.v_class.get()
+        visible = {'key', 'name', 'description', 'weight', 'value', 'inventoriable', 'sprite'}
+        visible.update(CLASS_FIELDS.get(cls, []))
+
+        row = self._class_row_count
+        for field in self._ALL_FIELDS:
+            lbl, frm = self._rows[field]
+            if field in visible:
+                lbl.grid(row=row, column=0, sticky='nw', padx=6, pady=2)
+                frm.grid(row=row, column=1, sticky='ew', padx=6, pady=2)
+                row += 1
+            else:
+                lbl.grid_remove()
+                frm.grid_remove()
 
     def _on_sprite_change(self, event=None):
         self.sprite_preview.load(self.v_sprite.get() or None)
 
-    def _int(self, var: tk.StringVar, default: int = 0) -> int:
+    def _float(self, var, default=0.0):
+        try:
+            return float(var.get())
+        except (ValueError, TypeError):
+            return default
+
+    def _int(self, var, default=0):
         try:
             return int(var.get())
-        except ValueError:
+        except (ValueError, TypeError):
             return default
 
     def refresh_list(self):
         con = get_con()
         try:
-            rows = con.execute('SELECT key FROM items ORDER BY key').fetchall()
+            rows = con.execute('SELECT key, class FROM items ORDER BY class, key').fetchall()
         finally:
             con.close()
         self.listbox.delete(0, tk.END)
         for r in rows:
-            self.listbox.insert(tk.END, r['key'])
+            self.listbox.insert(tk.END, f"[{r['class']}] {r['key']}")
 
     def refresh_sprite_dropdown(self):
         self._sprite_names = [''] + fetch_sprite_names()
         self.sprite_cb['values'] = self._sprite_names
 
     def _clear_form(self):
-        self._building = True
+        self.v_class.set('item')
         self.v_key.set('')
         self.v_name.set('')
         self.v_description.set('')
-        self.v_item_type.set(ITEM_TYPES[0])
-        self.v_state.set(STATES[0])
-        self.v_value.set('0')
         self.v_weight.set('0')
-        self.v_damage.set('0')
-        self.v_defense.set('0')
-        self.v_health.set('0')
-        self.v_slot_count.set('1')
+        self.v_value.set('0')
+        self.v_inventoriable.set(True)
+        self.v_max_stack.set('99')
         self.v_quantity.set('1')
-        self.v_durability.set('100')
-        self.v_dur_cur.set('100')
-        self.v_poison.set(False)
-        self.v_equippable.set(True)
-        self.v_consumable.set(False)
-        self.v_stackable.set(False)
-        self.slots_lb.selection_clear(0, tk.END)
+        self.v_duration.set('0')
+        self.v_destroy_prob.set('1.0')
+        for v in self.slot_vars.values():
+            v.set(False)
+        self.v_slot_count.set('1')
+        self.v_durability_max.set('100')
+        self.v_durability_cur.set('100')
+        self.v_render_on_creature.set(False)
+        self.v_damage.set('0')
+        self.v_attack_time.set('500')
+        self.v_directions.set('["front"]')
+        self.v_range.set('1')
+        self.v_ammo_type.set('')
         self.v_sprite.set('')
         self.sprite_preview.load(None)
-        self._building = False
+        self._refresh_visible_fields()
 
     def _populate_form(self, key: str):
         con = get_con()
@@ -351,48 +386,44 @@ class ItemsTab(ttk.Frame):
             row = con.execute('SELECT * FROM items WHERE key=?', (key,)).fetchone()
             if row is None:
                 return
-            slot_rows = con.execute(
-                'SELECT slot FROM item_slots WHERE item_key=?', (key,)
-            ).fetchall()
+            slot_rows = con.execute('SELECT slot FROM item_slots WHERE item_key=?', (key,)).fetchall()
         finally:
             con.close()
 
-        self._building = True
+        self.v_class.set(row['class'] or 'item')
         self.v_key.set(row['key'])
-        self.v_name.set(row['name'])
+        self.v_name.set(row['name'] or '')
         self.v_description.set(row['description'] or '')
-        self.v_item_type.set(row['item_type'])
-        self.v_state.set(row['state'])
-        self.v_value.set(str(row['value']))
-        self.v_weight.set(str(row['weight']))
-        self.v_damage.set(str(row['damage']))
-        self.v_defense.set(str(row['defense']))
-        self.v_health.set(str(row['health']))
-        self.v_slot_count.set(str(row['slot_count']))
-        self.v_quantity.set(str(row['quantity']))
-        self.v_durability.set(str(row['durability']))
-        self.v_dur_cur.set(str(row['durability_current']))
-        self.v_poison.set(bool(row['poison']))
-        self.v_equippable.set(bool(row['equippable']))
-        self.v_consumable.set(bool(row['consumable']))
-        self.v_stackable.set(bool(row['stackable']))
-
+        self.v_weight.set(str(row['weight'] or 0))
+        self.v_value.set(str(row['value'] or 0))
+        self.v_inventoriable.set(bool(row['inventoriable']))
+        self.v_max_stack.set(str(row['max_stack_size'] or 99))
+        self.v_quantity.set(str(row['quantity'] or 1))
+        self.v_duration.set(str(row['duration'] or 0))
+        self.v_destroy_prob.set(str(row['destroy_on_use_probability'] or 1.0))
         item_slots = {r['slot'] for r in slot_rows}
-        self.slots_lb.selection_clear(0, tk.END)
-        for i, s in enumerate(SLOTS):
-            if s in item_slots:
-                self.slots_lb.selection_set(i)
-
+        for slot, var in self.slot_vars.items():
+            var.set(slot in item_slots)
+        self.v_slot_count.set(str(row['slot_count'] or 1))
+        self.v_durability_max.set(str(row['durability_max'] or 100))
+        self.v_durability_cur.set(str(row['durability_current'] or 100))
+        self.v_render_on_creature.set(bool(row['render_on_creature'] or False))
+        self.v_damage.set(str(row['damage'] or 0))
+        self.v_attack_time.set(str(row['attack_time_ms'] or 500))
+        self.v_directions.set(row['directions'] or '["front"]')
+        self.v_range.set(str(row['range'] or 1))
+        self.v_ammo_type.set(row['ammunition_type'] or '')
         sprite = row['sprite_name'] or ''
         self.v_sprite.set(sprite)
         self.sprite_preview.load(sprite or None)
-        self._building = False
+        self._refresh_visible_fields()
 
     def _on_select(self, event=None):
         sel = self.listbox.curselection()
         if not sel:
             return
-        key = self.listbox.get(sel[0])
+        entry = self.listbox.get(sel[0])
+        key = entry.split('] ', 1)[-1]
         self._populate_form(key)
 
     def _new(self):
@@ -404,51 +435,53 @@ class ItemsTab(ttk.Frame):
         if not key:
             messagebox.showerror('Validation', 'Key is required.')
             return
-
-        selected_slots = [SLOTS[i] for i in self.slots_lb.curselection()]
+        selected_slots = [s for s, v in self.slot_vars.items() if v.get()]
         sprite = self.v_sprite.get().strip() or None
-
+        cls = self.v_class.get()
         con = get_con()
         try:
             con.execute(
                 '''INSERT INTO items
-                   (key, name, description, item_type, state,
-                    value, weight, damage, defense, health,
-                    poison, equippable, slot_count, consumable, stackable,
-                    quantity, durability, durability_current, sprite_name)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                   (class, key, name, description, weight, value, sprite_name, inventoriable,
+                    max_stack_size, quantity, duration, destroy_on_use_probability,
+                    slot_count, durability_max, durability_current, render_on_creature,
+                    damage, attack_time_ms, directions, range, ammunition_type)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                    ON CONFLICT(key) DO UPDATE SET
-                   name=excluded.name, description=excluded.description,
-                   item_type=excluded.item_type, state=excluded.state,
-                   value=excluded.value, weight=excluded.weight,
-                   damage=excluded.damage, defense=excluded.defense,
-                   health=excluded.health, poison=excluded.poison,
-                   equippable=excluded.equippable, slot_count=excluded.slot_count,
-                   consumable=excluded.consumable, stackable=excluded.stackable,
-                   quantity=excluded.quantity, durability=excluded.durability,
+                   class=excluded.class, name=excluded.name, description=excluded.description,
+                   weight=excluded.weight, value=excluded.value, sprite_name=excluded.sprite_name,
+                   inventoriable=excluded.inventoriable,
+                   max_stack_size=excluded.max_stack_size, quantity=excluded.quantity,
+                   duration=excluded.duration,
+                   destroy_on_use_probability=excluded.destroy_on_use_probability,
+                   slot_count=excluded.slot_count, durability_max=excluded.durability_max,
                    durability_current=excluded.durability_current,
-                   sprite_name=excluded.sprite_name
+                   render_on_creature=excluded.render_on_creature,
+                   damage=excluded.damage, attack_time_ms=excluded.attack_time_ms,
+                   directions=excluded.directions, range=excluded.range,
+                   ammunition_type=excluded.ammunition_type
                 ''',
                 (
-                    key,
+                    cls, key,
                     self.v_name.get().strip(),
                     self.v_description.get().strip(),
-                    self.v_item_type.get(),
-                    self.v_state.get(),
-                    self._int(self.v_value),
-                    self._int(self.v_weight),
-                    self._int(self.v_damage),
-                    self._int(self.v_defense),
-                    self._int(self.v_health),
-                    int(self.v_poison.get()),
-                    int(self.v_equippable.get()),
-                    self._int(self.v_slot_count, 1),
-                    int(self.v_consumable.get()),
-                    int(self.v_stackable.get()),
-                    self._int(self.v_quantity, 1),
-                    self._int(self.v_durability, 100),
-                    self._int(self.v_dur_cur, 100),
+                    self._float(self.v_weight),
+                    self._float(self.v_value),
                     sprite,
+                    int(self.v_inventoriable.get()),
+                    self._int(self.v_max_stack, 99) if cls in ('stackable','consumable','ammunition') else None,
+                    self._int(self.v_quantity, 1)   if cls in ('stackable','consumable','ammunition') else None,
+                    self._float(self.v_duration)    if cls == 'consumable' else None,
+                    self._float(self.v_destroy_prob, 1.0) if cls == 'ammunition' else None,
+                    self._int(self.v_slot_count, 1) if cls in ('equippable','weapon','wearable') else None,
+                    self._int(self.v_durability_max, 100) if cls in ('equippable','weapon','wearable') else None,
+                    self._int(self.v_durability_cur, 100) if cls in ('equippable','weapon','wearable') else None,
+                    int(self.v_render_on_creature.get()) if cls in ('equippable','weapon','wearable') else None,
+                    self._float(self.v_damage)      if cls in ('weapon','ammunition') else None,
+                    self._int(self.v_attack_time, 500) if cls == 'weapon' else None,
+                    self.v_directions.get().strip() if cls == 'weapon' else None,
+                    self._int(self.v_range, 1)      if cls == 'weapon' else None,
+                    self.v_ammo_type.get().strip() or None if cls == 'weapon' else None,
                 )
             )
             con.execute('DELETE FROM item_slots WHERE item_key=?', (key,))
@@ -462,10 +495,10 @@ class ItemsTab(ttk.Frame):
             con.close()
 
         self.refresh_list()
-        # Re-select the saved item
-        items = list(self.listbox.get(0, tk.END))
-        if key in items:
-            idx = items.index(key)
+        entries = list(self.listbox.get(0, tk.END))
+        target = f'[{cls}] {key}'
+        if target in entries:
+            idx = entries.index(target)
             self.listbox.selection_set(idx)
             self.listbox.see(idx)
 
@@ -474,7 +507,8 @@ class ItemsTab(ttk.Frame):
         if not sel:
             messagebox.showwarning('Delete', 'Select an item first.')
             return
-        key = self.listbox.get(sel[0])
+        entry = self.listbox.get(sel[0])
+        key = entry.split('] ', 1)[-1]
         if not messagebox.askyesno('Delete', f'Delete item "{key}"?'):
             return
         con = get_con()

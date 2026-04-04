@@ -4,13 +4,6 @@ from classes.trackable import Trackable
 from classes.world_object import WorldObject
 
 
-class ItemType(Enum):
-    WEAPON      = 'weapon'
-    ARMOR       = 'armor'
-    CONSUMABLE  = 'consumable'
-    KEY         = 'key'
-    MISC        = 'misc'
-
 class Slot(Enum):
     HEAD        = 'head'
     NECK        = 'neck'
@@ -27,44 +20,152 @@ class Slot(Enum):
     HAND_L      = 'hand_l'
     HAND_R      = 'hand_r'
 
-class StateOfMatter(Enum):
-    SOLID       = 'solid'
-    LIQUID      = 'liquid'
-    GAS         = 'gas'
-    PLASMA      = 'plasma'
-
-_ITEM_DEFAULTS = dict(
-    name            = ''
-    ,description    = ''
-    ,item_type      = ItemType.MISC
-    ,state          = StateOfMatter.SOLID
-    ,value          = 0
-    ,weight         = 0
-    ,damage         = 0
-    ,defense        = 0
-    ,health         = 0
-    ,poison         = False
-    ,equippable     = True
-    ,slots          = [Slot.HAND_L]
-    ,slot_count     = 1
-    ,consumable     = False
-    ,stackable      = False
-    ,quantity       = 1
-    ,durability     = 100
-    ,durability_current = 100
-    )
 
 class Item(WorldObject):
     z_index = 1
-    def __init__(self, **kwargs):
-        super().__init__()
-        for key, value in kwargs.items():
-            setattr(self, key, value)
 
-    def __getattr__(self, key):
-        if key in _ITEM_DEFAULTS:
-            return _ITEM_DEFAULTS[key]
-        raise AttributeError(key)
+    def __init__(
+        self
+        ,name: str = ''
+        ,description: str = ''
+        ,weight: float = 0
+        ,value: float = 0
+        ,sprite_name: str = None
+        ,inventoriable: bool = True
+        ,buffs: dict = None
+        ):
+        super().__init__()
+        self.name         = name
+        self.description  = description
+        self.weight       = weight
+        self.value        = value
+        self.sprite_name  = sprite_name
+        self.inventoriable = inventoriable
+        self.buffs        = buffs or {}
+
+
+class Stackable(Item):
+
+    def __init__(self, *args, max_stack_size: int = 99, quantity: int = 1, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.max_stack_size = max_stack_size
+        self.quantity       = quantity
+
+    def add(self, amount: int, inventory: Inventory) -> int:
+        """
+        Add amount to this stack. If the stack is full, create new stacks in
+        the inventory for the overflow. Returns any amount that could not fit.
+        """
+        space = self.max_stack_size - self.quantity
+        added = min(amount, space)
+        self.quantity += added
+        remaining = amount - added
+        while remaining > 0:
+            new_stack = self.__class__(
+                name=self.name, description=self.description,
+                weight=self.weight, value=self.value,
+                sprite_name=self.sprite_name, inventoriable=self.inventoriable,
+                buffs=dict(self.buffs), max_stack_size=self.max_stack_size,
+                quantity=0,
+            )
+            inventory.items.append(new_stack)
+            chunk = min(remaining, self.max_stack_size)
+            new_stack.quantity = chunk
+            remaining -= chunk
+        return 0
+
+    @staticmethod
+    def coalesce(inventory: Inventory):
+        """Merge stacks of the same item type (matched by name) where possible."""
+        from collections import defaultdict
+        groups: dict[str, list[Stackable]] = defaultdict(list)
+        for item in inventory.items:
+            if isinstance(item, Stackable):
+                groups[item.name].append(item)
+        for name, stacks in groups.items():
+            stacks.sort(key=lambda s: s.quantity)
+            for i in range(len(stacks) - 1):
+                src = stacks[i]
+                for dst in stacks[i + 1:]:
+                    if dst.quantity >= dst.max_stack_size:
+                        continue
+                    space = dst.max_stack_size - dst.quantity
+                    move  = min(src.quantity, space)
+                    dst.quantity += move
+                    src.quantity -= move
+        inventory.items = [i for i in inventory.items
+                           if not isinstance(i, Stackable) or i.quantity > 0]
+
+
+class Consumable(Stackable):
+
+    def __init__(self, *args, duration: float = 0.0, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.duration = duration
+
+
+class Ammunition(Stackable):
+
+    def __init__(self, *args, damage: float = 0, destroy_on_use_probability: float = 1.0, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.damage                    = damage
+        self.destroy_on_use_probability = destroy_on_use_probability
+
+
+class Equippable(Item):
+
+    def __init__(
+        self
+        ,*args
+        ,slots: list[Slot] = None
+        ,slot_count: int = 1
+        ,durability_max: int = 100
+        ,durability_current: int = None
+        ,render_on_creature: bool = False
+        ,**kwargs
+        ):
+        super().__init__(*args, **kwargs)
+        self.slots              = slots or []
+        self.slot_count         = slot_count
+        self.durability_max     = durability_max
+        self.durability_current = durability_current if durability_current is not None else durability_max
+        self.render_on_creature = render_on_creature
+
+
+class Weapon(Equippable):
+
+    def __init__(
+        self
+        ,*args
+        ,damage: float = 0
+        ,attack_time_ms: int = 500
+        ,directions: list[str] = None
+        ,range: int = 1
+        ,ammunition_type: str = None
+        ,**kwargs
+        ):
+        super().__init__(*args, **kwargs)
+        self.damage           = damage
+        self.attack_time_ms   = attack_time_ms
+        self.directions       = directions or ['front']
+        self.range            = range
+        self.ammunition_type  = ammunition_type
+
+
+class Wearable(Equippable):
+    pass
+
+
+CLASS_MAP: dict[str, type] = {
+    'item':        Item,
+    'stackable':   Stackable,
+    'consumable':  Consumable,
+    'ammunition':  Ammunition,
+    'equippable':  Equippable,
+    'weapon':      Weapon,
+    'wearable':    Wearable,
+}
+
 
 class Inventory(Trackable):
     def __init__(self, items: list = []):

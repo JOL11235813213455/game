@@ -3,7 +3,10 @@ import json
 from pathlib import Path
 
 from classes.creature import Stat
-from classes.inventory import Item, ItemType, Slot, StateOfMatter
+from classes.inventory import (
+    Item, Stackable, Consumable, Ammunition,
+    Equippable, Weapon, Wearable, Slot, CLASS_MAP
+)
 
 _DB_PATH = Path(__file__).parent / 'game.db'
 _loaded  = False
@@ -13,6 +16,7 @@ PLAYABLE:    dict[str, dict] = {}
 NONPLAYABLE: dict[str, dict] = {}
 ITEMS:       dict[str, Item] = {}
 SPRITE_DATA: dict[str, dict] = {}
+
 
 def load(db_path: Path = _DB_PATH) -> None:
     global _loaded
@@ -58,30 +62,54 @@ def _load_items(con: sqlite3.Connection) -> None:
         slots_by_key.setdefault(r['item_key'], []).append(Slot(r['slot']))
 
     for r in rows:
-        key = r['key']
-        kwargs = dict(
-            name               = r['name']
-            ,description       = r['description']
-            ,item_type         = ItemType(r['item_type'])
-            ,state             = StateOfMatter(r['state'])
-            ,value             = r['value']
-            ,weight            = r['weight']
-            ,damage            = r['damage']
-            ,defense           = r['defense']
-            ,health            = r['health']
-            ,poison            = bool(r['poison'])
-            ,equippable        = bool(r['equippable'])
-            ,slots             = slots_by_key.get(key, [Slot.HAND_L])
-            ,slot_count        = r['slot_count']
-            ,consumable        = bool(r['consumable'])
-            ,stackable         = bool(r['stackable'])
-            ,quantity          = r['quantity']
-            ,durability        = r['durability']
-            ,durability_current = r['durability_current']
+        key   = r['key']
+        cls   = CLASS_MAP.get(r['class'], Item)
+        base  = dict(
+            name        = r['name']
+            ,description = r['description']
+            ,weight      = r['weight']
+            ,value       = r['value']
+            ,inventoriable = bool(r['inventoriable'])
+            ,buffs       = json.loads(r['buffs'] or '{}')
         )
         if r['sprite_name'] is not None:
-            kwargs['sprite_name'] = r['sprite_name']
-        ITEMS[key] = Item(**kwargs)
+            base['sprite_name'] = r['sprite_name']
+
+        if cls in (Stackable, Consumable, Ammunition):
+            if r['max_stack_size'] is not None:
+                base['max_stack_size'] = r['max_stack_size']
+            if r['quantity'] is not None:
+                base['quantity'] = r['quantity']
+
+        if cls == Consumable and r['duration'] is not None:
+            base['duration'] = r['duration']
+
+        if cls == Ammunition:
+            if r['damage'] is not None:
+                base['damage'] = r['damage']
+            if r['destroy_on_use_probability'] is not None:
+                base['destroy_on_use_probability'] = r['destroy_on_use_probability']
+
+        if cls in (Equippable, Weapon, Wearable):
+            base['slots']              = slots_by_key.get(key, [])
+            base['slot_count']         = r['slot_count'] or 1
+            base['durability_max']     = r['durability_max'] or 100
+            base['durability_current'] = r['durability_current'] or r['durability_max'] or 100
+            base['render_on_creature'] = bool(r['render_on_creature'] or 0)
+
+        if cls == Weapon:
+            if r['damage'] is not None:
+                base['damage'] = r['damage']
+            if r['attack_time_ms'] is not None:
+                base['attack_time_ms'] = r['attack_time_ms']
+            if r['directions'] is not None:
+                base['directions'] = json.loads(r['directions'])
+            if r['range'] is not None:
+                base['range'] = r['range']
+            if r['ammunition_type'] is not None:
+                base['ammunition_type'] = r['ammunition_type']
+
+        ITEMS[key] = cls(**base)
 
 
 def _load_sprites(con: sqlite3.Connection) -> None:

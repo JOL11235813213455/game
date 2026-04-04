@@ -20,6 +20,7 @@ class Stat(Enum):
     CHR             = 'charisma'
     AGL             = 'agility'
     CON             = 'constitution'
+    ARM             = 'armor'
 
 def level_up_heal(creature, old_level, new_level):
     hd = creature.stats.get(Stat.HD, 6)
@@ -44,7 +45,7 @@ class Creature(WorldObject):
         super().__init__(current_map=current_map, location=location)
         self.name = name
         self.species = species
-        from data.species import SPECIES
+        from data.db import SPECIES
         species_stats = SPECIES.get(species, {}) if species else {}
         self.stats = {Stat.MHP: 1, Stat.CHP: 1, **species_stats, **stats}
         self._reconcile_exp_level()
