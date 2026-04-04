@@ -42,29 +42,49 @@ DIRECTION_BOUNDS: dict[tuple, tuple[str, str]] = {
 class Tile(Trackable):
     def __init__(
         self
+        ,template:dict=None
         ,map:Map=None
-        ,walkable:bool=True
-        ,covered:bool=False
-        ,bounds:Bounds=Bounds()
+        ,walkable:bool=None
+        ,covered:bool=None
+        ,bounds:Bounds=None
         ,items:list=[]
+        ,tile_template:str=None
+        ,sprite_name:str=None
+        ,tile_scale:float=None
         ):
         super().__init__()
-        self.walkable=walkable
-        self.covered=covered
-        self.bounds=bounds
+        tmpl = template or {}
+        self.walkable      = walkable    if walkable    is not None else tmpl.get('walkable',    True)
+        self.covered       = covered     if covered     is not None else tmpl.get('covered',     False)
+        self.bounds        = bounds      if bounds      is not None else tmpl.get('bounds',      Bounds())
+        self.sprite_name   = sprite_name if sprite_name is not None else tmpl.get('sprite_name', None)
+        self.tile_scale    = tile_scale  if tile_scale  is not None else tmpl.get('tile_scale',  1.0)
         self.nested_map: Map = map
         self.inventory = Inventory(items=items)
+        self.tile_template = tile_template
 
 class Map(Trackable):
     def __init__(
         self
         ,tile_set: dict[MapKey, Tile] = {}
         ,entrance: tuple[int, int] = (0, 0)
-        ,w_minmax: tuple[int, int] = (0, 0)
-        ,x_minmax: tuple[int, int] = (-16, 16)
-        ,y_minmax: tuple[int, int] = (-16, 16)
-        ,z_minmax: tuple[int, int] = (-16, 16)
+        ,name: str = None
+        ,default_tile: str = None
+        ,w_min: int = 0,  w_max: int = 0
+        ,x_min: int = -16, x_max: int = 16
+        ,y_min: int = -16, y_max: int = 16
+        ,z_min: int = -16, z_max: int = 16
         ):
         super().__init__()
         self.tiles = tile_set
         self.entrance = entrance
+        self.name = name
+        self.default_tile = default_tile
+        self.w_min = w_min
+        self.w_max = w_max
+        self.x_min = x_min
+        self.x_max = x_max
+        self.y_min = y_min
+        self.y_max = y_max
+        self.z_min = z_min
+        self.z_max = z_max

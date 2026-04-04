@@ -23,7 +23,6 @@ class Slot(Enum):
 
 class Item(WorldObject):
     z_index = 1
-
     def __init__(
         self
         ,name: str = ''
@@ -42,7 +41,6 @@ class Item(WorldObject):
         self.sprite_name  = sprite_name
         self.inventoriable = inventoriable
         self.buffs        = buffs or {}
-
 
 class Stackable(Item):
 
@@ -157,13 +155,11 @@ class Wearable(Equippable):
 
 
 CLASS_MAP: dict[str, type] = {
-    'item':        Item,
-    'stackable':   Stackable,
-    'consumable':  Consumable,
-    'ammunition':  Ammunition,
-    'equippable':  Equippable,
-    'weapon':      Weapon,
-    'wearable':    Wearable,
+    'Item':       Item,
+    'Consumable': Consumable,
+    'Ammunition': Ammunition,
+    'Weapon':     Weapon,
+    'Wearable':   Wearable,
 }
 
 

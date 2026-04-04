@@ -46,7 +46,10 @@ class Creature(WorldObject):
         self.name = name
         self.species = species
         from data.db import SPECIES
-        species_stats = SPECIES.get(species, {}) if species else {}
+        species_data  = SPECIES.get(species, {}) if species else {}
+        self.tile_scale  = species_data.get('tile_scale',  self.__class__.tile_scale)
+        self.sprite_name = species_data.get('sprite_name', self.__class__.sprite_name)
+        species_stats = {k: v for k, v in species_data.items() if isinstance(k, Stat)}
         self.stats = {Stat.MHP: 1, Stat.CHP: 1, **species_stats, **stats}
         self._reconcile_exp_level()
         self.inventory = Inventory(items=items)
@@ -105,3 +108,50 @@ class Creature(WorldObject):
                 self.current_map, self.location = self.map_stack.pop()
                 return True
         return False
+
+    def transfer_item(self, item, source, target):
+        tile = self.current_map.tiles.get(self.location)
+        accessible = [self.inventory]
+        if tile:
+            accessible.append(tile.inventory)
+            for creature in Creature.all():
+                if creature is not self and creature.current_map is self.current_map and creature.location == self.location:
+                    accessible.append(creature.inventory)
+        if source not in accessible or target not in accessible:
+            return False
+        if item not in source.items:
+            return False
+        source.items.remove(item)
+        target.items.append(item)
+        return True
+
+
+class NPC(Creature):
+    sprite_name = 'npc'
+    z_index     = 2
+
+    def __init__(
+        self
+        ,current_map: Map
+        ,location: MapKey = MapKey()
+        ,species: str = None
+        ,stats: dict = {}
+        ,items: list = []
+        ,move_interval: int = 1000
+        ):
+        super().__init__(current_map=current_map, location=location, species=species, stats=stats, items=items)
+        self.move_interval = move_interval
+        self._last_move = 0
+
+    def update(self, now: int, cols: int, rows: int):
+        if now - self._last_move >= self.move_interval:
+            self._think(cols, rows)
+            self._last_move = now
+
+    def _think(self, cols: int, rows: int):
+        dx, dy = random.choice([
+            (-1,-1),( 0,-1),( 1,-1)
+            ,(-1, 0),        ( 1, 0)
+            ,(-1, 1),( 0, 1),( 1, 1)
+        ])
+        self.move(dx, dy, cols, rows)

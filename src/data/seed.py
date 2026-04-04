@@ -15,7 +15,8 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS species (
     name        TEXT PRIMARY KEY,
     playable    INTEGER NOT NULL,
-    sprite_name TEXT REFERENCES sprites(name)
+    sprite_name TEXT REFERENCES sprites(name),
+    tile_scale  REAL NOT NULL DEFAULT 1.0
 );
 CREATE TABLE IF NOT EXISTS species_stats (
     species_name TEXT NOT NULL REFERENCES species(name),
@@ -24,7 +25,7 @@ CREATE TABLE IF NOT EXISTS species_stats (
     PRIMARY KEY (species_name, stat)
 );
 CREATE TABLE IF NOT EXISTS items (
-    class                      TEXT NOT NULL DEFAULT 'item',
+    class                      TEXT NOT NULL DEFAULT 'Item',
     key                        TEXT PRIMARY KEY,
     name                       TEXT NOT NULL DEFAULT '',
     description                TEXT NOT NULL DEFAULT '',
@@ -32,6 +33,7 @@ CREATE TABLE IF NOT EXISTS items (
     value                      REAL NOT NULL DEFAULT 0,
     sprite_name                TEXT REFERENCES sprites(name),
     inventoriable              INTEGER NOT NULL DEFAULT 1,
+    tile_scale                 REAL NOT NULL DEFAULT 1.0,
     buffs                      TEXT NOT NULL DEFAULT '{}',
     max_stack_size             INTEGER,
     quantity                   INTEGER,
@@ -53,9 +55,53 @@ CREATE TABLE IF NOT EXISTS item_slots (
     PRIMARY KEY (item_key, slot)
 );
 CREATE TABLE IF NOT EXISTS sprites (
-    name    TEXT PRIMARY KEY,
-    palette TEXT NOT NULL,
-    pixels  TEXT NOT NULL
+    name           TEXT PRIMARY KEY,
+    palette        TEXT NOT NULL,
+    pixels         TEXT NOT NULL,
+    width          INTEGER NOT NULL DEFAULT 32,
+    height         INTEGER NOT NULL DEFAULT 32,
+    action_point_x INTEGER,
+    action_point_y INTEGER
+);
+CREATE TABLE IF NOT EXISTS tiles (
+    key         TEXT PRIMARY KEY,
+    name        TEXT NOT NULL DEFAULT '',
+    walkable    INTEGER NOT NULL DEFAULT 1,
+    covered     INTEGER NOT NULL DEFAULT 0,
+    sprite_name TEXT REFERENCES sprites(name),
+    tile_scale  REAL NOT NULL DEFAULT 1.0,
+    bounds_n    TEXT, bounds_s TEXT, bounds_e TEXT, bounds_w  TEXT,
+    bounds_ne   TEXT, bounds_nw TEXT, bounds_se TEXT, bounds_sw TEXT
+);
+CREATE TABLE IF NOT EXISTS tile_sets (
+    name TEXT PRIMARY KEY
+);
+CREATE TABLE IF NOT EXISTS tile_entries (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    tile_set      TEXT NOT NULL REFERENCES tile_sets(name),
+    w             INTEGER NOT NULL DEFAULT 0,
+    x             INTEGER NOT NULL,
+    y             INTEGER NOT NULL,
+    z             INTEGER NOT NULL DEFAULT 0,
+    tile_template TEXT REFERENCES tiles(key),
+    walkable      INTEGER,
+    covered       INTEGER,
+    sprite_name   TEXT REFERENCES sprites(name),
+    tile_scale    REAL,
+    bounds_n      TEXT, bounds_s TEXT, bounds_e TEXT, bounds_w  TEXT,
+    bounds_ne     TEXT, bounds_nw TEXT, bounds_se TEXT, bounds_sw TEXT,
+    nested_map    TEXT REFERENCES maps(name)
+);
+CREATE TABLE IF NOT EXISTS maps (
+    name         TEXT PRIMARY KEY,
+    tile_set     TEXT REFERENCES tile_sets(name),
+    default_tile TEXT REFERENCES tiles(key),
+    entrance_x   INTEGER NOT NULL DEFAULT 0,
+    entrance_y   INTEGER NOT NULL DEFAULT 0,
+    w_min INTEGER NOT NULL DEFAULT 0,  w_max INTEGER NOT NULL DEFAULT 0,
+    x_min INTEGER NOT NULL DEFAULT 0,  x_max INTEGER NOT NULL DEFAULT 0,
+    y_min INTEGER NOT NULL DEFAULT 0,  y_max INTEGER NOT NULL DEFAULT 0,
+    z_min INTEGER NOT NULL DEFAULT 0,  z_max INTEGER NOT NULL DEFAULT 0
 );
 """
 
