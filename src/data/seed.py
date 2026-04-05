@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS items (
     value                      REAL NOT NULL DEFAULT 0,
     sprite_name                TEXT REFERENCES sprites(name),
     inventoriable              INTEGER NOT NULL DEFAULT 1,
+    collision                  INTEGER NOT NULL DEFAULT 0,
     tile_scale                 REAL NOT NULL DEFAULT 1.0,
     buffs                      TEXT NOT NULL DEFAULT '{}',
     max_stack_size             INTEGER,
@@ -47,7 +48,11 @@ CREATE TABLE IF NOT EXISTS items (
     attack_time_ms             INTEGER,
     directions                 TEXT,
     range                      INTEGER,
-    ammunition_type            TEXT
+    ammunition_type            TEXT,
+    footprint                  TEXT,
+    collision_mask             TEXT,
+    entry_points               TEXT,
+    nested_map                 TEXT
 );
 CREATE TABLE IF NOT EXISTS item_slots (
     item_key TEXT NOT NULL REFERENCES items(key),
@@ -102,6 +107,25 @@ CREATE TABLE IF NOT EXISTS maps (
     x_min INTEGER NOT NULL DEFAULT 0,  x_max INTEGER NOT NULL DEFAULT 0,
     y_min INTEGER NOT NULL DEFAULT 0,  y_max INTEGER NOT NULL DEFAULT 0,
     z_min INTEGER NOT NULL DEFAULT 0,  z_max INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS animations (
+    name        TEXT PRIMARY KEY,
+    target_type TEXT NOT NULL DEFAULT 'creature'
+);
+CREATE TABLE IF NOT EXISTS animation_frames (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    animation_name  TEXT    NOT NULL REFERENCES animations(name),
+    frame_index     INTEGER NOT NULL,
+    sprite_name     TEXT    NOT NULL REFERENCES sprites(name),
+    duration_ms     INTEGER NOT NULL DEFAULT 150,
+    UNIQUE(animation_name, frame_index)
+);
+CREATE TABLE IF NOT EXISTS animation_bindings (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    target_name     TEXT NOT NULL,
+    behavior        TEXT NOT NULL DEFAULT 'idle',
+    animation_name  TEXT NOT NULL REFERENCES animations(name),
+    UNIQUE(target_name, behavior)
 );
 """
 

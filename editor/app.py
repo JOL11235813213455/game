@@ -8,6 +8,7 @@ from editor.sprites_tab import SpritesTab
 from editor.tiles_tab import TilesTab
 from editor.tile_sets_tab import TileSetsTab
 from editor.maps_tab import MapsTab
+from editor.animations_tab import AnimationsTab
 
 
 class EditorApp(tk.Tk):
@@ -33,13 +34,15 @@ class EditorApp(tk.Tk):
         self.tiles_tab     = TilesTab(notebook)
         self.tile_sets_tab = TileSetsTab(notebook)
         self.maps_tab      = MapsTab(notebook)
+        self.anims_tab     = AnimationsTab(notebook)
 
-        notebook.add(self.items_tab,     text='  Items  ')
-        notebook.add(self.species_tab,   text='  Species  ')
         notebook.add(self.sprites_tab,   text='  Sprites  ')
+        notebook.add(self.anims_tab,     text='  Animations  ')
         notebook.add(self.tiles_tab,     text='  Tiles  ')
         notebook.add(self.tile_sets_tab, text='  Tile Sets  ')
         notebook.add(self.maps_tab,      text='  Maps  ')
+        notebook.add(self.species_tab,   text='  Species  ')
+        notebook.add(self.items_tab,     text='  Items  ')
 
         notebook.bind('<<NotebookTabChanged>>', self._on_tab_changed)
 
@@ -58,3 +61,5 @@ class EditorApp(tk.Tk):
             self.tile_sets_tab.refresh_sprite_dropdown()
         if tab == 'Maps':
             self.maps_tab.refresh_tile_set_dropdown()
+        if tab == 'Animations':
+            self.anims_tab.refresh_dropdowns()

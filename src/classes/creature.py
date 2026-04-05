@@ -32,6 +32,7 @@ def level_up_heal(creature, old_level, new_level):
 class Creature(WorldObject):
     sprite_name = 'player'
     z_index     = 3
+    collision   = True
 
     def __init__(
         self
@@ -77,6 +78,29 @@ class Creature(WorldObject):
             for callback in self.on_level_up:
                 callback(self, old_level, self.stats[Stat.LVL])
 
+    _DIR_BEHAVIORS = {
+        (0, -1): 'walk_north', (0, 1): 'walk_south',
+        (-1, 0): 'walk_west',  (1, 0): 'walk_east',
+        (-1, -1): 'walk_north', (1, -1): 'walk_north',
+        (-1,  1): 'walk_south', (1,  1): 'walk_south',
+    }
+
+    @staticmethod
+    def _tile_blocked(game_map, x: int, y: int) -> bool:
+        """Return True if any WorldObject with collision=True occupies (x, y)."""
+        from classes.world_object import WorldObject
+        from classes.inventory import Structure
+        for obj in WorldObject.all():
+            if obj.current_map is not game_map or not obj.collision:
+                continue
+            if isinstance(obj, Structure):
+                ox, oy = obj.location.x, obj.location.y
+                if (x - ox, y - oy) in obj.collision_mask:
+                    return True
+            elif obj.location.x == x and obj.location.y == y:
+                return True
+        return False
+
     def move(self, dx: int, dy: int, cols: int, rows: int):
         nx = max(0, min(cols - 1, self.location.x + dx))
         ny = max(0, min(rows - 1, self.location.y + dy))
@@ -90,15 +114,41 @@ class Creature(WorldObject):
             entry_bound = getattr(target.bounds, entry_attr)
             if not BOUND_TRAVERSABLE[exit_bound] or not BOUND_TRAVERSABLE[entry_bound]:
                 return
+        if self._tile_blocked(self.current_map, nx, ny):
+            return
         self.location = self.location._replace(x=nx, y=ny)
+        behavior = self._DIR_BEHAVIORS.get((dx, dy), 'walk_south')
+        self.play_animation(behavior)
 
     def enter(self):
+        # Check tile nested maps first
         tile = self.current_map.tiles.get(self.location)
         if tile and tile.nested_map is not None:
             self.map_stack.append((self.current_map, self.location))
             self.current_map = tile.nested_map
             self.location = MapKey(0, *self.current_map.entrance, 0)
             return True
+        # Check structure entry points
+        from classes.inventory import Structure
+        from data.db import MAPS
+        px, py = self.location.x, self.location.y
+        for s in Structure.all():
+            if s.current_map is not self.current_map or not s.nested_map_name:
+                continue
+            offset = (px - s.location.x, py - s.location.y)
+            offset_key = f'{offset[0]},{offset[1]}'
+            if offset_key in s.entry_points or offset in s.footprint:
+                nested = MAPS.get(s.nested_map_name)
+                if nested is None:
+                    continue
+                self.map_stack.append((self.current_map, self.location))
+                self.current_map = nested
+                ep = s.entry_points.get(offset_key)
+                if ep:
+                    self.location = MapKey(0, ep[0], ep[1], 0)
+                else:
+                    self.location = MapKey(0, *self.current_map.entrance, 0)
+                return True
         return False
 
     def exit(self):
@@ -147,6 +197,8 @@ class NPC(Creature):
         if now - self._last_move >= self.move_interval:
             self._think(cols, rows)
             self._last_move = now
+        else:
+            self.play_animation('idle')
 
     def _think(self, cols: int, rows: int):
         dx, dy = random.choice([

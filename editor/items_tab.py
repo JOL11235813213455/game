@@ -3,7 +3,7 @@ import sqlite3
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-from editor.db import get_con, fetch_sprite_names
+from editor.db import get_con, fetch_sprite_names, fetch_map_names
 from editor.constants import ITEM_CLASSES, SLOTS, CLASS_FIELDS, PREVIEW_SIZE
 from editor.sprite_preview import SpritePreview
 
@@ -12,11 +12,13 @@ class ItemsTab(ttk.Frame):
 
     _ALL_FIELDS = [
         'key', 'name', 'description', 'weight', 'value', 'inventoriable',
-        'tile_scale',
+        'collision', 'tile_scale',
         'max_stack_size', 'quantity', 'duration', 'destroy_on_use_probability',
         'damage', 'slots', 'slot_count', 'durability_max', 'durability_current',
         'render_on_creature', 'attack_time_ms', 'directions', 'range',
-        'ammunition_type', 'sprite',
+        'ammunition_type',
+        'footprint', 'collision_mask', 'entry_points', 'nested_map',
+        'sprite',
     ]
 
     def __init__(self, parent):
@@ -89,6 +91,7 @@ class ItemsTab(ttk.Frame):
         self.v_weight      = tk.StringVar(value='0')
         self.v_value       = tk.StringVar(value='0')
         self.v_inventoriable = tk.BooleanVar(value=True)
+        self.v_collision     = tk.BooleanVar(value=False)
 
         add_row('key',         'Key',         lambda p: ttk.Entry(p, textvariable=self.v_key, width=30).pack(anchor='w'))
         add_row('name',        'Name',        lambda p: ttk.Entry(p, textvariable=self.v_name, width=30).pack(anchor='w'))
@@ -96,6 +99,7 @@ class ItemsTab(ttk.Frame):
         add_row('weight',      'Weight',      lambda p: ttk.Entry(p, textvariable=self.v_weight, width=10).pack(anchor='w'))
         add_row('value',       'Value',       lambda p: ttk.Entry(p, textvariable=self.v_value, width=10).pack(anchor='w'))
         add_row('inventoriable', 'Inventoriable', lambda p: ttk.Checkbutton(p, variable=self.v_inventoriable).pack(anchor='w'))
+        add_row('collision',     'Collision',     lambda p: ttk.Checkbutton(p, variable=self.v_collision).pack(anchor='w'))
 
         self.v_tile_scale = tk.StringVar(value='1.0')
         add_row('tile_scale', 'Tile Scale', lambda p: ttk.Entry(p, textvariable=self.v_tile_scale, width=10).pack(anchor='w'))
@@ -139,6 +143,20 @@ class ItemsTab(ttk.Frame):
         add_row('range',          'Range',          lambda p: ttk.Entry(p, textvariable=self.v_range, width=10).pack(anchor='w'))
         add_row('ammunition_type','Ammo Type',      lambda p: ttk.Entry(p, textvariable=self.v_ammo_type, width=20).pack(anchor='w'))
 
+        self.v_footprint      = tk.StringVar(value='[[0,0]]')
+        self.v_collision_mask = tk.StringVar(value='[[0,0]]')
+        self.v_entry_points   = tk.StringVar(value='{}')
+        self.v_nested_map     = tk.StringVar()
+        add_row('footprint',      'Footprint (JSON)',      lambda p: ttk.Entry(p, textvariable=self.v_footprint, width=40).pack(anchor='w'))
+        add_row('collision_mask', 'Collision Mask (JSON)', lambda p: ttk.Entry(p, textvariable=self.v_collision_mask, width=40).pack(anchor='w'))
+        add_row('entry_points',   'Entry Points (JSON)',   lambda p: ttk.Entry(p, textvariable=self.v_entry_points, width=40).pack(anchor='w'))
+        self._map_names = [''] + fetch_map_names()
+        def _build_nested_map(p):
+            self.nested_map_cb = ttk.Combobox(p, textvariable=self.v_nested_map,
+                                              values=self._map_names, state='readonly', width=18)
+            self.nested_map_cb.pack(anchor='w')
+        add_row('nested_map', 'Nested Map', _build_nested_map)
+
         self.v_sprite = tk.StringVar()
         self._sprite_names = [''] + fetch_sprite_names()
         def _build_sprite(p):
@@ -155,7 +173,7 @@ class ItemsTab(ttk.Frame):
 
     def _refresh_visible_fields(self):
         cls = self.v_class.get()
-        visible = {'key', 'name', 'description', 'weight', 'value', 'inventoriable', 'tile_scale', 'sprite'}
+        visible = {'key', 'name', 'description', 'weight', 'value', 'inventoriable', 'collision', 'tile_scale', 'sprite'}
         visible.update(CLASS_FIELDS.get(cls, []))
 
         row = self._class_row_count
@@ -197,6 +215,8 @@ class ItemsTab(ttk.Frame):
     def refresh_sprite_dropdown(self):
         self._sprite_names = [''] + fetch_sprite_names()
         self.sprite_cb['values'] = self._sprite_names
+        self._map_names = [''] + fetch_map_names()
+        self.nested_map_cb['values'] = self._map_names
 
     def _clear_form(self):
         self.v_class.set('Item')
@@ -206,6 +226,7 @@ class ItemsTab(ttk.Frame):
         self.v_weight.set('0')
         self.v_value.set('0')
         self.v_inventoriable.set(True)
+        self.v_collision.set(False)
         self.v_tile_scale.set('1.0')
         self.v_max_stack.set('99')
         self.v_quantity.set('1')
@@ -222,6 +243,10 @@ class ItemsTab(ttk.Frame):
         self.v_directions.set('["front"]')
         self.v_range.set('1')
         self.v_ammo_type.set('')
+        self.v_footprint.set('[[0,0]]')
+        self.v_collision_mask.set('[[0,0]]')
+        self.v_entry_points.set('{}')
+        self.v_nested_map.set('')
         self.v_sprite.set('')
         self.sprite_preview.load(None)
         self._refresh_visible_fields()
@@ -243,6 +268,7 @@ class ItemsTab(ttk.Frame):
         self.v_weight.set(str(row['weight'] or 0))
         self.v_value.set(str(row['value'] or 0))
         self.v_inventoriable.set(bool(row['inventoriable']))
+        self.v_collision.set(bool(row['collision']))
         self.v_tile_scale.set(str(row['tile_scale'] if row['tile_scale'] is not None else 1.0))
         self.v_max_stack.set(str(row['max_stack_size'] or 99))
         self.v_quantity.set(str(row['quantity'] or 1))
@@ -260,6 +286,10 @@ class ItemsTab(ttk.Frame):
         self.v_directions.set(row['directions'] or '["front"]')
         self.v_range.set(str(row['range'] or 1))
         self.v_ammo_type.set(row['ammunition_type'] or '')
+        self.v_footprint.set(row['footprint'] or '[[0,0]]')
+        self.v_collision_mask.set(row['collision_mask'] or '[[0,0]]')
+        self.v_entry_points.set(row['entry_points'] or '{}')
+        self.v_nested_map.set(row['nested_map'] or '')
         sprite = row['sprite_name'] or ''
         self.v_sprite.set(sprite)
         self.sprite_preview.load(sprite or None)
@@ -290,15 +320,16 @@ class ItemsTab(ttk.Frame):
             con.execute(
                 '''INSERT INTO items
                    (class, key, name, description, weight, value, sprite_name, inventoriable,
-                    tile_scale,
+                    collision, tile_scale,
                     max_stack_size, quantity, duration, destroy_on_use_probability,
                     slot_count, durability_max, durability_current, render_on_creature,
-                    damage, attack_time_ms, directions, range, ammunition_type)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    damage, attack_time_ms, directions, range, ammunition_type,
+                    footprint, collision_mask, entry_points, nested_map)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                    ON CONFLICT(key) DO UPDATE SET
                    class=excluded.class, name=excluded.name, description=excluded.description,
                    weight=excluded.weight, value=excluded.value, sprite_name=excluded.sprite_name,
-                   inventoriable=excluded.inventoriable,
+                   inventoriable=excluded.inventoriable, collision=excluded.collision,
                    tile_scale=excluded.tile_scale,
                    max_stack_size=excluded.max_stack_size, quantity=excluded.quantity,
                    duration=excluded.duration,
@@ -308,7 +339,9 @@ class ItemsTab(ttk.Frame):
                    render_on_creature=excluded.render_on_creature,
                    damage=excluded.damage, attack_time_ms=excluded.attack_time_ms,
                    directions=excluded.directions, range=excluded.range,
-                   ammunition_type=excluded.ammunition_type
+                   ammunition_type=excluded.ammunition_type,
+                   footprint=excluded.footprint, collision_mask=excluded.collision_mask,
+                   entry_points=excluded.entry_points, nested_map=excluded.nested_map
                 ''',
                 (
                     cls, key,
@@ -318,6 +351,7 @@ class ItemsTab(ttk.Frame):
                     self._float(self.v_value),
                     sprite,
                     int(self.v_inventoriable.get()),
+                    int(self.v_collision.get()),
                     self._float(self.v_tile_scale, 1.0),
                     self._int(self.v_max_stack, 99) if cls in ('Consumable','Ammunition') else None,
                     self._int(self.v_quantity, 1)   if cls in ('Consumable','Ammunition') else None,
@@ -332,6 +366,10 @@ class ItemsTab(ttk.Frame):
                     self.v_directions.get().strip() if cls == 'Weapon' else None,
                     self._int(self.v_range, 1)      if cls == 'Weapon' else None,
                     self.v_ammo_type.get().strip() or None if cls == 'Weapon' else None,
+                    self.v_footprint.get().strip() if cls == 'Structure' else None,
+                    self.v_collision_mask.get().strip() if cls == 'Structure' else None,
+                    self.v_entry_points.get().strip() if cls == 'Structure' else None,
+                    self.v_nested_map.get().strip() or None if cls == 'Structure' else None,
                 )
             )
             con.execute('DELETE FROM item_slots WHERE item_key=?', (key,))
