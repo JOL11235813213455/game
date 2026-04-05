@@ -8,8 +8,10 @@ SCREEN_HEIGHT = int(os.getenv("SCREEN_HEIGHT", 720))
 FPS           = 300
 DEBUG         = os.getenv("DEBUG", "false").lower() == "true"
 
-BLOCK_SIZE  = 64
-MOVE_DELAY  = 150
+BLOCK_SIZE    = 64
+THREE_QUARTER = os.getenv("THREE_QUARTER", "true").lower() == "true"
+TILE_HEIGHT   = int(BLOCK_SIZE * 0.75) if THREE_QUARTER else BLOCK_SIZE
+MOVE_DELAY    = 150
 
 COLOR_WALKABLE = (60, 90, 60)
 COLOR_BLOCKED  = (40, 40, 40)

@@ -22,7 +22,8 @@ class Slot(Enum):
 
 
 class Item(WorldObject):
-    z_index = 1
+    z_index   = 2
+    collision = False
     def __init__(
         self
         ,name: str = ''
@@ -149,10 +150,28 @@ class Weapon(Equippable):
         self.range            = range
         self.ammunition_type  = ammunition_type
 
-
 class Wearable(Equippable):
     pass
 
+class Structure(Item):
+    z_index   = 1
+    collision = False
+
+    def __init__(
+        self
+        ,*args
+        ,footprint: list[list[int]] = None
+        ,collision_mask: list[list[int]] = None
+        ,entry_points: dict[str, list[int]] = None
+        ,nested_map: str = None
+        ,**kwargs
+        ):
+        kwargs.setdefault('inventoriable', False)
+        super().__init__(*args, **kwargs)
+        self.footprint      = [tuple(p) for p in (footprint or [[0, 0]])]
+        self.collision_mask  = [tuple(p) for p in (collision_mask or list(self.footprint))]
+        self.entry_points    = entry_points or {}
+        self.nested_map_name = nested_map
 
 CLASS_MAP: dict[str, type] = {
     'Item':       Item,
@@ -160,8 +179,8 @@ CLASS_MAP: dict[str, type] = {
     'Ammunition': Ammunition,
     'Weapon':     Weapon,
     'Wearable':   Wearable,
+    'Structure':  Structure,
 }
-
 
 class Inventory(Trackable):
     def __init__(self, items: list = []):

@@ -5,7 +5,7 @@ from pathlib import Path
 from classes.creature import Stat
 from classes.inventory import (
     Item, Stackable, Consumable, Ammunition,
-    Equippable, Weapon, Wearable, Slot, CLASS_MAP
+    Equippable, Weapon, Wearable, Structure, Slot, CLASS_MAP
 )
 
 _DB_PATH = Path(__file__).parent / 'game.db'
@@ -18,6 +18,9 @@ ITEMS:       dict[str, Item] = {}
 SPRITE_DATA: dict[str, dict] = {}
 TILES: dict[str, dict] = {}
 MAPS:  dict[str, object] = {}
+STRUCTURES: dict[str, 'Structure'] = {}  # key → Structure instance (templates from DB)
+ANIMATIONS: dict[str, dict] = {}    # name → {target_type, frames: [{sprite_name, duration_ms}]}
+ANIM_BINDINGS: dict[tuple, str] = {}  # (target_name, behavior) → animation_name
 
 
 def _migrate(con: sqlite3.Connection) -> None:
@@ -54,6 +57,11 @@ def _migrate(con: sqlite3.Connection) -> None:
     y_min INTEGER NOT NULL DEFAULT 0, y_max INTEGER NOT NULL DEFAULT 0,
     z_min INTEGER NOT NULL DEFAULT 0, z_max INTEGER NOT NULL DEFAULT 0)""",
         "ALTER TABLE maps ADD COLUMN tile_set TEXT",
+        "ALTER TABLE items ADD COLUMN collision INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE items ADD COLUMN footprint TEXT",
+        "ALTER TABLE items ADD COLUMN collision_mask TEXT",
+        "ALTER TABLE items ADD COLUMN entry_points TEXT",
+        "ALTER TABLE items ADD COLUMN nested_map TEXT",
     ]:
         try:
             con.execute(stmt)
@@ -81,6 +89,29 @@ def _migrate(con: sqlite3.Connection) -> None:
         con.execute("UPDATE maps SET tile_set = name WHERE tile_set IS NULL")
         con.execute("DROP TABLE _old_tile_sets")
 
+    # Animation tables
+    for stmt in [
+        """CREATE TABLE IF NOT EXISTS animations (
+            name TEXT PRIMARY KEY, target_type TEXT NOT NULL DEFAULT 'creature')""",
+        """CREATE TABLE IF NOT EXISTS animation_frames (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            animation_name TEXT NOT NULL REFERENCES animations(name),
+            frame_index INTEGER NOT NULL,
+            sprite_name TEXT NOT NULL REFERENCES sprites(name),
+            duration_ms INTEGER NOT NULL DEFAULT 150,
+            UNIQUE(animation_name, frame_index))""",
+        """CREATE TABLE IF NOT EXISTS animation_bindings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            target_name TEXT NOT NULL,
+            behavior TEXT NOT NULL DEFAULT 'idle',
+            animation_name TEXT NOT NULL REFERENCES animations(name),
+            UNIQUE(target_name, behavior))""",
+    ]:
+        try:
+            con.execute(stmt)
+        except sqlite3.OperationalError:
+            pass
+
     con.commit()
 
 
@@ -97,6 +128,7 @@ def load(db_path: Path = _DB_PATH) -> None:
         _load_sprites(con)
         _load_tiles(con)
         _load_maps(con)
+        _load_animations(con)
     finally:
         con.close()
     _loaded = True
@@ -179,9 +211,23 @@ def _load_items(con: sqlite3.Connection) -> None:
             if r['ammunition_type'] is not None:
                 base['ammunition_type'] = r['ammunition_type']
 
-        ITEMS[key] = cls(**base)
+        if cls == Structure:
+            if r['footprint'] is not None:
+                base['footprint'] = json.loads(r['footprint'])
+            if r['collision_mask'] is not None:
+                base['collision_mask'] = json.loads(r['collision_mask'])
+            if r['entry_points'] is not None:
+                base['entry_points'] = json.loads(r['entry_points'])
+            if r['nested_map'] is not None:
+                base['nested_map'] = r['nested_map']
+
+        obj = cls(**base)
         if r['tile_scale'] is not None:
-            ITEMS[key].tile_scale = r['tile_scale']
+            obj.tile_scale = r['tile_scale']
+        obj.collision = bool(r['collision'])
+        ITEMS[key] = obj
+        if cls == Structure:
+            STRUCTURES[key] = obj
 
 
 def _load_tiles(con: sqlite3.Connection) -> None:
@@ -282,3 +328,27 @@ def _load_sprites(con: sqlite3.Connection) -> None:
             ,'height':      r['height']
             ,'action_point': (apx, apy) if apx is not None and apy is not None else None
         }
+
+
+def _load_animations(con: sqlite3.Connection) -> None:
+    for r in con.execute('SELECT name, target_type FROM animations').fetchall():
+        ANIMATIONS[r['name']] = {
+            'target_type': r['target_type'],
+            'frames': [],
+        }
+
+    for r in con.execute(
+        'SELECT animation_name, frame_index, sprite_name, duration_ms'
+        ' FROM animation_frames ORDER BY animation_name, frame_index'
+    ).fetchall():
+        anim = ANIMATIONS.get(r['animation_name'])
+        if anim is not None:
+            anim['frames'].append({
+                'sprite_name': r['sprite_name'],
+                'duration_ms': r['duration_ms'],
+            })
+
+    for r in con.execute(
+        'SELECT target_name, behavior, animation_name FROM animation_bindings'
+    ).fetchall():
+        ANIM_BINDINGS[(r['target_name'], r['behavior'])] = r['animation_name']

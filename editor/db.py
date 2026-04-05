@@ -88,6 +88,11 @@ def migrate_db():
             "ALTER TABLE sprites ADD COLUMN action_point_x INTEGER",
             "ALTER TABLE sprites ADD COLUMN action_point_y INTEGER",
             "ALTER TABLE items   ADD COLUMN tile_scale REAL NOT NULL DEFAULT 1.0",
+            "ALTER TABLE items   ADD COLUMN collision INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE items   ADD COLUMN footprint TEXT",
+            "ALTER TABLE items   ADD COLUMN collision_mask TEXT",
+            "ALTER TABLE items   ADD COLUMN entry_points TEXT",
+            "ALTER TABLE items   ADD COLUMN nested_map TEXT",
             "ALTER TABLE species ADD COLUMN tile_scale REAL NOT NULL DEFAULT 1.0",
             """CREATE TABLE IF NOT EXISTS tiles (
     key TEXT PRIMARY KEY, name TEXT NOT NULL DEFAULT '',
@@ -137,6 +142,44 @@ def migrate_db():
             con.execute("INSERT OR IGNORE INTO tile_sets (name) SELECT DISTINCT tile_set FROM tile_entries")
             con.execute("UPDATE maps SET tile_set = name WHERE tile_set IS NULL")
             con.execute("DROP TABLE _old_tile_sets")
+        # Animation tables
+        for stmt in [
+            """CREATE TABLE IF NOT EXISTS animations (
+                name TEXT PRIMARY KEY, target_type TEXT NOT NULL DEFAULT 'creature')""",
+            """CREATE TABLE IF NOT EXISTS animation_frames (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                animation_name TEXT NOT NULL REFERENCES animations(name),
+                frame_index INTEGER NOT NULL,
+                sprite_name TEXT NOT NULL REFERENCES sprites(name),
+                duration_ms INTEGER NOT NULL DEFAULT 150,
+                UNIQUE(animation_name, frame_index))""",
+            """CREATE TABLE IF NOT EXISTS animation_bindings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                target_name TEXT NOT NULL,
+                behavior TEXT NOT NULL DEFAULT 'idle',
+                animation_name TEXT NOT NULL REFERENCES animations(name),
+                UNIQUE(target_name, behavior))""",
+        ]:
+            try:
+                con.execute(stmt)
+            except sqlite3.OperationalError:
+                pass
         con.commit()
+    finally:
+        con.close()
+
+
+def fetch_animation_names() -> list[str]:
+    con = get_con()
+    try:
+        return [r['name'] for r in con.execute('SELECT name FROM animations ORDER BY name').fetchall()]
+    finally:
+        con.close()
+
+
+def fetch_species_names() -> list[str]:
+    con = get_con()
+    try:
+        return [r['name'] for r in con.execute('SELECT name FROM species ORDER BY name').fetchall()]
     finally:
         con.close()

@@ -1,7 +1,7 @@
 import pygame
 from classes.maps import MapKey
 from main.config import (
-    SCREEN_WIDTH, SCREEN_HEIGHT,
+    SCREEN_WIDTH, SCREEN_HEIGHT, TILE_HEIGHT,
     COLOR_WALKABLE, COLOR_BLOCKED, COLOR_NESTED, COLOR_EXIT,
     COLOR_PLAYER, COLOR_GRID, MENU_OPTIONS,
 )
@@ -9,10 +9,11 @@ from main.config import (
 
 def camera_offset(player_loc, cols, rows, block_size):
     """Return (cam_x, cam_y) in pixels -- the world-space origin of the viewport."""
+    tile_h = TILE_HEIGHT
     cx = player_loc.x * block_size - SCREEN_WIDTH  // 2 + block_size // 2
-    cy = player_loc.y * block_size - SCREEN_HEIGHT // 2 + block_size // 2
+    cy = player_loc.y * tile_h     - SCREEN_HEIGHT // 2 + tile_h // 2
     cx = max(0, min(cx, cols * block_size - SCREEN_WIDTH))
-    cy = max(0, min(cy, rows * block_size - SCREEN_HEIGHT))
+    cy = max(0, min(cy, rows * tile_h     - SCREEN_HEIGHT))
     return cx, cy
 
 
@@ -27,8 +28,9 @@ def make_tile_surface(tile, block_size):
     palette = data['palette']
     cols    = len(pixels[0])
     rows    = len(pixels)
-    w = int(cols * (block_size / 32) * tile.tile_scale)
-    h = int(rows * (block_size / 32) * tile.tile_scale)
+    scale   = block_size / 32 * tile.tile_scale
+    w = int(cols * scale)
+    h = int(rows * scale * TILE_HEIGHT / block_size)
     native = pygame.Surface((cols, rows), pygame.SRCALPHA)
     for row_idx, row in enumerate(pixels):
         for col_idx, char in enumerate(row):
@@ -38,32 +40,35 @@ def make_tile_surface(tile, block_size):
     return pygame.transform.scale(native, (w, h))
 
 
-def draw_map(surface, game_map, cols, rows, block_size, cam, has_parent=False):
+def draw_map_row(surface, game_map, cols, y, block_size, cam, has_parent=False):
+    """Draw a single row of tiles."""
     cx, cy = cam
+    tile_h = TILE_HEIGHT
+    sy = y * tile_h - cy
+    if sy + tile_h < 0 or sy > SCREEN_HEIGHT:
+        return
     for x in range(cols):
-        for y in range(rows):
-            sx = x * block_size - cx
-            sy = y * block_size - cy
-            if sx + block_size < 0 or sx > SCREEN_WIDTH or sy + block_size < 0 or sy > SCREEN_HEIGHT:
-                continue
-            tile = game_map.tiles.get(MapKey(0, x, y, 0))
-            if (x, y) == game_map.entrance and has_parent:
-                color = COLOR_EXIT
-            elif tile is None:
-                color = COLOR_BLOCKED
-            elif tile.nested_map is not None:
-                color = COLOR_NESTED
-            elif tile.walkable:
-                color = COLOR_WALKABLE
-            else:
-                color = COLOR_BLOCKED
-            rect = pygame.Rect(sx, sy, block_size, block_size)
-            pygame.draw.rect(surface, color, rect)
-            if tile and tile.sprite_name:
-                tile_surf = make_tile_surface(tile, block_size)
-                if tile_surf:
-                    tw, th = tile_surf.get_size()
-                    surface.blit(tile_surf, (sx + (block_size - tw) // 2, sy + (block_size - th) // 2))
+        sx = x * block_size - cx
+        if sx + block_size < 0 or sx > SCREEN_WIDTH:
+            continue
+        tile = game_map.tiles.get(MapKey(0, x, y, 0))
+        if (x, y) == game_map.entrance and has_parent:
+            color = COLOR_EXIT
+        elif tile is None:
+            color = COLOR_BLOCKED
+        elif tile.nested_map is not None:
+            color = COLOR_NESTED
+        elif tile.walkable:
+            color = COLOR_WALKABLE
+        else:
+            color = COLOR_BLOCKED
+        rect = pygame.Rect(sx, sy, block_size, tile_h)
+        pygame.draw.rect(surface, color, rect)
+        if tile and tile.sprite_name:
+            tile_surf = make_tile_surface(tile, block_size)
+            if tile_surf:
+                tw, th = tile_surf.get_size()
+                surface.blit(tile_surf, (sx + (block_size - tw) // 2, sy + (tile_h - th) // 2))
 
 
 def draw_menu(surface, selected):
