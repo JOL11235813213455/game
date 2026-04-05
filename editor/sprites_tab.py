@@ -1,9 +1,10 @@
+import copy
 import json
 import sqlite3
 import tkinter as tk
 from tkinter import ttk, messagebox, colorchooser
 
-from editor.db import get_con
+from editor.db import get_con, fetch_sprite_sets
 from editor.constants import GRID_COLS, GRID_ROWS, CELL_SIZE, MAX_PALETTE
 from editor.tooltip import add_tooltip
 
@@ -15,19 +16,37 @@ class SpritesTab(ttk.Frame):
     CHECKER_A        = '#cccccc'
     CHECKER_B        = '#aaaaaa'
     CELL_PX          = CELL_SIZE
+    MAX_HISTORY      = 10
 
     def __init__(self, parent, on_sprites_changed=None):
         super().__init__(parent)
         self.on_sprites_changed = on_sprites_changed
 
-        self._cols: int              = GRID_COLS
-        self._rows: int              = GRID_ROWS
+        self._cols: int               = GRID_COLS
+        self._rows: int               = GRID_ROWS
         self._pixels: list[list[str]] = self._empty_pixels()
         self._palette: dict[str, str] = {}
         self._selected_char: str | None = None
         self._palette_widgets: list[dict] = []
         self._action_point: tuple[int, int] | None = None
         self._action_point_mode: bool              = False
+
+        # undo — stores (pixels_deepcopy, cols, rows)
+        self._history: list = []
+
+        # selection tool state
+        self._select_mode: bool       = False
+        self._sel_rect: tuple | None  = None   # (r1,c1,r2,c2) finalized selection
+        self._sel_start: tuple | None = None   # rubber-band anchor
+        self._sel_end: tuple | None   = None   # rubber-band cursor
+        self._sel_moving: bool        = False  # dragging selection to move it
+        self._sel_move_anchor: tuple | None = None
+        self._sel_buffer: list | None = None   # floating pixels during move
+        self._sel_buf_r: int          = 0      # buffer top-left row
+        self._sel_buf_c: int          = 0      # buffer top-left col
+
+        # clipboard for cut / paste
+        self._clipboard: list | None  = None   # list[list[str]]
 
         self._build_ui()
         self.refresh_list()
@@ -90,6 +109,18 @@ class SpritesTab(ttk.Frame):
         name_entry.pack(side=tk.LEFT, padx=6)
         add_tooltip(name_entry, 'Unique identifier for this sprite')
 
+        set_row = ttk.Frame(right)
+        set_row.pack(fill=tk.X, padx=6, pady=2)
+        ttk.Label(set_row, text='Set:').pack(side=tk.LEFT)
+        self.v_sprite_set = tk.StringVar()
+        self._sprite_set_cb = ttk.Combobox(
+            set_row, textvariable=self.v_sprite_set,
+            values=[''] + fetch_sprite_sets(), width=20)
+        self._sprite_set_cb.pack(side=tk.LEFT, padx=6)
+        add_tooltip(self._sprite_set_cb,
+                    'Optional grouping tag (e.g. "human_male", "goblin") — '
+                    'type a new name or pick an existing one')
+
         size_row = ttk.Frame(right)
         size_row.pack(fill=tk.X, padx=6, pady=2)
         ttk.Label(size_row, text='Size:').pack(side=tk.LEFT)
@@ -115,12 +146,18 @@ class SpritesTab(ttk.Frame):
         grid_w = self.CELL_PX * self._cols
         grid_h = self.CELL_PX * self._rows
         self.grid_canvas = tk.Canvas(
-            editor_row, width=grid_w, height=grid_h, bg='white', cursor='crosshair')
+            editor_row, width=grid_w, height=grid_h, bg='white',
+            cursor='crosshair', takefocus=True)
         self.grid_canvas.pack(side=tk.LEFT, anchor='n')
-        self.grid_canvas.bind('<Button-1>', self._on_grid_click)
-        self.grid_canvas.bind('<B1-Motion>', self._on_grid_drag)
-        self.grid_canvas.bind('<Button-3>', self._on_grid_erase)
-        self.grid_canvas.bind('<B3-Motion>', self._on_grid_erase)
+
+        self.grid_canvas.bind('<Button-1>',         self._on_grid_click)
+        self.grid_canvas.bind('<B1-Motion>',         self._on_grid_drag)
+        self.grid_canvas.bind('<ButtonRelease-1>',   self._on_grid_release)
+        self.grid_canvas.bind('<Button-3>',          self._on_grid_erase_click)
+        self.grid_canvas.bind('<B3-Motion>',         self._on_grid_erase)
+        self.grid_canvas.bind('<Control-z>',         self._undo)
+        self.grid_canvas.bind('<Control-x>',         self._cut)
+        self.grid_canvas.bind('<Control-v>',         self._paste)
 
         self._draw_grid()
 
@@ -142,6 +179,7 @@ class SpritesTab(ttk.Frame):
 
         ttk.Label(palette_outer, text='Tools', font=('TkDefaultFont', 10, 'bold')).pack(anchor='w')
 
+        # Row 1: paint tools
         tools_row1 = ttk.Frame(palette_outer)
         tools_row1.pack(fill=tk.X, pady=(2, 0))
 
@@ -154,6 +192,14 @@ class SpritesTab(ttk.Frame):
         self._ap_btn.pack(side=tk.LEFT, padx=(0, 4))
         add_tooltip(self._ap_btn, 'Set the anchor point used to align this sprite\non its tile (e.g. feet position)')
 
+        self._sel_btn = ttk.Button(tools_row1, text='Select', command=self._toggle_select_mode)
+        self._sel_btn.pack(side=tk.LEFT, padx=(0, 4))
+        add_tooltip(self._sel_btn,
+                    'Drag to select a rectangular region.\n'
+                    'Drag selection to move it.\n'
+                    'Ctrl+X cut  |  Ctrl+V paste  |  Ctrl+Z undo')
+
+        # Row 2: utility tools
         tools_row2 = ttk.Frame(palette_outer)
         tools_row2.pack(fill=tk.X, pady=(2, 0))
 
@@ -174,6 +220,7 @@ class SpritesTab(ttk.Frame):
         er_spin.pack(side=tk.LEFT)
         add_tooltip(er_spin, 'Eraser radius in pixels')
 
+        # Row 3: flip
         tools_row3 = ttk.Frame(palette_outer)
         tools_row3.pack(fill=tk.X, pady=(2, 0))
 
@@ -183,10 +230,15 @@ class SpritesTab(ttk.Frame):
         fv_btn = ttk.Button(tools_row3, text='Flip V', command=self._flip_v)
         fv_btn.pack(side=tk.LEFT, padx=(0, 4))
         add_tooltip(fv_btn, 'Mirror the sprite vertically (top \u2194 bottom)')
-        cw_btn = ttk.Button(tools_row3, text='Rot CW', command=self._rotate_cw)
+
+        # Row 4: rotate
+        tools_row4 = ttk.Frame(palette_outer)
+        tools_row4.pack(fill=tk.X, pady=(2, 0))
+
+        cw_btn = ttk.Button(tools_row4, text='Rot CW', command=self._rotate_cw)
         cw_btn.pack(side=tk.LEFT, padx=(0, 4))
         add_tooltip(cw_btn, 'Rotate the sprite 90\u00b0 clockwise')
-        ccw_btn = ttk.Button(tools_row3, text='Rot CCW', command=self._rotate_ccw)
+        ccw_btn = ttk.Button(tools_row4, text='Rot CCW', command=self._rotate_ccw)
         ccw_btn.pack(side=tk.LEFT, padx=(0, 4))
         add_tooltip(ccw_btn, 'Rotate the sprite 90\u00b0 counter-clockwise')
 
@@ -215,6 +267,41 @@ class SpritesTab(ttk.Frame):
                 tag = f'cell_{row}_{col}'
                 self.grid_canvas.create_rectangle(
                     x0, y0, x1, y1, fill=color, outline='#888888', width=1, tags=tag)
+
+        # draw floating buffer on top (during selection move)
+        if self._sel_buffer is not None:
+            for br, row_data in enumerate(self._sel_buffer):
+                for bc, ch in enumerate(row_data):
+                    r = self._sel_buf_r + br
+                    c = self._sel_buf_c + bc
+                    if r < 0 or r >= self._rows or c < 0 or c >= self._cols:
+                        continue
+                    x0, y0 = c * cp, r * cp
+                    if ch == self.TRANSPARENT_CHAR or ch not in self._palette:
+                        color = self.CHECKER_A if (r + c) % 2 == 0 else self.CHECKER_B
+                    else:
+                        color = self._palette[ch]
+                    self.grid_canvas.create_rectangle(
+                        x0, y0, x0 + cp, y0 + cp,
+                        fill=color, outline='#888888', width=1)
+
+        # draw selection overlay
+        rect = None
+        if self._sel_start is not None and self._sel_end is not None:
+            r1 = min(self._sel_start[0], self._sel_end[0])
+            r2 = max(self._sel_start[0], self._sel_end[0])
+            c1 = min(self._sel_start[1], self._sel_end[1])
+            c2 = max(self._sel_start[1], self._sel_end[1])
+            rect = (r1, c1, r2, c2)
+        elif self._sel_rect is not None:
+            rect = self._sel_rect
+        if rect is not None:
+            r1, c1, r2, c2 = rect
+            self.grid_canvas.create_rectangle(
+                c1 * cp, r1 * cp, (c2 + 1) * cp, (r2 + 1) * cp,
+                outline='#0088ff', width=2, dash=(4, 2), fill='')
+
+        # draw action point
         if self._action_point is not None:
             ar, ac = self._action_point
             x0 = ac * cp
@@ -250,64 +337,235 @@ class SpritesTab(ttk.Frame):
         self.grid_canvas.create_rectangle(
             x0, y0, x1, y1, fill=color, outline='#888888', width=1, tags=tag)
 
+    def _erase_cell_canvas(self, r: int, c: int):
+        """Erase one cell in _pixels and update the canvas rectangle."""
+        self._pixels[r][c] = self.TRANSPARENT_CHAR
+        cp = self.CELL_PX
+        x0, y0 = c * cp, r * cp
+        tag = f'cell_{r}_{c}'
+        self.grid_canvas.delete(tag)
+        color = self.CHECKER_A if (r + c) % 2 == 0 else self.CHECKER_B
+        self.grid_canvas.create_rectangle(
+            x0, y0, x0 + cp, y0 + cp,
+            fill=color, outline='#888888', width=1, tags=tag)
+
     def _erase_circle(self, center_row: int, center_col: int):
         try:
             radius = int(self.v_eraser_radius.get())
         except ValueError:
             radius = 2
-        cp = self.CELL_PX
         for r in range(max(0, center_row - radius), min(self._rows, center_row + radius + 1)):
             for c in range(max(0, center_col - radius), min(self._cols, center_col + radius + 1)):
                 if (r - center_row) ** 2 + (c - center_col) ** 2 <= radius ** 2:
-                    self._pixels[r][c] = self.TRANSPARENT_CHAR
-                    x0, y0 = c * cp, r * cp
-                    tag = f'cell_{r}_{c}'
-                    self.grid_canvas.delete(tag)
-                    color = self.CHECKER_A if (r + c) % 2 == 0 else self.CHECKER_B
-                    self.grid_canvas.create_rectangle(
-                        x0, y0, x0 + cp, y0 + cp,
-                        fill=color, outline='#888888', width=1, tags=tag)
+                    self._erase_cell_canvas(r, c)
+
+    # ---- mouse event handlers ---------------------------------------------
 
     def _on_grid_click(self, event):
+        self.grid_canvas.focus_set()
         cell = self._cell_from_event(event)
-        if cell:
-            if self._action_point_mode:
-                self._action_point = cell
-                self._update_ap_label()
-                self._draw_grid()
-            elif self._eraser_mode:
-                self._erase_circle(*cell)
-            elif self._fill_mode:
-                self._flood_fill(*cell)
+        if cell is None:
+            return
+
+        if self._select_mode:
+            if self._sel_rect is not None and self._point_in_sel(cell):
+                # start moving the existing selection
+                self._push_history()
+                self._start_sel_move(cell)
             else:
-                self._paint_cell(*cell)
+                # start a new rubber-band selection
+                if self._sel_buffer is not None:
+                    self._finish_sel_move()
+                self._sel_start = cell
+                self._sel_end   = cell
+                self._sel_rect  = None
+                self._draw_grid()
+            return
+
+        self._push_history()
+        if self._action_point_mode:
+            self._action_point = cell
+            self._update_ap_label()
+            self._draw_grid()
+        elif self._eraser_mode:
+            self._erase_circle(*cell)
+        elif self._fill_mode:
+            self._flood_fill(*cell)
+        else:
+            self._paint_cell(*cell)
 
     def _on_grid_drag(self, event):
         cell = self._cell_from_event(event)
-        if cell:
-            if self._eraser_mode:
-                self._erase_circle(*cell)
+        if cell is None:
+            return
+
+        if self._select_mode:
+            if self._sel_moving:
+                self._update_sel_move(cell)
             else:
-                self._paint_cell(*cell)
+                self._sel_end = cell
+                self._draw_grid()
+            return
+
+        if self._eraser_mode:
+            self._erase_circle(*cell)
+        elif not self._action_point_mode and not self._fill_mode:
+            self._paint_cell(*cell)
+
+    def _on_grid_release(self, event):
+        if self._select_mode:
+            if self._sel_moving:
+                self._finish_sel_move()
+            elif self._sel_start is not None:
+                r1 = min(self._sel_start[0], self._sel_end[0])
+                r2 = max(self._sel_start[0], self._sel_end[0])
+                c1 = min(self._sel_start[1], self._sel_end[1])
+                c2 = max(self._sel_start[1], self._sel_end[1])
+                self._sel_rect  = (r1, c1, r2, c2)
+                self._sel_start = None
+                self._sel_end   = None
+                self._draw_grid()
+
+    def _on_grid_erase_click(self, event):
+        self.grid_canvas.focus_set()
+        cell = self._cell_from_event(event)
+        if cell is None:
+            return
+        self._push_history()
+        if self._eraser_mode:
+            self._erase_circle(*cell)
+        elif self._fill_mode:
+            self._flood_fill_erase(*cell)
+        else:
+            self._erase_cell_canvas(*cell)
 
     def _on_grid_erase(self, event):
         cell = self._cell_from_event(event)
-        if cell:
-            if self._eraser_mode:
-                self._erase_circle(*cell)
-            elif self._fill_mode:
-                self._flood_fill_erase(*cell)
-            else:
-                row, col = cell
-                self._pixels[row][col] = self.TRANSPARENT_CHAR
-                cp = self.CELL_PX
-                x0, y0 = col * cp, row * cp
-                tag = f'cell_{row}_{col}'
-                self.grid_canvas.delete(tag)
-                color = self.CHECKER_A if (row + col) % 2 == 0 else self.CHECKER_B
-                self.grid_canvas.create_rectangle(
-                    x0, y0, x0 + cp, y0 + cp,
-                    fill=color, outline='#888888', width=1, tags=tag)
+        if cell is None:
+            return
+        if self._eraser_mode:
+            self._erase_circle(*cell)
+        elif self._fill_mode:
+            self._flood_fill_erase(*cell)
+        else:
+            self._erase_cell_canvas(*cell)
+
+    # ---- undo -------------------------------------------------------------
+
+    def _push_history(self):
+        self._history.append((copy.deepcopy(self._pixels), self._cols, self._rows))
+        if len(self._history) > self.MAX_HISTORY:
+            self._history.pop(0)
+
+    def _undo(self, event=None):
+        if not self._history:
+            return
+        pixels, cols, rows = self._history.pop()
+        self._pixels = pixels
+        self._cols   = cols
+        self._rows   = rows
+        self.v_width.set(str(cols))
+        self.v_height.set(str(rows))
+        cp = self.CELL_PX
+        self.grid_canvas.configure(width=cols * cp, height=rows * cp)
+        self._sel_rect   = None
+        self._sel_start  = None
+        self._sel_buffer = None
+        self._sel_moving = False
+        self._draw_grid()
+
+    # ---- selection tool ---------------------------------------------------
+
+    def _point_in_sel(self, cell) -> bool:
+        if self._sel_rect is None:
+            return False
+        r1, c1, r2, c2 = self._sel_rect
+        r, c = cell
+        return r1 <= r <= r2 and c1 <= c <= c2
+
+    def _start_sel_move(self, cell):
+        self._sel_moving     = True
+        self._sel_move_anchor = cell
+        r1, c1, r2, c2 = self._sel_rect
+        self._sel_buffer = [
+            [self._pixels[r][c] for c in range(c1, c2 + 1)]
+            for r in range(r1, r2 + 1)
+        ]
+        self._sel_buf_r = r1
+        self._sel_buf_c = c1
+        for r in range(r1, r2 + 1):
+            for c in range(c1, c2 + 1):
+                self._pixels[r][c] = self.TRANSPARENT_CHAR
+        self._draw_grid()
+
+    def _update_sel_move(self, cell):
+        dr = cell[0] - self._sel_move_anchor[0]
+        dc = cell[1] - self._sel_move_anchor[1]
+        if dr == 0 and dc == 0:
+            return
+        self._sel_move_anchor = cell
+        r1, c1, r2, c2 = self._sel_rect
+        buf_h = r2 - r1 + 1
+        buf_w = c2 - c1 + 1
+        new_r = max(0, min(self._sel_buf_r + dr, self._rows - buf_h))
+        new_c = max(0, min(self._sel_buf_c + dc, self._cols - buf_w))
+        self._sel_buf_r = new_r
+        self._sel_buf_c = new_c
+        self._sel_rect  = (new_r, new_c, new_r + buf_h - 1, new_c + buf_w - 1)
+        self._draw_grid()
+
+    def _finish_sel_move(self):
+        if self._sel_buffer is None:
+            return
+        r1, c1, r2, c2 = self._sel_rect
+        for br, r in enumerate(range(r1, r2 + 1)):
+            for bc, c in enumerate(range(c1, c2 + 1)):
+                px = self._sel_buffer[br][bc]
+                if px != self.TRANSPARENT_CHAR:
+                    self._pixels[r][c] = px
+        self._sel_moving = False
+        self._sel_buffer = None
+        self._draw_grid()
+
+    # ---- cut / paste ------------------------------------------------------
+
+    def _cut(self, event=None):
+        if self._sel_rect is None:
+            return
+        self._push_history()
+        r1, c1, r2, c2 = self._sel_rect
+        self._clipboard = [
+            [self._pixels[r][c] for c in range(c1, c2 + 1)]
+            for r in range(r1, r2 + 1)
+        ]
+        for r in range(r1, r2 + 1):
+            for c in range(c1, c2 + 1):
+                self._pixels[r][c] = self.TRANSPARENT_CHAR
+        self._sel_rect = None
+        self._draw_grid()
+
+    def _paste(self, event=None):
+        if self._clipboard is None:
+            return
+        self._push_history()
+        buf_h = len(self._clipboard)
+        buf_w = len(self._clipboard[0]) if buf_h else 0
+        for br in range(buf_h):
+            for bc in range(buf_w):
+                r = br
+                c = bc
+                if r < self._rows and c < self._cols:
+                    px = self._clipboard[br][bc]
+                    if px != self.TRANSPARENT_CHAR:
+                        self._pixels[r][c] = px
+        # select pasted region so user can move it right away
+        self._sel_rect = (0, 0,
+                          min(buf_h - 1, self._rows - 1),
+                          min(buf_w - 1, self._cols - 1))
+        # switch to select mode automatically
+        if not self._select_mode:
+            self._toggle_select_mode()
+        self._draw_grid()
 
     # ---- palette ----------------------------------------------------------
 
@@ -319,7 +577,6 @@ class SpritesTab(ttk.Frame):
             self._create_palette_row(char, color)
 
     def _create_palette_row(self, char: str, color: str):
-        idx = len(self._palette_widgets)
         frame = ttk.Frame(self.palette_frame)
         frame.pack(fill=tk.X, pady=2)
 
@@ -434,6 +691,7 @@ class SpritesTab(ttk.Frame):
         if not (1 <= new_cols <= 128 and 1 <= new_rows <= 128):
             messagebox.showerror('Size', 'Width/height must be between 1 and 128.')
             return
+        self._push_history()
         self._resize_grid(new_cols, new_rows)
 
     def _import_image(self):
@@ -506,6 +764,7 @@ class SpritesTab(ttk.Frame):
                     row.append(idx_to_char.get(idx, '.'))
             new_pixels.append(row)
 
+        self._push_history()
         self._palette = new_palette
         self._pixels = new_pixels
         self._selected_char = None
@@ -531,6 +790,8 @@ class SpritesTab(ttk.Frame):
             if ar >= new_rows or ac >= new_cols:
                 self._action_point = None
                 self._update_ap_label()
+        self._sel_rect  = None
+        self._sel_start = None
         cp = self.CELL_PX
         self.grid_canvas.configure(width=new_cols * cp, height=new_rows * cp)
         self._draw_grid()
@@ -545,6 +806,13 @@ class SpritesTab(ttk.Frame):
         if except_mode != 'eraser' and self._eraser_mode:
             self._eraser_mode = False
             self._eraser_btn.configure(text='Eraser')
+        if except_mode != 'select' and self._select_mode:
+            self._select_mode = False
+            self._sel_btn.configure(text='Select')
+            self._sel_rect   = None
+            self._sel_start  = None
+            self._sel_buffer = None
+            self._sel_moving = False
         if except_mode is None:
             self.grid_canvas.configure(cursor='crosshair')
 
@@ -577,6 +845,21 @@ class SpritesTab(ttk.Frame):
         else:
             self._eraser_btn.configure(text='Eraser')
             self.grid_canvas.configure(cursor='crosshair')
+
+    def _toggle_select_mode(self):
+        self._deactivate_modes(except_mode='select')
+        self._select_mode = not self._select_mode
+        if self._select_mode:
+            self._sel_btn.configure(text='[Select]')
+            self.grid_canvas.configure(cursor='sizing')
+        else:
+            self._sel_btn.configure(text='Select')
+            self.grid_canvas.configure(cursor='crosshair')
+            if self._sel_buffer is not None:
+                self._finish_sel_move()
+            self._sel_rect  = None
+            self._sel_start = None
+            self._draw_grid()
 
     def _flood_fill(self, row: int, col: int):
         if self._selected_char is None:
@@ -638,6 +921,7 @@ class SpritesTab(ttk.Frame):
             return
         new_rows = max_r - min_r + 1
         new_cols = max_c - min_c + 1
+        self._push_history()
         new_pixels = []
         for r in range(min_r, max_r + 1):
             new_pixels.append(self._pixels[r][min_c:max_c + 1])
@@ -655,12 +939,14 @@ class SpritesTab(ttk.Frame):
             else:
                 self._action_point = None
             self._update_ap_label()
+        self._sel_rect  = None
+        self._sel_start = None
         cp = self.CELL_PX
         self.grid_canvas.configure(width=new_cols * cp, height=new_rows * cp)
         self._draw_grid()
 
     def _flip_h(self):
-        """Flip the sprite horizontally (mirror left-right)."""
+        self._push_history()
         for row in self._pixels:
             row.reverse()
         if self._action_point is not None:
@@ -670,7 +956,7 @@ class SpritesTab(ttk.Frame):
         self._draw_grid()
 
     def _flip_v(self):
-        """Flip the sprite vertically (mirror top-bottom)."""
+        self._push_history()
         self._pixels.reverse()
         if self._action_point is not None:
             ar, ac = self._action_point
@@ -679,7 +965,7 @@ class SpritesTab(ttk.Frame):
         self._draw_grid()
 
     def _rotate_cw(self):
-        """Rotate the sprite 90 degrees clockwise."""
+        self._push_history()
         old_rows, old_cols = self._rows, self._cols
         new_pixels = []
         for c in range(old_cols):
@@ -697,7 +983,7 @@ class SpritesTab(ttk.Frame):
         self._draw_grid()
 
     def _rotate_ccw(self):
-        """Rotate the sprite 90 degrees counter-clockwise."""
+        self._push_history()
         old_rows, old_cols = self._rows, self._cols
         new_pixels = []
         for c in range(old_cols - 1, -1, -1):
@@ -735,6 +1021,7 @@ class SpritesTab(ttk.Frame):
 
     def _clear_editor(self):
         self.v_name.set('')
+        self.v_sprite_set.set('')
         self._cols = GRID_COLS
         self._rows = GRID_ROWS
         self.v_width.set(str(GRID_COLS))
@@ -744,9 +1031,16 @@ class SpritesTab(ttk.Frame):
         self._action_point_mode = False
         self._fill_mode         = False
         self._eraser_mode       = False
+        self._select_mode       = False
+        self._sel_rect          = None
+        self._sel_start         = None
+        self._sel_buffer        = None
+        self._sel_moving        = False
+        self._history           = []
         self._ap_btn.configure(text='Action Point')
         self._fill_btn.configure(text='Fill')
         self._eraser_btn.configure(text='Eraser')
+        self._sel_btn.configure(text='Select')
         self.grid_canvas.configure(
             width=self._cols * self.CELL_PX,
             height=self._rows * self.CELL_PX,
@@ -763,7 +1057,8 @@ class SpritesTab(ttk.Frame):
         con = get_con()
         try:
             row = con.execute(
-                'SELECT name, palette, pixels, width, height, action_point_x, action_point_y'
+                'SELECT name, palette, pixels, width, height,'
+                ' action_point_x, action_point_y, sprite_set'
                 ' FROM sprites WHERE name=?', (name,)
             ).fetchone()
             if row is None:
@@ -772,6 +1067,7 @@ class SpritesTab(ttk.Frame):
             con.close()
 
         self.v_name.set(row['name'])
+        self.v_sprite_set.set(row['sprite_set'] or '')
         raw_palette = json.loads(row['palette'])
         self._palette = {}
         for char, val in raw_palette.items():
@@ -804,6 +1100,8 @@ class SpritesTab(ttk.Frame):
         self._action_point = (apy, apx) if apx is not None and apy is not None else None
         self._update_ap_label()
 
+        self._history  = []
+        self._sel_rect = None
         cp = self.CELL_PX
         self.grid_canvas.configure(width=self._cols * cp, height=self._rows * cp)
 
@@ -840,22 +1138,25 @@ class SpritesTab(ttk.Frame):
 
         ap_x = self._action_point[1] if self._action_point else None
         ap_y = self._action_point[0] if self._action_point else None
+        sprite_set = self.v_sprite_set.get().strip() or None
 
         con = get_con()
         try:
             con.execute(
-                '''INSERT INTO sprites (name, palette, pixels, width, height, action_point_x, action_point_y)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)
+                '''INSERT INTO sprites (name, palette, pixels, width, height,
+                                        action_point_x, action_point_y, sprite_set)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(name) DO UPDATE SET
                    palette=excluded.palette,
                    pixels=excluded.pixels,
                    width=excluded.width,
                    height=excluded.height,
                    action_point_x=excluded.action_point_x,
-                   action_point_y=excluded.action_point_y
+                   action_point_y=excluded.action_point_y,
+                   sprite_set=excluded.sprite_set
                 ''',
                 (name, json.dumps(palette_out), json.dumps(pixels_out),
-                 self._cols, self._rows, ap_x, ap_y)
+                 self._cols, self._rows, ap_x, ap_y, sprite_set)
             )
             con.commit()
         except sqlite3.Error as e:
@@ -865,6 +1166,7 @@ class SpritesTab(ttk.Frame):
             con.close()
 
         self.refresh_list()
+        self._sprite_set_cb['values'] = [''] + fetch_sprite_sets()
         items = list(self.listbox.get(0, tk.END))
         if name in items:
             idx = items.index(name)

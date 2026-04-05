@@ -51,14 +51,16 @@ class Tile(Trackable):
         ,tile_template:str=None
         ,sprite_name:str=None
         ,tile_scale:float=None
+        ,animation_name:str=None
         ):
         super().__init__()
         tmpl = template or {}
-        self.walkable      = walkable    if walkable    is not None else tmpl.get('walkable',    True)
-        self.covered       = covered     if covered     is not None else tmpl.get('covered',     False)
-        self.bounds        = bounds      if bounds      is not None else tmpl.get('bounds',      Bounds())
-        self.sprite_name   = sprite_name if sprite_name is not None else tmpl.get('sprite_name', None)
-        self.tile_scale    = tile_scale  if tile_scale  is not None else tmpl.get('tile_scale',  1.0)
+        self.walkable       = walkable    if walkable    is not None else tmpl.get('walkable',    True)
+        self.covered        = covered     if covered     is not None else tmpl.get('covered',     False)
+        self.bounds         = bounds      if bounds      is not None else tmpl.get('bounds',      Bounds())
+        self.sprite_name    = sprite_name if sprite_name is not None else tmpl.get('sprite_name', None)
+        self.tile_scale     = tile_scale  if tile_scale  is not None else tmpl.get('tile_scale',  1.0)
+        self.animation_name = animation_name if animation_name is not None else tmpl.get('animation_name', None)
         self.nested_map: Map = map
         self.inventory = Inventory(items=items)
         self.tile_template = tile_template

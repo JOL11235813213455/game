@@ -1,7 +1,7 @@
 import pygame
 from classes.maps import MapKey
 from main.config import (
-    SCREEN_WIDTH, SCREEN_HEIGHT, TILE_HEIGHT,
+    SCREEN_WIDTH, SCREEN_HEIGHT, get_tile_height,
     COLOR_WALKABLE, COLOR_BLOCKED, COLOR_NESTED, COLOR_EXIT,
     COLOR_PLAYER, COLOR_GRID, MENU_OPTIONS,
 )
@@ -9,7 +9,7 @@ from main.config import (
 
 def camera_offset(player_loc, cols, rows, block_size):
     """Return (cam_x, cam_y) in pixels -- the world-space origin of the viewport."""
-    tile_h = TILE_HEIGHT
+    tile_h = get_tile_height()
     cx = player_loc.x * block_size - SCREEN_WIDTH  // 2 + block_size // 2
     cy = player_loc.y * tile_h     - SCREEN_HEIGHT // 2 + tile_h // 2
     cx = max(0, min(cx, cols * block_size - SCREEN_WIDTH))
@@ -17,33 +17,62 @@ def camera_offset(player_loc, cols, rows, block_size):
     return cx, cy
 
 
-def make_tile_surface(tile, block_size):
-    if not tile.sprite_name:
+def _resolve_tile_sprite(tile, time_ms: int) -> str | None:
+    """Return the sprite name for a tile, resolving animation if present."""
+    anim_name = tile.animation_name
+    if anim_name:
+        from data.db import ANIMATIONS
+        anim = ANIMATIONS.get(anim_name)
+        if anim and anim['frames']:
+            frames = anim['frames']
+            total = sum(f['duration_ms'] for f in frames)
+            if total > 0:
+                t = time_ms % total
+                acc = 0
+                for f in frames:
+                    acc += f['duration_ms']
+                    if t < acc:
+                        return f['sprite_name']
+                return frames[-1]['sprite_name']
+    return tile.sprite_name
+
+
+def make_tile_surface(tile, block_size, time_ms: int = 0):
+    sprite_name = _resolve_tile_sprite(tile, time_ms)
+    if not sprite_name:
         return None
     from data.db import SPRITE_DATA
-    data = SPRITE_DATA.get(tile.sprite_name)
+    data = SPRITE_DATA.get(sprite_name)
     if not data:
         return None
     pixels  = data['pixels']
     palette = data['palette']
     cols    = len(pixels[0])
     rows    = len(pixels)
-    scale   = block_size / 32 * tile.tile_scale
-    w = int(cols * scale)
-    h = int(rows * scale * TILE_HEIGHT / block_size)
     native = pygame.Surface((cols, rows), pygame.SRCALPHA)
     for row_idx, row in enumerate(pixels):
         for col_idx, char in enumerate(row):
             if char == '.' or char not in palette:
                 continue
             native.set_at((col_idx, row_idx), palette[char])
-    return pygame.transform.scale(native, (w, h))
+    # Target tile size in pixels
+    target_w = block_size
+    target_h = get_tile_height()
+    # If sprite is smaller than the tile, repeat it to fill
+    if cols < target_w or rows < target_h:
+        tiled = pygame.Surface((target_w, target_h), pygame.SRCALPHA)
+        for tx in range(0, target_w, cols):
+            for ty in range(0, target_h, rows):
+                tiled.blit(native, (tx, ty))
+        return tiled
+    else:
+        return pygame.transform.scale(native, (target_w, target_h))
 
 
-def draw_map_row(surface, game_map, cols, y, block_size, cam, has_parent=False):
+def draw_map_row(surface, game_map, cols, y, block_size, cam, has_parent=False, time_ms=0):
     """Draw a single row of tiles."""
     cx, cy = cam
-    tile_h = TILE_HEIGHT
+    tile_h = get_tile_height()
     sy = y * tile_h - cy
     if sy + tile_h < 0 or sy > SCREEN_HEIGHT:
         return
@@ -65,7 +94,7 @@ def draw_map_row(surface, game_map, cols, y, block_size, cam, has_parent=False):
         rect = pygame.Rect(sx, sy, block_size, tile_h)
         pygame.draw.rect(surface, color, rect)
         if tile and tile.sprite_name:
-            tile_surf = make_tile_surface(tile, block_size)
+            tile_surf = make_tile_surface(tile, block_size, time_ms)
             if tile_surf:
                 tw, th = tile_surf.get_size()
                 surface.blit(tile_surf, (sx + (block_size - tw) // 2, sy + (tile_h - th) // 2))

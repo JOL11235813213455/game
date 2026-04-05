@@ -21,6 +21,8 @@ MAPS:  dict[str, object] = {}
 STRUCTURES: dict[str, 'Structure'] = {}  # key → Structure instance (templates from DB)
 ANIMATIONS: dict[str, dict] = {}    # name → {target_type, frames: [{sprite_name, duration_ms}]}
 ANIM_BINDINGS: dict[tuple, str] = {}  # (target_name, behavior) → animation_name
+COMPOSITES: dict[str, dict] = {}    # name → {root_layer, layers, connections, variants, animations}
+COMPOSITE_ANIMS: dict[str, dict] = {}  # name → {composite_name, loop, duration_ms, keyframes}
 
 
 def _migrate(con: sqlite3.Connection) -> None:
@@ -57,11 +59,14 @@ def _migrate(con: sqlite3.Connection) -> None:
     y_min INTEGER NOT NULL DEFAULT 0, y_max INTEGER NOT NULL DEFAULT 0,
     z_min INTEGER NOT NULL DEFAULT 0, z_max INTEGER NOT NULL DEFAULT 0)""",
         "ALTER TABLE maps ADD COLUMN tile_set TEXT",
+        "ALTER TABLE tiles ADD COLUMN animation_name TEXT",
         "ALTER TABLE items ADD COLUMN collision INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE items ADD COLUMN footprint TEXT",
         "ALTER TABLE items ADD COLUMN collision_mask TEXT",
         "ALTER TABLE items ADD COLUMN entry_points TEXT",
         "ALTER TABLE items ADD COLUMN nested_map TEXT",
+        "ALTER TABLE species ADD COLUMN composite_name TEXT",
+        "ALTER TABLE sprites ADD COLUMN sprite_set TEXT",
     ]:
         try:
             con.execute(stmt)
@@ -112,6 +117,56 @@ def _migrate(con: sqlite3.Connection) -> None:
         except sqlite3.OperationalError:
             pass
 
+    # Composite sprite tables
+    for stmt in [
+        """CREATE TABLE IF NOT EXISTS composite_sprites (
+            name TEXT PRIMARY KEY,
+            root_layer TEXT NOT NULL DEFAULT 'root')""",
+        """CREATE TABLE IF NOT EXISTS composite_layers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            composite_name TEXT NOT NULL REFERENCES composite_sprites(name),
+            layer_name TEXT NOT NULL,
+            z_layer INTEGER NOT NULL DEFAULT 0,
+            default_sprite TEXT REFERENCES sprites(name),
+            UNIQUE(composite_name, layer_name))""",
+        """CREATE TABLE IF NOT EXISTS layer_variants (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            composite_name TEXT NOT NULL REFERENCES composite_sprites(name),
+            layer_name TEXT NOT NULL,
+            variant_name TEXT NOT NULL,
+            sprite_name TEXT NOT NULL REFERENCES sprites(name),
+            UNIQUE(composite_name, layer_name, variant_name))""",
+        """CREATE TABLE IF NOT EXISTS layer_connections (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            composite_name TEXT NOT NULL REFERENCES composite_sprites(name),
+            parent_layer TEXT NOT NULL,
+            child_layer TEXT NOT NULL,
+            parent_socket_x INTEGER NOT NULL DEFAULT 0,
+            parent_socket_y INTEGER NOT NULL DEFAULT 0,
+            child_anchor_x INTEGER NOT NULL DEFAULT 0,
+            child_anchor_y INTEGER NOT NULL DEFAULT 0,
+            UNIQUE(composite_name, child_layer))""",
+        """CREATE TABLE IF NOT EXISTS composite_animations (
+            name TEXT PRIMARY KEY,
+            composite_name TEXT NOT NULL REFERENCES composite_sprites(name),
+            loop INTEGER NOT NULL DEFAULT 1,
+            duration_ms INTEGER NOT NULL DEFAULT 1000)""",
+        """CREATE TABLE IF NOT EXISTS composite_anim_keyframes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            animation_name TEXT NOT NULL REFERENCES composite_animations(name),
+            layer_name TEXT NOT NULL,
+            time_ms INTEGER NOT NULL DEFAULT 0,
+            offset_x INTEGER NOT NULL DEFAULT 0,
+            offset_y INTEGER NOT NULL DEFAULT 0,
+            rotation_deg REAL NOT NULL DEFAULT 0.0,
+            variant_name TEXT,
+            UNIQUE(animation_name, layer_name, time_ms))""",
+    ]:
+        try:
+            con.execute(stmt)
+        except sqlite3.OperationalError:
+            pass
+
     con.commit()
 
 
@@ -129,13 +184,14 @@ def load(db_path: Path = _DB_PATH) -> None:
         _load_tiles(con)
         _load_maps(con)
         _load_animations(con)
+        _load_composites(con)
     finally:
         con.close()
     _loaded = True
 
 
 def _load_species(con: sqlite3.Connection) -> None:
-    rows      = con.execute('SELECT name, playable, sprite_name, tile_scale FROM species').fetchall()
+    rows      = con.execute('SELECT name, playable, sprite_name, tile_scale, composite_name FROM species').fetchall()
     stat_rows = con.execute('SELECT species_name, stat, value FROM species_stats').fetchall()
 
     stats_by_species: dict[str, dict] = {r['name']: {} for r in rows}
@@ -147,6 +203,8 @@ def _load_species(con: sqlite3.Connection) -> None:
         block = stats_by_species[name]
         if r['sprite_name'] is not None:
             block['sprite_name'] = r['sprite_name']
+        if r['composite_name'] is not None:
+            block['composite_name'] = r['composite_name']
         block['tile_scale'] = r['tile_scale'] if r['tile_scale'] is not None else 1.0
         SPECIES[name] = block
         if r['playable']:
@@ -242,6 +300,7 @@ def _load_tiles(con: sqlite3.Connection) -> None:
             'sprite_name': r['sprite_name'],
             'tile_scale':  r['tile_scale'] if r['tile_scale'] is not None else 1.0,
             'bounds':      Bounds(**b_kwargs),
+            'animation_name': r['animation_name'],
         }
 
 
@@ -352,3 +411,75 @@ def _load_animations(con: sqlite3.Connection) -> None:
         'SELECT target_name, behavior, animation_name FROM animation_bindings'
     ).fetchall():
         ANIM_BINDINGS[(r['target_name'], r['behavior'])] = r['animation_name']
+
+
+def _load_composites(con: sqlite3.Connection) -> None:
+    # Load composite definitions
+    for r in con.execute('SELECT name, root_layer FROM composite_sprites').fetchall():
+        COMPOSITES[r['name']] = {
+            'root_layer': r['root_layer'],
+            'layers': {},       # layer_name → {z_layer, default_sprite}
+            'connections': {},  # child_layer → {parent_layer, parent_socket, child_anchor}
+            'variants': {},     # layer_name → {variant_name → sprite_name}
+        }
+
+    # Load layers
+    for r in con.execute(
+        'SELECT composite_name, layer_name, z_layer, default_sprite'
+        ' FROM composite_layers ORDER BY z_layer'
+    ).fetchall():
+        comp = COMPOSITES.get(r['composite_name'])
+        if comp:
+            comp['layers'][r['layer_name']] = {
+                'z_layer': r['z_layer'],
+                'default_sprite': r['default_sprite'],
+            }
+
+    # Load connections
+    for r in con.execute(
+        'SELECT composite_name, parent_layer, child_layer,'
+        ' parent_socket_x, parent_socket_y, child_anchor_x, child_anchor_y'
+        ' FROM layer_connections'
+    ).fetchall():
+        comp = COMPOSITES.get(r['composite_name'])
+        if comp:
+            comp['connections'][r['child_layer']] = {
+                'parent_layer': r['parent_layer'],
+                'parent_socket': (r['parent_socket_x'], r['parent_socket_y']),
+                'child_anchor': (r['child_anchor_x'], r['child_anchor_y']),
+            }
+
+    # Load variants
+    for r in con.execute(
+        'SELECT composite_name, layer_name, variant_name, sprite_name'
+        ' FROM layer_variants'
+    ).fetchall():
+        comp = COMPOSITES.get(r['composite_name'])
+        if comp:
+            comp['variants'].setdefault(r['layer_name'], {})[r['variant_name']] = r['sprite_name']
+
+    # Load composite animations
+    for r in con.execute(
+        'SELECT name, composite_name, loop, duration_ms FROM composite_animations'
+    ).fetchall():
+        COMPOSITE_ANIMS[r['name']] = {
+            'composite_name': r['composite_name'],
+            'loop': bool(r['loop']),
+            'duration_ms': r['duration_ms'],
+            'keyframes': {},  # layer_name → [{time_ms, offset_x, offset_y, rotation_deg, variant_name}]
+        }
+
+    for r in con.execute(
+        'SELECT animation_name, layer_name, time_ms, offset_x, offset_y,'
+        ' rotation_deg, variant_name'
+        ' FROM composite_anim_keyframes ORDER BY animation_name, layer_name, time_ms'
+    ).fetchall():
+        anim = COMPOSITE_ANIMS.get(r['animation_name'])
+        if anim:
+            anim['keyframes'].setdefault(r['layer_name'], []).append({
+                'time_ms': r['time_ms'],
+                'offset_x': r['offset_x'],
+                'offset_y': r['offset_y'],
+                'rotation_deg': r['rotation_deg'],
+                'variant_name': r['variant_name'],
+            })

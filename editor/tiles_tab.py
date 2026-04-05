@@ -2,7 +2,7 @@ import sqlite3
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-from editor.db import get_con, fetch_sprite_names
+from editor.db import get_con, fetch_sprite_names, fetch_animation_names
 from editor.constants import PREVIEW_SIZE
 from editor.sprite_preview import SpritePreview
 from editor.tooltip import add_tooltip
@@ -88,6 +88,16 @@ class TilesTab(ttk.Frame):
         self.sprite_preview = SpritePreview(sf, size=PREVIEW_SIZE)
         self.sprite_preview.pack(side=tk.LEFT)
         self.sprite_cb.bind('<<ComboboxSelected>>', lambda e: self.sprite_preview.load(self.v_sprite.get() or None))
+
+        ttk.Label(f, text='Animation').grid(row=r, column=0, sticky='w', padx=6, pady=4)
+        self.v_animation = tk.StringVar()
+        self._anim_names = [''] + fetch_animation_names()
+        self.anim_cb = ttk.Combobox(f, textvariable=self.v_animation,
+                                    values=self._anim_names, state='readonly', width=18)
+        self.anim_cb.grid(row=r, column=1, sticky='w', padx=6, pady=4)
+        add_tooltip(self.anim_cb, 'Animation to play on this tile (overrides static sprite)')
+        r += 1
+
         f.columnconfigure(1, weight=1)
 
     def refresh_list(self):
@@ -104,6 +114,8 @@ class TilesTab(ttk.Frame):
     def refresh_sprite_dropdown(self):
         self._sprite_names = [''] + fetch_sprite_names()
         self.sprite_cb['values'] = self._sprite_names
+        self._anim_names = [''] + fetch_animation_names()
+        self.anim_cb['values'] = self._anim_names
 
     def _clear_form(self):
         self.v_key.set('')
@@ -112,6 +124,7 @@ class TilesTab(ttk.Frame):
         self.v_covered.set(False)
         self.v_tile_scale.set('1.0')
         self.v_sprite.set('')
+        self.v_animation.set('')
         self.sprite_preview.load(None)
 
     def _populate_form(self, key: str):
@@ -128,6 +141,7 @@ class TilesTab(ttk.Frame):
         self.v_covered.set(bool(row['covered']))
         self.v_tile_scale.set(str(row['tile_scale'] if row['tile_scale'] is not None else 1.0))
         self.v_sprite.set(row['sprite_name'] or '')
+        self.v_animation.set(row['animation_name'] or '')
         self.sprite_preview.load(row['sprite_name'] or None)
 
     def _on_select(self, event=None):
@@ -151,14 +165,15 @@ class TilesTab(ttk.Frame):
         con = get_con()
         try:
             con.execute(
-                '''INSERT INTO tiles (key, name, walkable, covered, sprite_name, tile_scale)
-                   VALUES (?, ?, ?, ?, ?, ?)
+                '''INSERT INTO tiles (key, name, walkable, covered, sprite_name, tile_scale, animation_name)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(key) DO UPDATE SET
                    name=excluded.name, walkable=excluded.walkable,
                    covered=excluded.covered, sprite_name=excluded.sprite_name,
-                   tile_scale=excluded.tile_scale''',
+                   tile_scale=excluded.tile_scale, animation_name=excluded.animation_name''',
                 (key, self.v_name.get().strip(), int(self.v_walkable.get()),
-                 int(self.v_covered.get()), self.v_sprite.get().strip() or None, ts)
+                 int(self.v_covered.get()), self.v_sprite.get().strip() or None, ts,
+                 self.v_animation.get().strip() or None)
             )
             con.commit()
         except sqlite3.Error as e:

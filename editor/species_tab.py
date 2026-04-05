@@ -2,7 +2,7 @@ import sqlite3
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-from editor.db import get_con, fetch_sprite_names
+from editor.db import get_con, fetch_sprite_names, fetch_composite_names
 from editor.constants import STATS, STAT_LABELS, PREVIEW_SIZE
 from editor.sprite_preview import SpritePreview
 from editor.tooltip import add_tooltip
@@ -79,6 +79,15 @@ class SpeciesTab(ttk.Frame):
         add_tooltip(e_scale, 'Visual scale on the tile (1.0 = normal)')
         row += 1
 
+        ttk.Label(f, text='Composite').grid(row=row, column=0, sticky='w', padx=6, pady=4)
+        self.v_composite = tk.StringVar()
+        self._composite_names = [''] + fetch_composite_names()
+        self.composite_cb = ttk.Combobox(f, textvariable=self.v_composite,
+                                          values=self._composite_names, state='readonly', width=18)
+        self.composite_cb.grid(row=row, column=1, sticky='w', padx=6, pady=4)
+        add_tooltip(self.composite_cb, 'Optional composite sprite (layered) — overrides simple sprite if set')
+        row += 1
+
         ttk.Separator(f, orient=tk.HORIZONTAL).grid(
             row=row, column=0, columnspan=2, sticky='ew', padx=6, pady=6)
         row += 1
@@ -126,11 +135,14 @@ class SpeciesTab(ttk.Frame):
     def refresh_sprite_dropdown(self):
         self._sprite_names = [''] + fetch_sprite_names()
         self.sprite_cb['values'] = self._sprite_names
+        self._composite_names = [''] + fetch_composite_names()
+        self.composite_cb['values'] = self._composite_names
 
     def _clear_form(self):
         self.v_name.set('')
         self.v_playable.set(False)
         self.v_sprite.set('')
+        self.v_composite.set('')
         self.sprite_preview.load(None)
         self.v_tile_scale.set('1.0')
         for var in self.stat_vars.values():
@@ -140,7 +152,7 @@ class SpeciesTab(ttk.Frame):
         con = get_con()
         try:
             row = con.execute(
-                'SELECT name, playable, sprite_name, tile_scale FROM species WHERE name=?', (name,)
+                'SELECT name, playable, sprite_name, tile_scale, composite_name FROM species WHERE name=?', (name,)
             ).fetchone()
             if row is None:
                 return
@@ -156,6 +168,7 @@ class SpeciesTab(ttk.Frame):
         self.v_sprite.set(sprite)
         self.sprite_preview.load(sprite or None)
         self.v_tile_scale.set(str(row['tile_scale'] if row['tile_scale'] is not None else 1.0))
+        self.v_composite.set(row['composite_name'] or '')
 
         stats = {r['stat']: r['value'] for r in stat_rows}
         for stat, var in self.stat_vars.items():
@@ -179,6 +192,7 @@ class SpeciesTab(ttk.Frame):
             return
 
         sprite = self.v_sprite.get().strip() or None
+        composite = self.v_composite.get().strip() or None
         playable = int(self.v_playable.get())
 
         stats = {}
@@ -198,14 +212,15 @@ class SpeciesTab(ttk.Frame):
             except ValueError:
                 tile_scale = 1.0
             con.execute(
-                '''INSERT INTO species (name, playable, sprite_name, tile_scale)
-                   VALUES (?, ?, ?, ?)
+                '''INSERT INTO species (name, playable, sprite_name, tile_scale, composite_name)
+                   VALUES (?, ?, ?, ?, ?)
                    ON CONFLICT(name) DO UPDATE SET
                    playable=excluded.playable,
                    sprite_name=excluded.sprite_name,
-                   tile_scale=excluded.tile_scale
+                   tile_scale=excluded.tile_scale,
+                   composite_name=excluded.composite_name
                 ''',
-                (name, playable, sprite, tile_scale)
+                (name, playable, sprite, tile_scale, composite)
             )
             con.execute('DELETE FROM species_stats WHERE species_name=?', (name,))
             for stat, val in stats.items():

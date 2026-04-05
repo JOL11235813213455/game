@@ -3,7 +3,8 @@ import pygame
 
 from main.config import (
     SCREEN_WIDTH, SCREEN_HEIGHT, FPS, DEBUG,
-    BLOCK_SIZE, TILE_HEIGHT, MOVE_DELAY, MENU_OPTIONS,
+    MOVE_DELAY, MENU_OPTIONS,
+    get_block_size, get_tile_height, get_zoom, set_zoom, ZOOM_STEP,
 )
 from classes.creature import Creature, NPC, Stat
 from classes.inventory import Structure
@@ -23,8 +24,8 @@ def main():
     pygame.display.set_caption("Game")
     clock = pygame.time.Clock()
 
-    cols = (SCREEN_WIDTH  // BLOCK_SIZE) * 3
-    rows = (SCREEN_HEIGHT // BLOCK_SIZE) * 3
+    cols = (SCREEN_WIDTH  // get_block_size()) * 3
+    rows = (SCREEN_HEIGHT // get_block_size()) * 3
 
     nested_map = make_map(cols, rows)
     game_map   = make_map(cols, rows, nested_map=nested_map)
@@ -103,7 +104,10 @@ def main():
                         if event.key == pygame.K_l:
                             lvl = player.stats.get(Stat.LVL, 0)
                             player.gain_exp(exp_for_level(lvl + 1))
-                        pass  # placeholder for future debug keys
+                        if event.key in (pygame.K_EQUALS, pygame.K_PLUS, pygame.K_KP_PLUS):
+                            set_zoom(get_zoom() + ZOOM_STEP)
+                        if event.key in (pygame.K_MINUS, pygame.K_KP_MINUS):
+                            set_zoom(get_zoom() - ZOOM_STEP)
 
         # ---- update ---------------------------------------------------------
         dt = clock.get_time() / 1000.0  # seconds since last frame
@@ -136,7 +140,9 @@ def main():
                 npc.anim.update(dt_ms)
 
         # ---- render ---------------------------------------------------------
-        cam = camera_offset(player.location, cols, rows, BLOCK_SIZE)
+        bs = get_block_size()
+        th = get_tile_height()
+        cam = camera_offset(player.location, cols, rows, bs)
 
         screen.fill((30, 30, 30))
 
@@ -147,21 +153,21 @@ def main():
         # Pass 1: draw all ground tiles
         has_parent = bool(player.map_stack)
         for y in range(rows):
-            draw_map_row(screen, player.current_map, cols, y, BLOCK_SIZE, cam,
-                         has_parent=has_parent)
+            draw_map_row(screen, player.current_map, cols, y, bs, cam,
+                         has_parent=has_parent, time_ms=now)
 
         # Pass 2: draw sprites/structures sorted by Y (z_index breaks ties on same tile)
         renderables = ([player]
                        + [n for n in NPC.all() if n.current_map is player.current_map]
                        + [s for s in Structure.all() if s.current_map is player.current_map])
         for obj in sorted(renderables, key=lambda o: (o.location.y, o.z_index)):
-            result = obj.make_surface(BLOCK_SIZE)
+            result = obj.make_surface(bs)
             if result:
                 sprite_surf, (bdx, bdy) = result
-                sx = obj.location.x * BLOCK_SIZE  - cam[0] + bdx
-                sy = obj.location.y * TILE_HEIGHT - cam[1] + bdy
+                sx = obj.location.x * bs - cam[0] + bdx
+                sy = obj.location.y * th - cam[1] + bdy
 
-                shadow = make_shadow(sprite_surf, sun_dir, shadow_len, BLOCK_SIZE)
+                shadow = make_shadow(sprite_surf, sun_dir, shadow_len, bs)
                 if shadow:
                     sh_surf, sh_ox, sh_oy = shadow
                     screen.blit(sh_surf, (sx + sh_ox, sy + sh_oy))

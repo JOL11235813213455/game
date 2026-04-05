@@ -76,7 +76,8 @@ CREATE TABLE IF NOT EXISTS tiles (
     sprite_name TEXT REFERENCES sprites(name),
     tile_scale  REAL NOT NULL DEFAULT 1.0,
     bounds_n    TEXT, bounds_s TEXT, bounds_e TEXT, bounds_w  TEXT,
-    bounds_ne   TEXT, bounds_nw TEXT, bounds_se TEXT, bounds_sw TEXT
+    bounds_ne   TEXT, bounds_nw TEXT, bounds_se TEXT, bounds_sw TEXT,
+    animation_name TEXT REFERENCES animations(name)
 );
 CREATE TABLE IF NOT EXISTS tile_sets (
     name TEXT PRIMARY KEY
