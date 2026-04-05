@@ -183,6 +183,6 @@ CLASS_MAP: dict[str, type] = {
 }
 
 class Inventory(Trackable):
-    def __init__(self, items: list = []):
+    def __init__(self, items: list = None):
         super().__init__()
-        self.items: list[Item] = list(items)
+        self.items: list[Item] = list(items) if items else []

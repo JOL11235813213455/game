@@ -156,12 +156,16 @@ def _get_gradient(w: int, h: int, bucket: int, intensity: float):
     return brighten, darken
 
 
+_highlight_cache: dict[tuple, pygame.Surface] = {}
+
+
 def apply_top_highlight(sprite_surface: pygame.Surface,
                         sun_elevation: float) -> pygame.Surface:
     """Return a copy with a smooth vertical lighting gradient.
 
     Top rows are gently brightened, bottom rows gently darkened,
     simulating top-down light.  Intensity scales with sun elevation.
+    Cached by (surface_id, elevation_bucket) to avoid redundant copies.
     """
     if sun_elevation <= 0.05:
         return sprite_surface
@@ -171,11 +175,22 @@ def apply_top_highlight(sprite_surface: pygame.Surface,
         return sprite_surface
 
     bucket = int(sun_elevation * 8)
-    intensity = sun_elevation * 18
+    key = (id(sprite_surface), bucket)
+    cached = _highlight_cache.get(key)
+    if cached is not None:
+        return cached
 
+    intensity = sun_elevation * 18
     brighten, darken = _get_gradient(w, h, bucket, intensity)
 
     result = sprite_surface.copy()
     result.blit(brighten, (0, 0), special_flags=pygame.BLEND_RGB_ADD)
     result.blit(darken,   (0, 0), special_flags=pygame.BLEND_RGB_SUB)
+
+    _highlight_cache[key] = result
+    if len(_highlight_cache) > 256:
+        # Evict oldest entries
+        for old_key in list(_highlight_cache)[:64]:
+            del _highlight_cache[old_key]
+
     return result

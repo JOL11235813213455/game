@@ -407,6 +407,10 @@ def _load_animations(con: sqlite3.Connection) -> None:
                 'duration_ms': r['duration_ms'],
             })
 
+    # Pre-compute total duration for each animation
+    for anim in ANIMATIONS.values():
+        anim['total_duration_ms'] = sum(f['duration_ms'] for f in anim['frames'])
+
     for r in con.execute(
         'SELECT target_name, behavior, animation_name FROM animation_bindings'
     ).fetchall():

@@ -23,7 +23,15 @@ def get_zoom() -> float:
 
 def set_zoom(level: float):
     global _zoom_level
-    _zoom_level = max(ZOOM_MIN, min(ZOOM_MAX, level))
+    new = max(ZOOM_MIN, min(ZOOM_MAX, level))
+    if new != _zoom_level:
+        _zoom_level = new
+        # Invalidate sprite cache on zoom change
+        try:
+            from main.sprite_cache import invalidate
+            invalidate()
+        except ImportError:
+            pass
 
 def get_block_size() -> int:
     return int(BASE_BLOCK_SIZE * _zoom_level)

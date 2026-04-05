@@ -5,6 +5,7 @@ from main.config import (
     COLOR_WALKABLE, COLOR_BLOCKED, COLOR_NESTED, COLOR_EXIT,
     COLOR_PLAYER, COLOR_GRID, MENU_OPTIONS,
 )
+from main.sprite_cache import get_tiled, get_scaled
 
 
 def camera_offset(player_loc, cols, rows, block_size):
@@ -25,7 +26,9 @@ def _resolve_tile_sprite(tile, time_ms: int) -> str | None:
         anim = ANIMATIONS.get(anim_name)
         if anim and anim['frames']:
             frames = anim['frames']
-            total = sum(f['duration_ms'] for f in frames)
+            total = anim.get('total_duration_ms')
+            if total is None:
+                total = sum(f['duration_ms'] for f in frames)
             if total > 0:
                 t = time_ms % total
                 acc = 0
@@ -41,32 +44,12 @@ def make_tile_surface(tile, block_size, time_ms: int = 0):
     sprite_name = _resolve_tile_sprite(tile, time_ms)
     if not sprite_name:
         return None
-    from data.db import SPRITE_DATA
-    data = SPRITE_DATA.get(sprite_name)
-    if not data:
-        return None
-    pixels  = data['pixels']
-    palette = data['palette']
-    cols    = len(pixels[0])
-    rows    = len(pixels)
-    native = pygame.Surface((cols, rows), pygame.SRCALPHA)
-    for row_idx, row in enumerate(pixels):
-        for col_idx, char in enumerate(row):
-            if char == '.' or char not in palette:
-                continue
-            native.set_at((col_idx, row_idx), palette[char])
-    # Target tile size in pixels
+
     target_w = block_size
     target_h = get_tile_height()
-    # If sprite is smaller than the tile, repeat it to fill
-    if cols < target_w or rows < target_h:
-        tiled = pygame.Surface((target_w, target_h), pygame.SRCALPHA)
-        for tx in range(0, target_w, cols):
-            for ty in range(0, target_h, rows):
-                tiled.blit(native, (tx, ty))
-        return tiled
-    else:
-        return pygame.transform.scale(native, (target_w, target_h))
+
+    # Use cached tiled/scaled surface
+    return get_tiled(sprite_name, target_w, target_h, block_size)
 
 
 def draw_map_row(surface, game_map, cols, y, block_size, cam, has_parent=False, time_ms=0):

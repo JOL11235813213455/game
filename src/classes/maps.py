@@ -47,7 +47,7 @@ class Tile(Trackable):
         ,walkable:bool=None
         ,covered:bool=None
         ,bounds:Bounds=None
-        ,items:list=[]
+        ,items:list=None
         ,tile_template:str=None
         ,sprite_name:str=None
         ,tile_scale:float=None
@@ -62,13 +62,13 @@ class Tile(Trackable):
         self.tile_scale     = tile_scale  if tile_scale  is not None else tmpl.get('tile_scale',  1.0)
         self.animation_name = animation_name if animation_name is not None else tmpl.get('animation_name', None)
         self.nested_map: Map = map
-        self.inventory = Inventory(items=items)
+        self.inventory = Inventory(items=items or [])
         self.tile_template = tile_template
 
 class Map(Trackable):
     def __init__(
         self
-        ,tile_set: dict[MapKey, Tile] = {}
+        ,tile_set: dict[MapKey, Tile] = None
         ,entrance: tuple[int, int] = (0, 0)
         ,name: str = None
         ,default_tile: str = None
@@ -78,7 +78,7 @@ class Map(Trackable):
         ,z_min: int = -16, z_max: int = 16
         ):
         super().__init__()
-        self.tiles = tile_set
+        self.tiles = tile_set if tile_set is not None else {}
         self.entrance = entrance
         self.name = name
         self.default_tile = default_tile

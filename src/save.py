@@ -54,11 +54,17 @@ def _serialise(player) -> bytes:
 
 def _deserialise(blob: bytes):
     global _held
+    from classes.world_object import WorldObject
+    # Clear stale map index before loading
+    WorldObject._by_map.clear()
     data = pickle.loads(blob)
     objects = data['objects']
     _held = objects
     for obj in objects:
         type(obj)._instances.add(obj)
+        # Re-register in per-map index (pickle restores _current_map directly)
+        if isinstance(obj, WorldObject) and obj._current_map is not None:
+            WorldObject._by_map[id(obj._current_map)].add(obj)
     return data['player']
 
 
