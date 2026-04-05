@@ -130,91 +130,43 @@ class WorldObject(Trackable):
         return surface, (blit_dx, blit_dy)
 
     def _make_composite_surface(self, block_size: int):
-        """Assemble all layers of a composite sprite into one surface."""
+        """Get cached composite surface, using pre-rendered animation frames when available."""
+        from main.sprite_cache import get_composite, get_composite_anim_frame
+
+        # Build variant key from current state (for variant overrides)
+        variant_key = getattr(self, '_variant_overrides', ())
+
+        # If a composite animation is playing, use pre-rendered frames
+        comp_anim = getattr(self, '_composite_anim', None)
+        if comp_anim is not None:
+            import pygame
+            time_ms = pygame.time.get_ticks() - getattr(self, '_composite_anim_start', 0)
+            result = get_composite_anim_frame(
+                self.composite_name, comp_anim, time_ms,
+                block_size, self.tile_scale)
+            if result:
+                return result
+
+        # Static composite pose (cached)
+        return get_composite(self.composite_name, block_size,
+                             self.tile_scale, variant_key)
+
+    def play_composite_anim(self, anim_name: str):
+        """Start playing a pre-rendered composite animation."""
         import pygame
-        import numpy as np
-        from data.db import COMPOSITES, SPRITE_DATA
-        from main.sprite_cache import get_native
+        self._composite_anim = anim_name
+        self._composite_anim_start = pygame.time.get_ticks()
 
-        comp = COMPOSITES.get(self.composite_name)
-        if not comp or not comp['layers']:
-            return None
+    def stop_composite_anim(self):
+        """Stop composite animation, return to static pose."""
+        self._composite_anim = None
 
-        root = comp['root_layer']
-        scale = block_size / 32 * self.tile_scale
+    def set_variant(self, layer_name: str, sprite_name: str):
+        """Override a layer's sprite (e.g. swap face to 'happy')."""
+        overrides = dict(getattr(self, '_variant_overrides', ()))
+        overrides[layer_name] = sprite_name
+        self._variant_overrides = tuple(sorted(overrides.items()))
 
-        # Resolve layer positions in native pixel coords
-        positions = {}
-
-        def resolve(layer_name, depth=0):
-            if layer_name in positions or depth > 20:
-                return
-            if layer_name == root:
-                positions[layer_name] = (0, 0)
-            else:
-                conn = comp['connections'].get(layer_name)
-                if not conn:
-                    positions[layer_name] = (0, 0)
-                    return
-                parent = conn['parent_layer']
-                resolve(parent, depth + 1)
-                pp = positions.get(parent, (0, 0))
-                sx, sy = conn['parent_socket']
-                ax, ay = conn['child_anchor']
-                positions[layer_name] = (pp[0] + sx - ax, pp[1] + sy - ay)
-
-        for lname in comp['layers']:
-            resolve(lname)
-
-        # Find bounding box
-        min_x = min_y = float('inf')
-        max_x = max_y = float('-inf')
-        layer_surfaces = {}
-        for lname, layer in comp['layers'].items():
-            spr = layer['default_sprite']
-            if not spr:
-                continue
-            native = get_native(spr)
-            if native is None:
-                continue
-            layer_surfaces[lname] = native
-            px, py = positions.get(lname, (0, 0))
-            nw, nh = native.get_size()
-            min_x = min(min_x, px)
-            min_y = min(min_y, py)
-            max_x = max(max_x, px + nw)
-            max_y = max(max_y, py + nh)
-
-        if min_x == float('inf'):
-            return None
-
-        total_w = max_x - min_x
-        total_h = max_y - min_y
-        if total_w <= 0 or total_h <= 0:
-            return None
-
-        # Blit cached native surfaces (no per-pixel loop)
-        composite = pygame.Surface((total_w, total_h), pygame.SRCALPHA)
-        for lname, layer in sorted(comp['layers'].items(),
-                                    key=lambda x: x[1]['z_layer']):
-            native = layer_surfaces.get(lname)
-            if native is None:
-                continue
-            px, py = positions.get(lname, (0, 0))
-            composite.blit(native, (px - min_x, py - min_y))
-
-        # Scale to game size
-        sw = int(total_w * scale)
-        sh = int(total_h * scale)
-        if sw <= 0 or sh <= 0:
-            return None
-        surface = pygame.transform.scale(composite, (sw, sh))
-
-        # Blit offset: center-bottom of composite on tile center
-        from main.config import get_tile_height
-        tile_cx = block_size // 2
-        tile_cy = get_tile_height() // 2
-        blit_dx = tile_cx - sw // 2
-        blit_dy = tile_cy - sh
-
-        return surface, (blit_dx, blit_dy)
+    def clear_variants(self):
+        """Reset all variant overrides to defaults."""
+        self._variant_overrides = ()
