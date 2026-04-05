@@ -3,6 +3,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 
 from editor.db import get_con, fetch_sprite_names, fetch_tile_keys, fetch_map_names
+from editor.tooltip import add_tooltip
 
 
 class TileSetsTab(ttk.Frame):
@@ -40,7 +41,9 @@ class TileSetsTab(ttk.Frame):
         nf.pack(fill=tk.X, pady=2)
         ttk.Label(nf, text='Name').pack(side=tk.LEFT, padx=2)
         self.v_ts_name = tk.StringVar()
-        ttk.Entry(nf, textvariable=self.v_ts_name, width=16).pack(side=tk.LEFT, padx=2)
+        ts_entry = ttk.Entry(nf, textvariable=self.v_ts_name, width=16)
+        ts_entry.pack(side=tk.LEFT, padx=2)
+        add_tooltip(ts_entry, 'Unique name for this tile set')
         ttk.Button(nf, text='Save', command=self._save_tile_set).pack(side=tk.LEFT, padx=2)
 
         # --- Right: scrollable entries ---
@@ -90,9 +93,11 @@ class TileSetsTab(ttk.Frame):
         self.v_x = tk.StringVar()
         self.v_y = tk.StringVar()
         self.v_z = tk.StringVar(value='0')
-        for i, v in enumerate((self.v_w, self.v_x, self.v_y, self.v_z)):
-            ttk.Entry(f, textvariable=v, width=6).grid(
-                row=r, column=i, padx=(6 if i == 0 else 2, 2), pady=3, sticky='w')
+        coord_tips = ['W: world/layer index', 'X: horizontal position', 'Y: vertical position', 'Z: elevation/floor']
+        for i, (v, tip) in enumerate(zip((self.v_w, self.v_x, self.v_y, self.v_z), coord_tips)):
+            e = ttk.Entry(f, textvariable=v, width=6)
+            e.grid(row=r, column=i, padx=(6 if i == 0 else 2, 2), pady=3, sticky='w')
+            add_tooltip(e, tip)
         r += 1
 
         ttk.Label(f, text='Template').grid(row=r, column=0, sticky='w', padx=6, pady=3)
@@ -101,20 +106,25 @@ class TileSetsTab(ttk.Frame):
             f, textvariable=self.v_template,
             values=[''] + fetch_tile_keys(), state='readonly', width=18)
         self.template_cb.grid(row=r, column=1, columnspan=3, sticky='w', padx=6, pady=3)
+        add_tooltip(self.template_cb, 'Base tile template (provides defaults for walkable, sprite, etc.)')
         r += 1
 
         ttk.Label(f, text='Walkable override').grid(row=r, column=0, sticky='w', padx=6, pady=3)
         self.v_walkable = tk.StringVar(value='(template)')
-        ttk.Combobox(f, textvariable=self.v_walkable,
+        walk_cb = ttk.Combobox(f, textvariable=self.v_walkable,
                      values=['(template)', 'walkable', 'blocked'],
-                     state='readonly', width=14).grid(row=r, column=1, sticky='w', padx=6, pady=3)
+                     state='readonly', width=14)
+        walk_cb.grid(row=r, column=1, sticky='w', padx=6, pady=3)
+        add_tooltip(walk_cb, 'Override walkability or inherit from template')
         r += 1
 
         ttk.Label(f, text='Covered override').grid(row=r, column=0, sticky='w', padx=6, pady=3)
         self.v_covered = tk.StringVar(value='(template)')
-        ttk.Combobox(f, textvariable=self.v_covered,
+        cov_cb = ttk.Combobox(f, textvariable=self.v_covered,
                      values=['(template)', 'yes', 'no'],
-                     state='readonly', width=14).grid(row=r, column=1, sticky='w', padx=6, pady=3)
+                     state='readonly', width=14)
+        cov_cb.grid(row=r, column=1, sticky='w', padx=6, pady=3)
+        add_tooltip(cov_cb, 'Override roof/ceiling status or inherit from template')
         r += 1
 
         ttk.Label(f, text='Sprite override').grid(row=r, column=0, sticky='w', padx=6, pady=3)
@@ -123,12 +133,14 @@ class TileSetsTab(ttk.Frame):
             f, textvariable=self.v_sprite,
             values=[''] + fetch_sprite_names(), state='readonly', width=18)
         self.sprite_cb.grid(row=r, column=1, columnspan=3, sticky='w', padx=6, pady=3)
+        add_tooltip(self.sprite_cb, 'Override sprite or leave blank to use template sprite')
         r += 1
 
         ttk.Label(f, text='Scale override').grid(row=r, column=0, sticky='w', padx=6, pady=3)
         self.v_scale = tk.StringVar()
-        ttk.Entry(f, textvariable=self.v_scale, width=8).grid(
-            row=r, column=1, sticky='w', padx=6, pady=3)
+        scale_e = ttk.Entry(f, textvariable=self.v_scale, width=8)
+        scale_e.grid(row=r, column=1, sticky='w', padx=6, pady=3)
+        add_tooltip(scale_e, 'Override tile scale (blank = use template scale)')
         ttk.Label(f, text='(blank = template)').grid(
             row=r, column=2, sticky='w', padx=2, pady=3)
         r += 1
@@ -139,12 +151,17 @@ class TileSetsTab(ttk.Frame):
             f, textvariable=self.v_nested,
             values=[''] + fetch_map_names(), state='readonly', width=18)
         self.nested_cb.grid(row=r, column=1, columnspan=3, sticky='w', padx=6, pady=3)
+        add_tooltip(self.nested_cb, 'Map to enter when stepping on this tile')
         r += 1
 
         btn_f = ttk.Frame(f)
         btn_f.grid(row=r, column=0, columnspan=4, sticky='w', padx=6, pady=6)
-        ttk.Button(btn_f, text='Add Entry', command=self._add_entry).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_f, text='Update Selected', command=self._update_entry).pack(side=tk.LEFT, padx=2)
+        add_btn = ttk.Button(btn_f, text='Add Entry', command=self._add_entry)
+        add_btn.pack(side=tk.LEFT, padx=2)
+        add_tooltip(add_btn, 'Add a new tile entry to this set')
+        upd_btn = ttk.Button(btn_f, text='Update Selected', command=self._update_entry)
+        upd_btn.pack(side=tk.LEFT, padx=2)
+        add_tooltip(upd_btn, 'Overwrite the selected entry with current form values')
 
         f.columnconfigure(1, weight=1)
         f.columnconfigure(2, weight=1)

@@ -3,6 +3,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 
 from editor.db import get_con, fetch_tile_keys, fetch_tile_set_names
+from editor.tooltip import add_tooltip
 
 
 class MapsTab(ttk.Frame):
@@ -41,8 +42,9 @@ class MapsTab(ttk.Frame):
         r = 0
         ttk.Label(f, text='Name').grid(row=r, column=0, sticky='w', padx=6, pady=3)
         self.v_name = tk.StringVar()
-        ttk.Entry(f, textvariable=self.v_name, width=22).grid(
-            row=r, column=1, columnspan=3, sticky='ew', padx=6, pady=3)
+        e_name = ttk.Entry(f, textvariable=self.v_name, width=22)
+        e_name.grid(row=r, column=1, columnspan=3, sticky='ew', padx=6, pady=3)
+        add_tooltip(e_name, 'Unique name for this map')
         r += 1
 
         ttk.Label(f, text='Tile Set').grid(row=r, column=0, sticky='w', padx=6, pady=3)
@@ -51,6 +53,7 @@ class MapsTab(ttk.Frame):
             f, textvariable=self.v_tile_set,
             values=[''] + fetch_tile_set_names(), state='readonly', width=20)
         self.tile_set_cb.grid(row=r, column=1, columnspan=3, sticky='w', padx=6, pady=3)
+        add_tooltip(self.tile_set_cb, 'Tile set used to build this map\'s floor layout')
         r += 1
 
         ttk.Label(f, text='Default Tile').grid(row=r, column=0, sticky='w', padx=6, pady=3)
@@ -59,17 +62,26 @@ class MapsTab(ttk.Frame):
             f, textvariable=self.v_default_tile,
             values=[''] + fetch_tile_keys(), state='readonly', width=20)
         self.default_tile_cb.grid(row=r, column=1, columnspan=3, sticky='w', padx=6, pady=3)
+        add_tooltip(self.default_tile_cb, 'Tile template used to fill empty coordinates')
         r += 1
 
         ttk.Label(f, text='Entrance x,y').grid(row=r, column=0, sticky='w', padx=6, pady=3)
         self.v_ent_x = tk.StringVar(value='0')
         self.v_ent_y = tk.StringVar(value='0')
-        ttk.Entry(f, textvariable=self.v_ent_x, width=6).grid(
-            row=r, column=1, sticky='w', padx=3, pady=3)
-        ttk.Entry(f, textvariable=self.v_ent_y, width=6).grid(
-            row=r, column=2, sticky='w', padx=3, pady=3)
+        ent_x = ttk.Entry(f, textvariable=self.v_ent_x, width=6)
+        ent_x.grid(row=r, column=1, sticky='w', padx=3, pady=3)
+        add_tooltip(ent_x, 'X coordinate where the player spawns when entering')
+        ent_y = ttk.Entry(f, textvariable=self.v_ent_y, width=6)
+        ent_y.grid(row=r, column=2, sticky='w', padx=3, pady=3)
+        add_tooltip(ent_y, 'Y coordinate where the player spawns when entering')
         r += 1
 
+        axis_tips = {
+            'w': 'World/layer dimension bounds',
+            'x': 'Horizontal dimension bounds (map width)',
+            'y': 'Vertical dimension bounds (map height)',
+            'z': 'Elevation/floor dimension bounds',
+        }
         for axis in ('w', 'x', 'y', 'z'):
             ttk.Label(f, text=f'{axis.upper()} min / max').grid(
                 row=r, column=0, sticky='w', padx=6, pady=3)
@@ -77,10 +89,12 @@ class MapsTab(ttk.Frame):
             vmax = tk.StringVar(value='0')
             setattr(self, f'v_{axis}_min', vmin)
             setattr(self, f'v_{axis}_max', vmax)
-            ttk.Entry(f, textvariable=vmin, width=6).grid(
-                row=r, column=1, sticky='w', padx=3, pady=3)
-            ttk.Entry(f, textvariable=vmax, width=6).grid(
-                row=r, column=2, sticky='w', padx=3, pady=3)
+            e_min = ttk.Entry(f, textvariable=vmin, width=6)
+            e_min.grid(row=r, column=1, sticky='w', padx=3, pady=3)
+            add_tooltip(e_min, f'{axis_tips[axis]} (minimum)')
+            e_max = ttk.Entry(f, textvariable=vmax, width=6)
+            e_max.grid(row=r, column=2, sticky='w', padx=3, pady=3)
+            add_tooltip(e_max, f'{axis_tips[axis]} (maximum)')
             r += 1
 
         f.columnconfigure(1, weight=1)

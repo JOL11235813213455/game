@@ -71,7 +71,8 @@ def main():
                                 npc._last_move = now
 
                 elif event.type == pygame.KEYDOWN:
-                    # ---- pause menu -----------------------------------------
+                    # ---- pause menu -----------------------------------------i want to add this repo to my github. i want to change my global git e-mail to github@jasonlackey.com, which is the same as my github login e-mail.
+
                     if paused:
                         if event.key == pygame.K_ESCAPE:
                             paused = False

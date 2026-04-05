@@ -5,6 +5,7 @@ from tkinter import ttk, messagebox, colorchooser
 
 from editor.db import get_con
 from editor.constants import GRID_COLS, GRID_ROWS, CELL_SIZE, MAX_PALETTE
+from editor.tooltip import add_tooltip
 
 
 class SpritesTab(ttk.Frame):
@@ -85,18 +86,28 @@ class SpritesTab(ttk.Frame):
         name_row.pack(fill=tk.X, padx=6, pady=6)
         ttk.Label(name_row, text='Name:').pack(side=tk.LEFT)
         self.v_name = tk.StringVar()
-        ttk.Entry(name_row, textvariable=self.v_name, width=24).pack(side=tk.LEFT, padx=6)
+        name_entry = ttk.Entry(name_row, textvariable=self.v_name, width=24)
+        name_entry.pack(side=tk.LEFT, padx=6)
+        add_tooltip(name_entry, 'Unique identifier for this sprite')
 
         size_row = ttk.Frame(right)
         size_row.pack(fill=tk.X, padx=6, pady=2)
         ttk.Label(size_row, text='Size:').pack(side=tk.LEFT)
         self.v_width  = tk.StringVar(value=str(GRID_COLS))
         self.v_height = tk.StringVar(value=str(GRID_ROWS))
-        ttk.Spinbox(size_row, from_=1, to=128, textvariable=self.v_width,  width=5).pack(side=tk.LEFT, padx=(4, 0))
+        w_spin = ttk.Spinbox(size_row, from_=1, to=128, textvariable=self.v_width,  width=5)
+        w_spin.pack(side=tk.LEFT, padx=(4, 0))
+        add_tooltip(w_spin, 'Sprite width in pixels (1-128)')
         ttk.Label(size_row, text='\u00d7').pack(side=tk.LEFT, padx=2)
-        ttk.Spinbox(size_row, from_=1, to=128, textvariable=self.v_height, width=5).pack(side=tk.LEFT, padx=(0, 4))
-        ttk.Button(size_row, text='Apply', command=self._apply_size).pack(side=tk.LEFT, padx=4)
-        ttk.Button(size_row, text='Import Image', command=self._import_image).pack(side=tk.LEFT, padx=4)
+        h_spin = ttk.Spinbox(size_row, from_=1, to=128, textvariable=self.v_height, width=5)
+        h_spin.pack(side=tk.LEFT, padx=(0, 4))
+        add_tooltip(h_spin, 'Sprite height in pixels (1-128)')
+        apply_btn = ttk.Button(size_row, text='Apply', command=self._apply_size)
+        apply_btn.pack(side=tk.LEFT, padx=4)
+        add_tooltip(apply_btn, 'Resize the pixel grid to the specified dimensions')
+        import_btn = ttk.Button(size_row, text='Import Image', command=self._import_image)
+        import_btn.pack(side=tk.LEFT, padx=4)
+        add_tooltip(import_btn, 'Import an image file and quantize to palette')
 
         editor_row = ttk.Frame(right)
         editor_row.pack(fill=tk.X, padx=6, pady=4)
@@ -137,24 +148,47 @@ class SpritesTab(ttk.Frame):
         self._fill_mode = False
         self._fill_btn = ttk.Button(tools_row1, text='Fill', command=self._toggle_fill_mode)
         self._fill_btn.pack(side=tk.LEFT, padx=(0, 4))
+        add_tooltip(self._fill_btn, 'Flood-fill a region with the selected colour (L-click)\nor erase a region (R-click)')
 
         self._ap_btn = ttk.Button(tools_row1, text='Action Point', command=self._toggle_action_point_mode)
         self._ap_btn.pack(side=tk.LEFT, padx=(0, 4))
+        add_tooltip(self._ap_btn, 'Set the anchor point used to align this sprite\non its tile (e.g. feet position)')
 
         tools_row2 = ttk.Frame(palette_outer)
         tools_row2.pack(fill=tk.X, pady=(2, 0))
 
-        ttk.Button(tools_row2, text='Lasso', command=self._lasso).pack(side=tk.LEFT, padx=(0, 4))
+        lasso_btn = ttk.Button(tools_row2, text='Lasso', command=self._lasso)
+        lasso_btn.pack(side=tk.LEFT, padx=(0, 4))
+        add_tooltip(lasso_btn, 'Auto-crop: trim transparent border to fit content')
 
         self._eraser_mode = False
         self._eraser_btn = ttk.Button(tools_row2, text='Eraser', command=self._toggle_eraser_mode)
         self._eraser_btn.pack(side=tk.LEFT, padx=(0, 4))
+        add_tooltip(self._eraser_btn, 'Circle eraser: click/drag to erase pixels\nwithin the specified radius')
 
         ef = ttk.Frame(tools_row2)
         ef.pack(side=tk.LEFT)
         ttk.Label(ef, text='r:').pack(side=tk.LEFT)
         self.v_eraser_radius = tk.StringVar(value='2')
-        ttk.Spinbox(ef, from_=1, to=20, textvariable=self.v_eraser_radius, width=3).pack(side=tk.LEFT)
+        er_spin = ttk.Spinbox(ef, from_=1, to=20, textvariable=self.v_eraser_radius, width=3)
+        er_spin.pack(side=tk.LEFT)
+        add_tooltip(er_spin, 'Eraser radius in pixels')
+
+        tools_row3 = ttk.Frame(palette_outer)
+        tools_row3.pack(fill=tk.X, pady=(2, 0))
+
+        fh_btn = ttk.Button(tools_row3, text='Flip H', command=self._flip_h)
+        fh_btn.pack(side=tk.LEFT, padx=(0, 4))
+        add_tooltip(fh_btn, 'Mirror the sprite horizontally (left \u2194 right)')
+        fv_btn = ttk.Button(tools_row3, text='Flip V', command=self._flip_v)
+        fv_btn.pack(side=tk.LEFT, padx=(0, 4))
+        add_tooltip(fv_btn, 'Mirror the sprite vertically (top \u2194 bottom)')
+        cw_btn = ttk.Button(tools_row3, text='Rot CW', command=self._rotate_cw)
+        cw_btn.pack(side=tk.LEFT, padx=(0, 4))
+        add_tooltip(cw_btn, 'Rotate the sprite 90\u00b0 clockwise')
+        ccw_btn = ttk.Button(tools_row3, text='Rot CCW', command=self._rotate_ccw)
+        ccw_btn.pack(side=tk.LEFT, padx=(0, 4))
+        add_tooltip(ccw_btn, 'Rotate the sprite 90\u00b0 counter-clockwise')
 
         self._ap_label = ttk.Label(palette_outer, text='Action point: (none)', foreground='#555')
         self._ap_label.pack(anchor='w', pady=(2, 0))
@@ -623,6 +657,61 @@ class SpritesTab(ttk.Frame):
             self._update_ap_label()
         cp = self.CELL_PX
         self.grid_canvas.configure(width=new_cols * cp, height=new_rows * cp)
+        self._draw_grid()
+
+    def _flip_h(self):
+        """Flip the sprite horizontally (mirror left-right)."""
+        for row in self._pixels:
+            row.reverse()
+        if self._action_point is not None:
+            ar, ac = self._action_point
+            self._action_point = (ar, self._cols - 1 - ac)
+            self._update_ap_label()
+        self._draw_grid()
+
+    def _flip_v(self):
+        """Flip the sprite vertically (mirror top-bottom)."""
+        self._pixels.reverse()
+        if self._action_point is not None:
+            ar, ac = self._action_point
+            self._action_point = (self._rows - 1 - ar, ac)
+            self._update_ap_label()
+        self._draw_grid()
+
+    def _rotate_cw(self):
+        """Rotate the sprite 90 degrees clockwise."""
+        old_rows, old_cols = self._rows, self._cols
+        new_pixels = []
+        for c in range(old_cols):
+            new_pixels.append([self._pixels[old_rows - 1 - r][c] for r in range(old_rows)])
+        self._pixels = new_pixels
+        self._rows, self._cols = old_cols, old_rows
+        self.v_width.set(str(self._cols))
+        self.v_height.set(str(self._rows))
+        if self._action_point is not None:
+            ar, ac = self._action_point
+            self._action_point = (ac, old_rows - 1 - ar)
+            self._update_ap_label()
+        cp = self.CELL_PX
+        self.grid_canvas.configure(width=self._cols * cp, height=self._rows * cp)
+        self._draw_grid()
+
+    def _rotate_ccw(self):
+        """Rotate the sprite 90 degrees counter-clockwise."""
+        old_rows, old_cols = self._rows, self._cols
+        new_pixels = []
+        for c in range(old_cols - 1, -1, -1):
+            new_pixels.append([self._pixels[r][c] for r in range(old_rows)])
+        self._pixels = new_pixels
+        self._rows, self._cols = old_cols, old_rows
+        self.v_width.set(str(self._cols))
+        self.v_height.set(str(self._rows))
+        if self._action_point is not None:
+            ar, ac = self._action_point
+            self._action_point = (old_cols - 1 - ac, ar)
+            self._update_ap_label()
+        cp = self.CELL_PX
+        self.grid_canvas.configure(width=self._cols * cp, height=self._rows * cp)
         self._draw_grid()
 
     def _update_ap_label(self):
