@@ -21,6 +21,35 @@ def fetch_sprite_names() -> list[str]:
         con.close()
 
 
+def fetch_sprite_sets() -> list[str]:
+    """Return distinct non-null sprite_set values."""
+    con = get_con()
+    try:
+        rows = con.execute(
+            'SELECT DISTINCT sprite_set FROM sprites'
+            ' WHERE sprite_set IS NOT NULL AND sprite_set != \'\''
+            ' ORDER BY sprite_set').fetchall()
+        return [r['sprite_set'] for r in rows]
+    finally:
+        con.close()
+
+
+def fetch_sprite_names_by_set(sprite_set: str | None = None) -> list[str]:
+    """Return sprite names, optionally filtered by sprite_set."""
+    con = get_con()
+    try:
+        if sprite_set:
+            rows = con.execute(
+                'SELECT name FROM sprites WHERE sprite_set=? ORDER BY name',
+                (sprite_set,)).fetchall()
+        else:
+            rows = con.execute(
+                'SELECT name FROM sprites ORDER BY name').fetchall()
+        return [r['name'] for r in rows]
+    finally:
+        con.close()
+
+
 def fetch_sprite(name: str) -> dict | None:
     """Return sprite dict with palette, pixels, width, height, action_point, or None."""
     if not name:
@@ -88,12 +117,15 @@ def migrate_db():
             "ALTER TABLE sprites ADD COLUMN action_point_x INTEGER",
             "ALTER TABLE sprites ADD COLUMN action_point_y INTEGER",
             "ALTER TABLE items   ADD COLUMN tile_scale REAL NOT NULL DEFAULT 1.0",
+            "ALTER TABLE tiles   ADD COLUMN animation_name TEXT",
             "ALTER TABLE items   ADD COLUMN collision INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE items   ADD COLUMN footprint TEXT",
             "ALTER TABLE items   ADD COLUMN collision_mask TEXT",
             "ALTER TABLE items   ADD COLUMN entry_points TEXT",
             "ALTER TABLE items   ADD COLUMN nested_map TEXT",
             "ALTER TABLE species ADD COLUMN tile_scale REAL NOT NULL DEFAULT 1.0",
+            "ALTER TABLE species ADD COLUMN composite_name TEXT",
+            "ALTER TABLE sprites ADD COLUMN sprite_set TEXT",
             """CREATE TABLE IF NOT EXISTS tiles (
     key TEXT PRIMARY KEY, name TEXT NOT NULL DEFAULT '',
     walkable INTEGER NOT NULL DEFAULT 1, covered INTEGER NOT NULL DEFAULT 0,
@@ -164,7 +196,65 @@ def migrate_db():
                 con.execute(stmt)
             except sqlite3.OperationalError:
                 pass
+        # Composite sprite tables
+        for stmt in [
+            """CREATE TABLE IF NOT EXISTS composite_sprites (
+                name TEXT PRIMARY KEY,
+                root_layer TEXT NOT NULL DEFAULT 'root')""",
+            """CREATE TABLE IF NOT EXISTS composite_layers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                composite_name TEXT NOT NULL REFERENCES composite_sprites(name),
+                layer_name TEXT NOT NULL,
+                z_layer INTEGER NOT NULL DEFAULT 0,
+                default_sprite TEXT REFERENCES sprites(name),
+                UNIQUE(composite_name, layer_name))""",
+            """CREATE TABLE IF NOT EXISTS layer_variants (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                composite_name TEXT NOT NULL REFERENCES composite_sprites(name),
+                layer_name TEXT NOT NULL,
+                variant_name TEXT NOT NULL,
+                sprite_name TEXT NOT NULL REFERENCES sprites(name),
+                UNIQUE(composite_name, layer_name, variant_name))""",
+            """CREATE TABLE IF NOT EXISTS layer_connections (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                composite_name TEXT NOT NULL REFERENCES composite_sprites(name),
+                parent_layer TEXT NOT NULL,
+                child_layer TEXT NOT NULL,
+                parent_socket_x INTEGER NOT NULL DEFAULT 0,
+                parent_socket_y INTEGER NOT NULL DEFAULT 0,
+                child_anchor_x INTEGER NOT NULL DEFAULT 0,
+                child_anchor_y INTEGER NOT NULL DEFAULT 0,
+                UNIQUE(composite_name, child_layer))""",
+            """CREATE TABLE IF NOT EXISTS composite_animations (
+                name TEXT PRIMARY KEY,
+                composite_name TEXT NOT NULL REFERENCES composite_sprites(name),
+                loop INTEGER NOT NULL DEFAULT 1,
+                duration_ms INTEGER NOT NULL DEFAULT 1000)""",
+            """CREATE TABLE IF NOT EXISTS composite_anim_keyframes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                animation_name TEXT NOT NULL REFERENCES composite_animations(name),
+                layer_name TEXT NOT NULL,
+                time_ms INTEGER NOT NULL DEFAULT 0,
+                offset_x INTEGER NOT NULL DEFAULT 0,
+                offset_y INTEGER NOT NULL DEFAULT 0,
+                rotation_deg REAL NOT NULL DEFAULT 0.0,
+                variant_name TEXT,
+                UNIQUE(animation_name, layer_name, time_ms))""",
+        ]:
+            try:
+                con.execute(stmt)
+            except sqlite3.OperationalError:
+                pass
         con.commit()
+    finally:
+        con.close()
+
+
+def fetch_composite_names() -> list[str]:
+    con = get_con()
+    try:
+        return [r['name'] for r in con.execute(
+            'SELECT name FROM composite_sprites ORDER BY name').fetchall()]
     finally:
         con.close()
 

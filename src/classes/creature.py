@@ -48,8 +48,9 @@ class Creature(WorldObject):
         self.species = species
         from data.db import SPECIES
         species_data  = SPECIES.get(species, {}) if species else {}
-        self.tile_scale  = species_data.get('tile_scale',  self.__class__.tile_scale)
-        self.sprite_name = species_data.get('sprite_name', self.__class__.sprite_name)
+        self.tile_scale      = species_data.get('tile_scale',      self.__class__.tile_scale)
+        self.sprite_name     = species_data.get('sprite_name',     self.__class__.sprite_name)
+        self.composite_name  = species_data.get('composite_name',  self.__class__.composite_name)
         species_stats = {k: v for k, v in species_data.items() if isinstance(k, Stat)}
         self.stats = {Stat.MHP: 1, Stat.CHP: 1, **species_stats, **stats}
         self._reconcile_exp_level()
