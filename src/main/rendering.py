@@ -59,7 +59,6 @@ def draw_map(surface, game_map, cols, rows, block_size, cam, has_parent=False):
                 color = COLOR_BLOCKED
             rect = pygame.Rect(sx, sy, block_size, block_size)
             pygame.draw.rect(surface, color, rect)
-            pygame.draw.rect(surface, COLOR_GRID, rect, 1)
             if tile and tile.sprite_name:
                 tile_surf = make_tile_surface(tile, block_size)
                 if tile_surf:
