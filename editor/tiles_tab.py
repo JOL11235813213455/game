@@ -5,6 +5,7 @@ from tkinter import ttk, messagebox
 from editor.db import get_con, fetch_sprite_names
 from editor.constants import PREVIEW_SIZE
 from editor.sprite_preview import SpritePreview
+from editor.tooltip import add_tooltip
 
 
 class TilesTab(ttk.Frame):
@@ -43,27 +44,35 @@ class TilesTab(ttk.Frame):
 
         ttk.Label(f, text='Key').grid(row=r, column=0, sticky='w', padx=6, pady=4)
         self.v_key = tk.StringVar()
-        ttk.Entry(f, textvariable=self.v_key, width=24).grid(row=r, column=1, sticky='ew', padx=6, pady=4)
+        e_key = ttk.Entry(f, textvariable=self.v_key, width=24)
+        e_key.grid(row=r, column=1, sticky='ew', padx=6, pady=4)
+        add_tooltip(e_key, 'Unique identifier for this tile template')
         r += 1
 
         ttk.Label(f, text='Name').grid(row=r, column=0, sticky='w', padx=6, pady=4)
         self.v_name = tk.StringVar()
-        ttk.Entry(f, textvariable=self.v_name, width=24).grid(row=r, column=1, sticky='ew', padx=6, pady=4)
+        e_name = ttk.Entry(f, textvariable=self.v_name, width=24)
+        e_name.grid(row=r, column=1, sticky='ew', padx=6, pady=4)
+        add_tooltip(e_name, 'Display name for this tile type')
         r += 1
 
         self.v_walkable = tk.BooleanVar(value=True)
-        ttk.Checkbutton(f, text='Walkable', variable=self.v_walkable).grid(
-            row=r, column=0, columnspan=2, sticky='w', padx=6, pady=4)
+        cb_walk = ttk.Checkbutton(f, text='Walkable', variable=self.v_walkable)
+        cb_walk.grid(row=r, column=0, columnspan=2, sticky='w', padx=6, pady=4)
+        add_tooltip(cb_walk, 'Whether creatures can walk on this tile')
         r += 1
 
         self.v_covered = tk.BooleanVar(value=False)
-        ttk.Checkbutton(f, text='Covered', variable=self.v_covered).grid(
-            row=r, column=0, columnspan=2, sticky='w', padx=6, pady=4)
+        cb_cov = ttk.Checkbutton(f, text='Covered', variable=self.v_covered)
+        cb_cov.grid(row=r, column=0, columnspan=2, sticky='w', padx=6, pady=4)
+        add_tooltip(cb_cov, 'Whether this tile acts as a roof/ceiling')
         r += 1
 
         ttk.Label(f, text='Tile Scale').grid(row=r, column=0, sticky='w', padx=6, pady=4)
         self.v_tile_scale = tk.StringVar(value='1.0')
-        ttk.Entry(f, textvariable=self.v_tile_scale, width=10).grid(row=r, column=1, sticky='w', padx=6, pady=4)
+        e_scale = ttk.Entry(f, textvariable=self.v_tile_scale, width=10)
+        e_scale.grid(row=r, column=1, sticky='w', padx=6, pady=4)
+        add_tooltip(e_scale, 'Visual scale multiplier (1.0 = normal size)')
         r += 1
 
         ttk.Label(f, text='Sprite').grid(row=r, column=0, sticky='w', padx=6, pady=4)
@@ -75,6 +84,7 @@ class TilesTab(ttk.Frame):
         self.sprite_cb = ttk.Combobox(sf, textvariable=self.v_sprite,
                                       values=self._sprite_names, state='readonly', width=18)
         self.sprite_cb.pack(side=tk.LEFT, padx=(0, 8))
+        add_tooltip(self.sprite_cb, 'Sprite used to draw this tile')
         self.sprite_preview = SpritePreview(sf, size=PREVIEW_SIZE)
         self.sprite_preview.pack(side=tk.LEFT)
         self.sprite_cb.bind('<<ComboboxSelected>>', lambda e: self.sprite_preview.load(self.v_sprite.get() or None))

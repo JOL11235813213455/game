@@ -6,6 +6,7 @@ from tkinter import ttk, messagebox
 from editor.db import get_con, fetch_sprite_names, fetch_map_names
 from editor.constants import ITEM_CLASSES, SLOTS, CLASS_FIELDS, PREVIEW_SIZE
 from editor.sprite_preview import SpritePreview
+from editor.tooltip import add_tooltip
 
 
 class ItemsTab(ttk.Frame):
@@ -69,12 +70,15 @@ class ItemsTab(ttk.Frame):
     def _build_form(self):
         f = self.form
         self._rows = {}
+        self._tooltips = {}
 
-        def add_row(field, label_text, widget_fn):
+        def add_row(field, label_text, widget_fn, tip=None):
             lbl = ttk.Label(f, text=label_text)
             frm = ttk.Frame(f)
             widget_fn(frm)
             self._rows[field] = (lbl, frm)
+            if tip:
+                add_tooltip(frm, tip)
 
         ttk.Label(f, text='Class', font=('TkDefaultFont', 9, 'bold')).grid(
             row=0, column=0, sticky='w', padx=6, pady=4)
@@ -83,6 +87,7 @@ class ItemsTab(ttk.Frame):
                               state='readonly', width=18)
         cls_cb.grid(row=0, column=1, sticky='w', padx=6, pady=4)
         cls_cb.bind('<<ComboboxSelected>>', lambda e: self._refresh_visible_fields())
+        add_tooltip(cls_cb, 'Item type: determines which fields are available')
         self._class_row_count = 1
 
         self.v_key         = tk.StringVar()
@@ -93,27 +98,39 @@ class ItemsTab(ttk.Frame):
         self.v_inventoriable = tk.BooleanVar(value=True)
         self.v_collision     = tk.BooleanVar(value=False)
 
-        add_row('key',         'Key',         lambda p: ttk.Entry(p, textvariable=self.v_key, width=30).pack(anchor='w'))
-        add_row('name',        'Name',        lambda p: ttk.Entry(p, textvariable=self.v_name, width=30).pack(anchor='w'))
-        add_row('description', 'Description', lambda p: ttk.Entry(p, textvariable=self.v_description, width=40).pack(anchor='w'))
-        add_row('weight',      'Weight',      lambda p: ttk.Entry(p, textvariable=self.v_weight, width=10).pack(anchor='w'))
-        add_row('value',       'Value',       lambda p: ttk.Entry(p, textvariable=self.v_value, width=10).pack(anchor='w'))
-        add_row('inventoriable', 'Inventoriable', lambda p: ttk.Checkbutton(p, variable=self.v_inventoriable).pack(anchor='w'))
-        add_row('collision',     'Collision',     lambda p: ttk.Checkbutton(p, variable=self.v_collision).pack(anchor='w'))
+        add_row('key',         'Key',         lambda p: ttk.Entry(p, textvariable=self.v_key, width=30).pack(anchor='w'),
+                'Unique identifier for this item (used in code and saves)')
+        add_row('name',        'Name',        lambda p: ttk.Entry(p, textvariable=self.v_name, width=30).pack(anchor='w'),
+                'Display name shown to the player')
+        add_row('description', 'Description', lambda p: ttk.Entry(p, textvariable=self.v_description, width=40).pack(anchor='w'),
+                'Flavour text or description shown in inventory')
+        add_row('weight',      'Weight',      lambda p: ttk.Entry(p, textvariable=self.v_weight, width=10).pack(anchor='w'),
+                'Item weight for inventory/encumbrance')
+        add_row('value',       'Value',       lambda p: ttk.Entry(p, textvariable=self.v_value, width=10).pack(anchor='w'),
+                'Base trade value of this item')
+        add_row('inventoriable', 'Inventoriable', lambda p: ttk.Checkbutton(p, variable=self.v_inventoriable).pack(anchor='w'),
+                'Whether this item can be picked up and stored in inventory')
+        add_row('collision',     'Collision',     lambda p: ttk.Checkbutton(p, variable=self.v_collision).pack(anchor='w'),
+                'Whether this item blocks movement when placed in the world')
 
         self.v_tile_scale = tk.StringVar(value='1.0')
-        add_row('tile_scale', 'Tile Scale', lambda p: ttk.Entry(p, textvariable=self.v_tile_scale, width=10).pack(anchor='w'))
+        add_row('tile_scale', 'Tile Scale', lambda p: ttk.Entry(p, textvariable=self.v_tile_scale, width=10).pack(anchor='w'),
+                'Visual scale multiplier on the tile (1.0 = normal size)')
 
         self.v_max_stack   = tk.StringVar(value='99')
         self.v_quantity    = tk.StringVar(value='1')
-        add_row('max_stack_size', 'Max Stack',  lambda p: ttk.Entry(p, textvariable=self.v_max_stack, width=10).pack(anchor='w'))
-        add_row('quantity',       'Quantity',   lambda p: ttk.Entry(p, textvariable=self.v_quantity, width=10).pack(anchor='w'))
+        add_row('max_stack_size', 'Max Stack',  lambda p: ttk.Entry(p, textvariable=self.v_max_stack, width=10).pack(anchor='w'),
+                'Maximum number of items per inventory stack')
+        add_row('quantity',       'Quantity',   lambda p: ttk.Entry(p, textvariable=self.v_quantity, width=10).pack(anchor='w'),
+                'Default starting quantity when spawned')
 
         self.v_duration = tk.StringVar(value='0')
-        add_row('duration', 'Duration', lambda p: ttk.Entry(p, textvariable=self.v_duration, width=10).pack(anchor='w'))
+        add_row('duration', 'Duration', lambda p: ttk.Entry(p, textvariable=self.v_duration, width=10).pack(anchor='w'),
+                'Effect duration in seconds when consumed')
 
         self.v_destroy_prob = tk.StringVar(value='1.0')
-        add_row('destroy_on_use_probability', 'Destroy Prob.', lambda p: ttk.Entry(p, textvariable=self.v_destroy_prob, width=10).pack(anchor='w'))
+        add_row('destroy_on_use_probability', 'Destroy Prob.', lambda p: ttk.Entry(p, textvariable=self.v_destroy_prob, width=10).pack(anchor='w'),
+                'Chance (0.0-1.0) that ammunition is destroyed on use')
 
         self.v_slot_count       = tk.StringVar(value='1')
         self.v_durability_max   = tk.StringVar(value='100')
@@ -126,36 +143,50 @@ class ItemsTab(ttk.Frame):
             for i, slot in enumerate(SLOTS):
                 ttk.Checkbutton(p, text=slot, variable=self.slot_vars[slot]).grid(
                     row=i // cols, column=i % cols, sticky='w', padx=4)
-        add_row('slots',             'Slots',             _build_slots)
-        add_row('slot_count',        'Slot Count',        lambda p: ttk.Entry(p, textvariable=self.v_slot_count, width=10).pack(anchor='w'))
-        add_row('durability_max',    'Durability Max',    lambda p: ttk.Entry(p, textvariable=self.v_durability_max, width=10).pack(anchor='w'))
-        add_row('durability_current','Durability Cur.',   lambda p: ttk.Entry(p, textvariable=self.v_durability_cur, width=10).pack(anchor='w'))
-        add_row('render_on_creature','Render on Creature',lambda p: ttk.Checkbutton(p, variable=self.v_render_on_creature).pack(anchor='w'))
+        add_row('slots',             'Slots',             _build_slots,
+                'Equipment slots this item can be equipped in')
+        add_row('slot_count',        'Slot Count',        lambda p: ttk.Entry(p, textvariable=self.v_slot_count, width=10).pack(anchor='w'),
+                'Number of equipment slots this item occupies')
+        add_row('durability_max',    'Durability Max',    lambda p: ttk.Entry(p, textvariable=self.v_durability_max, width=10).pack(anchor='w'),
+                'Maximum durability when fully repaired')
+        add_row('durability_current','Durability Cur.',   lambda p: ttk.Entry(p, textvariable=self.v_durability_cur, width=10).pack(anchor='w'),
+                'Current durability (degrades with use)')
+        add_row('render_on_creature','Render on Creature',lambda p: ttk.Checkbutton(p, variable=self.v_render_on_creature).pack(anchor='w'),
+                'Whether to visually display this item on the creature sprite')
 
         self.v_damage         = tk.StringVar(value='0')
         self.v_attack_time    = tk.StringVar(value='500')
         self.v_directions     = tk.StringVar(value='["front"]')
         self.v_range          = tk.StringVar(value='1')
         self.v_ammo_type      = tk.StringVar()
-        add_row('damage',         'Damage',         lambda p: ttk.Entry(p, textvariable=self.v_damage, width=10).pack(anchor='w'))
-        add_row('attack_time_ms', 'Attack Time ms', lambda p: ttk.Entry(p, textvariable=self.v_attack_time, width=10).pack(anchor='w'))
-        add_row('directions',     'Directions',     lambda p: ttk.Entry(p, textvariable=self.v_directions, width=30).pack(anchor='w'))
-        add_row('range',          'Range',          lambda p: ttk.Entry(p, textvariable=self.v_range, width=10).pack(anchor='w'))
-        add_row('ammunition_type','Ammo Type',      lambda p: ttk.Entry(p, textvariable=self.v_ammo_type, width=20).pack(anchor='w'))
+        add_row('damage',         'Damage',         lambda p: ttk.Entry(p, textvariable=self.v_damage, width=10).pack(anchor='w'),
+                'Base damage dealt per hit')
+        add_row('attack_time_ms', 'Attack Time ms', lambda p: ttk.Entry(p, textvariable=self.v_attack_time, width=10).pack(anchor='w'),
+                'Milliseconds between attacks (lower = faster)')
+        add_row('directions',     'Directions',     lambda p: ttk.Entry(p, textvariable=self.v_directions, width=30).pack(anchor='w'),
+                'JSON list of attack directions, e.g. ["front", "back"]')
+        add_row('range',          'Range',          lambda p: ttk.Entry(p, textvariable=self.v_range, width=10).pack(anchor='w'),
+                'Attack range in tiles (1 = melee)')
+        add_row('ammunition_type','Ammo Type',      lambda p: ttk.Entry(p, textvariable=self.v_ammo_type, width=20).pack(anchor='w'),
+                'Name of required ammunition item (blank for no ammo)')
 
         self.v_footprint      = tk.StringVar(value='[[0,0]]')
         self.v_collision_mask = tk.StringVar(value='[[0,0]]')
         self.v_entry_points   = tk.StringVar(value='{}')
         self.v_nested_map     = tk.StringVar()
-        add_row('footprint',      'Footprint (JSON)',      lambda p: ttk.Entry(p, textvariable=self.v_footprint, width=40).pack(anchor='w'))
-        add_row('collision_mask', 'Collision Mask (JSON)', lambda p: ttk.Entry(p, textvariable=self.v_collision_mask, width=40).pack(anchor='w'))
-        add_row('entry_points',   'Entry Points (JSON)',   lambda p: ttk.Entry(p, textvariable=self.v_entry_points, width=40).pack(anchor='w'))
+        add_row('footprint',      'Footprint (JSON)',      lambda p: ttk.Entry(p, textvariable=self.v_footprint, width=40).pack(anchor='w'),
+                'Tile offsets this structure occupies, e.g. [[0,0],[1,0],[0,1],[1,1]]')
+        add_row('collision_mask', 'Collision Mask (JSON)', lambda p: ttk.Entry(p, textvariable=self.v_collision_mask, width=40).pack(anchor='w'),
+                'Subset of footprint that blocks movement (defaults to full footprint)')
+        add_row('entry_points',   'Entry Points (JSON)',   lambda p: ttk.Entry(p, textvariable=self.v_entry_points, width=40).pack(anchor='w'),
+                'Map offsets to interior entrances, e.g. {"0,1": [5, 10]}')
         self._map_names = [''] + fetch_map_names()
         def _build_nested_map(p):
             self.nested_map_cb = ttk.Combobox(p, textvariable=self.v_nested_map,
                                               values=self._map_names, state='readonly', width=18)
             self.nested_map_cb.pack(anchor='w')
-        add_row('nested_map', 'Nested Map', _build_nested_map)
+        add_row('nested_map', 'Nested Map', _build_nested_map,
+                'Interior map to enter when interacting with this structure')
 
         self.v_sprite = tk.StringVar()
         self._sprite_names = [''] + fetch_sprite_names()

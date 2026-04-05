@@ -5,6 +5,7 @@ from tkinter import ttk, messagebox
 from editor.db import get_con, fetch_sprite_names, fetch_animation_names, fetch_species_names
 from editor.constants import PREVIEW_SIZE
 from editor.sprite_preview import SpritePreview
+from editor.tooltip import add_tooltip
 
 TARGET_TYPES = ['creature', 'tile', 'world_object']
 BEHAVIORS = [
@@ -53,11 +54,15 @@ class AnimationsTab(ttk.Frame):
         top.pack(fill=tk.X, padx=6, pady=4)
         ttk.Label(top, text='Name').pack(side=tk.LEFT)
         self.v_name = tk.StringVar()
-        ttk.Entry(top, textvariable=self.v_name, width=24).pack(side=tk.LEFT, padx=6)
+        e_name = ttk.Entry(top, textvariable=self.v_name, width=24)
+        e_name.pack(side=tk.LEFT, padx=6)
+        add_tooltip(e_name, 'Unique animation name')
         ttk.Label(top, text='Type').pack(side=tk.LEFT, padx=(12, 0))
         self.v_type = tk.StringVar(value='creature')
-        ttk.Combobox(top, textvariable=self.v_type, values=TARGET_TYPES,
-                     state='readonly', width=14).pack(side=tk.LEFT, padx=4)
+        type_cb = ttk.Combobox(top, textvariable=self.v_type, values=TARGET_TYPES,
+                     state='readonly', width=14)
+        type_cb.pack(side=tk.LEFT, padx=4)
+        add_tooltip(type_cb, 'What kind of object this animation targets')
 
         ttk.Separator(right, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=6, pady=4)
 
@@ -72,6 +77,7 @@ class AnimationsTab(ttk.Frame):
         preview_ctrl.pack(side=tk.LEFT, anchor='n')
         self._play_btn = ttk.Button(preview_ctrl, text='Play', command=self._toggle_preview)
         self._play_btn.pack(anchor='w', pady=2)
+        add_tooltip(self._play_btn, 'Play/stop the animation preview')
         self._preview_label = ttk.Label(preview_ctrl, text='Stopped', foreground='#555')
         self._preview_label.pack(anchor='w', pady=2)
 
@@ -101,8 +107,9 @@ class AnimationsTab(ttk.Frame):
 
         frame_btns = ttk.Frame(right)
         frame_btns.pack(fill=tk.X, padx=6, pady=4)
-        ttk.Button(frame_btns, text='+ Add Frame', command=self._add_frame).pack(
-            side=tk.LEFT, padx=2)
+        add_frame_btn = ttk.Button(frame_btns, text='+ Add Frame', command=self._add_frame)
+        add_frame_btn.pack(side=tk.LEFT, padx=2)
+        add_tooltip(add_frame_btn, 'Append a new frame to this animation')
 
         ttk.Separator(right, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=6, pady=4)
 
@@ -118,12 +125,16 @@ class AnimationsTab(ttk.Frame):
             bind_row, textvariable=self.v_bind_target,
             values=fetch_species_names(), width=16)
         self._bind_target_cb.pack(side=tk.LEFT, padx=4)
+        add_tooltip(self._bind_target_cb, 'Species or sprite name this animation applies to')
         ttk.Label(bind_row, text='Behavior').pack(side=tk.LEFT, padx=(8, 0))
         self.v_bind_behavior = tk.StringVar(value='idle')
-        ttk.Combobox(bind_row, textvariable=self.v_bind_behavior,
-                     values=BEHAVIORS, width=14).pack(side=tk.LEFT, padx=4)
-        ttk.Button(bind_row, text='Add Binding', command=self._add_binding).pack(
-            side=tk.LEFT, padx=4)
+        behav_cb = ttk.Combobox(bind_row, textvariable=self.v_bind_behavior,
+                     values=BEHAVIORS, width=14)
+        behav_cb.pack(side=tk.LEFT, padx=4)
+        add_tooltip(behav_cb, 'Action that triggers this animation (idle, walk, attack, etc.)')
+        add_bind_btn = ttk.Button(bind_row, text='Add Binding', command=self._add_binding)
+        add_bind_btn.pack(side=tk.LEFT, padx=4)
+        add_tooltip(add_bind_btn, 'Link this animation to the target + behavior pair')
 
         self._bindings_frame = ttk.Frame(right)
         self._bindings_frame.pack(fill=tk.X, padx=6, pady=2)

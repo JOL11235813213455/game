@@ -5,6 +5,7 @@ from tkinter import ttk, messagebox
 from editor.db import get_con, fetch_sprite_names
 from editor.constants import STATS, STAT_LABELS, PREVIEW_SIZE
 from editor.sprite_preview import SpritePreview
+from editor.tooltip import add_tooltip
 
 
 class SpeciesTab(ttk.Frame):
@@ -45,13 +46,15 @@ class SpeciesTab(ttk.Frame):
 
         ttk.Label(f, text='Name').grid(row=row, column=0, sticky='w', padx=6, pady=4)
         self.v_name = tk.StringVar()
-        ttk.Entry(f, textvariable=self.v_name, width=30).grid(
-            row=row, column=1, sticky='ew', padx=6, pady=4)
+        e_name = ttk.Entry(f, textvariable=self.v_name, width=30)
+        e_name.grid(row=row, column=1, sticky='ew', padx=6, pady=4)
+        add_tooltip(e_name, 'Unique species name')
         row += 1
 
         self.v_playable = tk.BooleanVar()
-        ttk.Checkbutton(f, text='Playable', variable=self.v_playable).grid(
-            row=row, column=0, columnspan=2, sticky='w', padx=6, pady=4)
+        cb_play = ttk.Checkbutton(f, text='Playable', variable=self.v_playable)
+        cb_play.grid(row=row, column=0, columnspan=2, sticky='w', padx=6, pady=4)
+        add_tooltip(cb_play, 'Whether the player can choose this species')
         row += 1
 
         ttk.Label(f, text='Sprite').grid(row=row, column=0, sticky='w', padx=6, pady=4)
@@ -64,14 +67,16 @@ class SpeciesTab(ttk.Frame):
         self.sprite_cb = ttk.Combobox(sprite_frame, textvariable=self.v_sprite,
                                       values=self._sprite_names, state='readonly', width=18)
         self.sprite_cb.pack(side=tk.LEFT, padx=(0, 8))
+        add_tooltip(self.sprite_cb, 'Default sprite used for creatures of this species')
         self.sprite_preview = SpritePreview(sprite_frame, size=PREVIEW_SIZE)
         self.sprite_preview.pack(side=tk.LEFT)
         self.sprite_cb.bind('<<ComboboxSelected>>', self._on_sprite_change)
 
         ttk.Label(f, text='Tile Scale').grid(row=row, column=0, sticky='w', padx=6, pady=4)
         self.v_tile_scale = tk.StringVar(value='1.0')
-        ttk.Entry(f, textvariable=self.v_tile_scale, width=10).grid(
-            row=row, column=1, sticky='w', padx=6, pady=4)
+        e_scale = ttk.Entry(f, textvariable=self.v_tile_scale, width=10)
+        e_scale.grid(row=row, column=1, sticky='w', padx=6, pady=4)
+        add_tooltip(e_scale, 'Visual scale on the tile (1.0 = normal)')
         row += 1
 
         ttk.Separator(f, orient=tk.HORIZONTAL).grid(
@@ -82,14 +87,25 @@ class SpeciesTab(ttk.Frame):
             row=row, column=0, columnspan=2, sticky='w', padx=6, pady=2)
         row += 1
 
+        stat_tips = {
+            'strength': 'Physical power — affects melee damage',
+            'constitution': 'Endurance — affects max HP',
+            'intelligence': 'Mental acuity — affects skills and magic',
+            'agility': 'Speed and reflexes — affects dodge and move speed',
+            'perception': 'Awareness — affects detection and ranged accuracy',
+            'charisma': 'Social influence — affects NPC interactions',
+            'luck': 'Fortune — affects critical hits and loot',
+            'hit dice': 'Base HP dice rolled per level',
+        }
         self.stat_vars: dict[str, tk.StringVar] = {}
         for stat in STATS:
             ttk.Label(f, text=STAT_LABELS[stat]).grid(
                 row=row, column=0, sticky='w', padx=6, pady=2)
             var = tk.StringVar()
             self.stat_vars[stat] = var
-            ttk.Entry(f, textvariable=var, width=8).grid(
-                row=row, column=1, sticky='w', padx=6, pady=2)
+            e_stat = ttk.Entry(f, textvariable=var, width=8)
+            e_stat.grid(row=row, column=1, sticky='w', padx=6, pady=2)
+            add_tooltip(e_stat, stat_tips.get(stat, f'Base {stat} value'))
             row += 1
 
         f.columnconfigure(1, weight=1)
