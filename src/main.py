@@ -103,12 +103,14 @@ def main():
                         if event.key == pygame.K_l:
                             lvl = player.stats.get(Stat.LVL, 0)
                             player.gain_exp(exp_for_level(lvl + 1))
-                        if event.key == pygame.K_t:
-                            game_clock.update(60.0)  # advance 1 game hour
+                        pass  # placeholder for future debug keys
 
         # ---- update ---------------------------------------------------------
         dt = clock.get_time() / 1000.0  # seconds since last frame
         if not paused and save_ui is None:
+            keys_held = pygame.key.get_pressed()
+            if keys_held[pygame.K_t]:
+                game_clock.update(dt * 120)  # hold T: 2 game-hours per real second
             game_clock.update(dt)
 
         dt_ms = clock.get_time()  # ms since last frame

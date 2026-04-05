@@ -8,7 +8,7 @@ SCREEN_HEIGHT = int(os.getenv("SCREEN_HEIGHT", 720))
 FPS           = 300
 DEBUG         = os.getenv("DEBUG", "false").lower() == "true"
 
-BLOCK_SIZE    = 64
+BLOCK_SIZE    = 128
 THREE_QUARTER = os.getenv("THREE_QUARTER", "true").lower() == "true"
 TILE_HEIGHT   = int(BLOCK_SIZE * 0.75) if THREE_QUARTER else BLOCK_SIZE
 MOVE_DELAY    = 150
