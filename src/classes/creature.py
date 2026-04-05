@@ -40,8 +40,8 @@ class Creature(WorldObject):
         ,location: MapKey = MapKey()
         ,name: str = None
         ,species: str = None
-        ,stats: dict = {}
-        ,items: list = []
+        ,stats: dict = None
+        ,items: list = None
         ):
         super().__init__(current_map=current_map, location=location)
         self.name = name
@@ -52,9 +52,9 @@ class Creature(WorldObject):
         self.sprite_name     = species_data.get('sprite_name',     self.__class__.sprite_name)
         self.composite_name  = species_data.get('composite_name',  self.__class__.composite_name)
         species_stats = {k: v for k, v in species_data.items() if isinstance(k, Stat)}
-        self.stats = {Stat.MHP: 1, Stat.CHP: 1, **species_stats, **stats}
+        self.stats = {Stat.MHP: 1, Stat.CHP: 1, **species_stats, **(stats or {})}
         self._reconcile_exp_level()
-        self.inventory = Inventory(items=items)
+        self.inventory = Inventory(items=items or [])
         self.map_stack: list[tuple[Map, MapKey]] = []
         self.on_level_up: list[callable] = [level_up_heal]
         self.hostile = False
@@ -91,9 +91,7 @@ class Creature(WorldObject):
         """Return True if any WorldObject with collision=True occupies (x, y)."""
         from classes.world_object import WorldObject
         from classes.inventory import Structure
-        for obj in WorldObject.all():
-            if obj.current_map is not game_map or not obj.collision:
-                continue
+        for obj in WorldObject.colliders_on_map(game_map):
             if isinstance(obj, Structure):
                 ox, oy = obj.location.x, obj.location.y
                 if (x - ox, y - oy) in obj.collision_mask:
@@ -133,8 +131,8 @@ class Creature(WorldObject):
         from classes.inventory import Structure
         from data.db import MAPS
         px, py = self.location.x, self.location.y
-        for s in Structure.all():
-            if s.current_map is not self.current_map or not s.nested_map_name:
+        for s in WorldObject.on_map(self.current_map):
+            if not isinstance(s, Structure) or not s.nested_map_name:
                 continue
             offset = (px - s.location.x, py - s.location.y)
             offset_key = f'{offset[0]},{offset[1]}'
@@ -165,8 +163,8 @@ class Creature(WorldObject):
         accessible = [self.inventory]
         if tile:
             accessible.append(tile.inventory)
-            for creature in Creature.all():
-                if creature is not self and creature.current_map is self.current_map and creature.location == self.location:
+            for creature in WorldObject.on_map(self.current_map):
+                if isinstance(creature, Creature) and creature is not self and creature.location == self.location:
                     accessible.append(creature.inventory)
         if source not in accessible or target not in accessible:
             return False
@@ -186,8 +184,8 @@ class NPC(Creature):
         ,current_map: Map
         ,location: MapKey = MapKey()
         ,species: str = None
-        ,stats: dict = {}
-        ,items: list = []
+        ,stats: dict = None
+        ,items: list = None
         ,move_interval: int = 1000
         ):
         super().__init__(current_map=current_map, location=location, species=species, stats=stats, items=items)

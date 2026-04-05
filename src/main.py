@@ -8,6 +8,7 @@ from main.config import (
 )
 from classes.creature import Creature, NPC, Stat
 from classes.inventory import Structure
+from classes.world_object import WorldObject
 from classes.levels import exp_for_level
 from classes.maps import MapKey
 from data.db import load as load_db
@@ -130,13 +131,14 @@ def main():
                 player.play_animation('idle')
 
         if save_ui is None and not paused:
-            for npc in NPC.all():
-                if npc.current_map is player.current_map:
-                    npc.update(now, cols, rows)
+            map_objects = WorldObject.on_map(player.current_map)
+            map_npcs = [o for o in map_objects if isinstance(o, NPC)]
+            for npc in map_npcs:
+                npc.update(now, cols, rows)
 
             # Update animations on all world objects
             player.anim.update(dt_ms)
-            for npc in NPC.all():
+            for npc in map_npcs:
                 npc.anim.update(dt_ms)
 
         # ---- render ---------------------------------------------------------
@@ -157,9 +159,8 @@ def main():
                          has_parent=has_parent, time_ms=now)
 
         # Pass 2: draw sprites/structures sorted by Y (z_index breaks ties on same tile)
-        renderables = ([player]
-                       + [n for n in NPC.all() if n.current_map is player.current_map]
-                       + [s for s in Structure.all() if s.current_map is player.current_map])
+        renderables = [o for o in WorldObject.on_map(player.current_map)
+                       if isinstance(o, (Creature, NPC, Structure))]
         for obj in sorted(renderables, key=lambda o: (o.location.y, o.z_index)):
             result = obj.make_surface(bs)
             if result:

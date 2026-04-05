@@ -1,4 +1,6 @@
 from __future__ import annotations
+import weakref
+from collections import defaultdict
 from typing import TYPE_CHECKING
 from classes.trackable import Trackable
 from classes.animation import AnimationState
@@ -14,14 +16,45 @@ class WorldObject(Trackable):
     tile_scale: float   = 1.0
     collision: bool     = False
 
+    # Per-map spatial index: map_id → WeakSet of WorldObjects on that map
+    _by_map: dict[int, weakref.WeakSet] = defaultdict(weakref.WeakSet)
+
+    @classmethod
+    def on_map(cls, game_map) -> list['WorldObject']:
+        """Return all WorldObjects on the given map. O(1) lookup."""
+        return list(cls._by_map.get(id(game_map), []))
+
+    @classmethod
+    def colliders_on_map(cls, game_map) -> list['WorldObject']:
+        """Return WorldObjects with collision=True on the given map."""
+        return [o for o in cls._by_map.get(id(game_map), [])
+                if o.collision]
+
     def __init__(self, current_map: Map = None, location=None):
         super().__init__()
-        self.current_map = current_map
+        self._current_map = None
         if location is None:
             from classes.maps import MapKey
             location = MapKey()
         self.location = location
         self.anim = AnimationState()
+        # Set via property to register in _by_map
+        self.current_map = current_map
+
+    @property
+    def current_map(self):
+        return self._current_map
+
+    @current_map.setter
+    def current_map(self, new_map):
+        old = self._current_map
+        if old is not None:
+            by = WorldObject._by_map.get(id(old))
+            if by is not None:
+                by.discard(self)
+        self._current_map = new_map
+        if new_map is not None:
+            WorldObject._by_map[id(new_map)].add(self)
 
     def play_animation(self, behavior: str, fallback: str = 'idle'):
         """Look up and play an animation for this object's species/type + behavior."""
@@ -63,37 +96,34 @@ class WorldObject(Trackable):
         name = self._resolve_sprite_name()
         if name is None:
             return None
-        import pygame
+
         from data.db import SPRITE_DATA
+        from main.sprite_cache import get_scaled
+
         data = SPRITE_DATA.get(name)
         if data is None:
             return None
-        pixels  = data['pixels']
-        palette = data['palette']
-        cols    = len(pixels[0])
-        rows    = len(pixels)
+
+        cols = data['width']
+        rows = len(data['pixels'])
         w = int(cols * (block_size / 32) * self.tile_scale)
         h = int(rows * (block_size / 32) * self.tile_scale)
-        native = pygame.Surface((cols, rows), pygame.SRCALPHA)
-        for row_idx, row in enumerate(pixels):
-            for col_idx, char in enumerate(row):
-                if char == '.' or char not in palette:
-                    continue
-                native.set_at((col_idx, row_idx), palette[char])
-        surface = pygame.transform.scale(native, (w, h))
+
+        surface = get_scaled(name, w, h, block_size)
+        if surface is None:
+            return None
 
         # Compute blit offset so the action point lands on the tile center.
-        # action_point is stored as (x, y) in sprite-pixel coordinates.
         from main.config import get_tile_height
         tile_cx = block_size // 2
-        tile_cy = get_tile_height() // 2    # feet at tile center (3/4 convention)
+        tile_cy = get_tile_height() // 2
         ap = data.get('action_point')
         if ap is not None:
             ap_sx = int(ap[0] * w / cols)
             ap_sy = int(ap[1] * h / rows)
         else:
             ap_sx = w // 2
-            ap_sy = h              # sprite bottom = feet
+            ap_sy = h
         blit_dx = tile_cx - ap_sx
         blit_dy = tile_cy - ap_sy
 
@@ -102,7 +132,9 @@ class WorldObject(Trackable):
     def _make_composite_surface(self, block_size: int):
         """Assemble all layers of a composite sprite into one surface."""
         import pygame
+        import numpy as np
         from data.db import COMPOSITES, SPRITE_DATA
+        from main.sprite_cache import get_native
 
         comp = COMPOSITES.get(self.composite_name)
         if not comp or not comp['layers']:
@@ -137,17 +169,21 @@ class WorldObject(Trackable):
         # Find bounding box
         min_x = min_y = float('inf')
         max_x = max_y = float('-inf')
+        layer_surfaces = {}
         for lname, layer in comp['layers'].items():
-            data = SPRITE_DATA.get(layer['default_sprite'] or '')
-            if not data:
+            spr = layer['default_sprite']
+            if not spr:
                 continue
+            native = get_native(spr)
+            if native is None:
+                continue
+            layer_surfaces[lname] = native
             px, py = positions.get(lname, (0, 0))
-            w = data['width']
-            h = len(data['pixels'])
+            nw, nh = native.get_size()
             min_x = min(min_x, px)
             min_y = min(min_y, py)
-            max_x = max(max_x, px + w)
-            max_y = max(max_y, py + h)
+            max_x = max(max_x, px + nw)
+            max_y = max(max_y, py + nh)
 
         if min_x == float('inf'):
             return None
@@ -157,28 +193,22 @@ class WorldObject(Trackable):
         if total_w <= 0 or total_h <= 0:
             return None
 
-        # Create native-resolution surface and blit layers sorted by z_layer
-        native = pygame.Surface((total_w, total_h), pygame.SRCALPHA)
-        sorted_layers = sorted(comp['layers'].items(),
-                               key=lambda x: x[1]['z_layer'])
-        for lname, layer in sorted_layers:
-            data = SPRITE_DATA.get(layer['default_sprite'] or '')
-            if not data:
+        # Blit cached native surfaces (no per-pixel loop)
+        composite = pygame.Surface((total_w, total_h), pygame.SRCALPHA)
+        for lname, layer in sorted(comp['layers'].items(),
+                                    key=lambda x: x[1]['z_layer']):
+            native = layer_surfaces.get(lname)
+            if native is None:
                 continue
             px, py = positions.get(lname, (0, 0))
-            pixels = data['pixels']
-            palette = data['palette']
-            for row_idx, row_str in enumerate(pixels):
-                for col_idx, ch in enumerate(row_str):
-                    if ch == '.' or ch not in palette:
-                        continue
-                    native.set_at((px - min_x + col_idx, py - min_y + row_idx),
-                                  palette[ch])
+            composite.blit(native, (px - min_x, py - min_y))
 
         # Scale to game size
         sw = int(total_w * scale)
         sh = int(total_h * scale)
-        surface = pygame.transform.scale(native, (sw, sh))
+        if sw <= 0 or sh <= 0:
+            return None
+        surface = pygame.transform.scale(composite, (sw, sh))
 
         # Blit offset: center-bottom of composite on tile center
         from main.config import get_tile_height
