@@ -118,10 +118,31 @@ class Creature(WorldObject):
         self.location = self.location._replace(x=nx, y=ny)
         behavior = self._DIR_BEHAVIORS.get((dx, dy), 'walk_south')
         self.play_animation(behavior)
+        # Auto-warp: if the new tile has warp_auto, teleport immediately
+        landed = self.current_map.tiles.get(self.location)
+        if landed and landed.warp_auto and landed.warp_map:
+            self._do_warp(landed)
+
+    def _do_warp(self, tile):
+        """Teleport to another map/location based on tile warp fields."""
+        from data.db import MAPS
+        target_map = MAPS.get(tile.warp_map)
+        if target_map is None:
+            return False
+        self.map_stack.append((self.current_map, self.location))
+        self.current_map = target_map
+        wx = tile.warp_x if tile.warp_x is not None else target_map.entrance[0]
+        wy = tile.warp_y if tile.warp_y is not None else target_map.entrance[1]
+        self.location = MapKey(0, wx, wy, 0)
+        return True
 
     def enter(self):
-        # Check tile nested maps first
+        # Check tile warp (enter-key triggered) first
         tile = self.current_map.tiles.get(self.location)
+        if tile and tile.warp_map and not tile.warp_auto:
+            if self._do_warp(tile):
+                return True
+        # Check tile nested maps
         if tile and tile.nested_map is not None:
             self.map_stack.append((self.current_map, self.location))
             self.current_map = tile.nested_map

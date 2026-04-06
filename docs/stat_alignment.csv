@@ -1,0 +1,45 @@
+Concept,D&D 5e,Fallout SPECIAL,GURPS,Elder Scrolls (MW/OB),Dark Souls III,Diablo II,Pillars of Eternity,World of Darkness,Shadowrun
+,,,,,,,,
+PRIMARY STATS,,,,,,,,
+{KEEP} Physical Power,STR,Strength,ST,Strength,STR,Strength,Might*,Strength,Strength
+{KEEP} Agility / Reflexes,DEX,Agility,DX,Agility,DEX,Dexterity,Dexterity**,Dexterity,Agility
+{KEEP} Toughness / Endurance,CON,Endurance,HT,Endurance,VIG,Vitality,Constitution,Stamina,Body
+{KEEP} Intelligence / Reasoning,INT,Intelligence,IQ,Intelligence,INT,,Intellect***,Intelligence,Logic
+{KEEP} Awareness / Perception,WIS (partial),Perception,Per (from IQ),,,,Perception,Wits,Intuition
+{KEEP} Social / Influence,CHA,Charisma,(IQ skills),Personality,,,Resolve (partial),Charisma,Charisma
+Manipulation / Cunning,,,,,,,,Manipulation,
+Willpower / Mental Resist,WIS (partial),,Will (from IQ),Willpower,,,,Resolve,Willpower
+Composure / Poise,,,,,,,,Composure,
+{KEEP} Luck,,Luck,,Luck,LCK,,,,
+{KEEP} Movement Speed,,,(Basic Move),Speed,,,,,(Reaction)
+Faith / Spirit,,,,,FTH,,,,(Magic)
+Equip Load / Carry,STR,Strength,ST (Basic Lift),Strength,VIT,Strength,,,
+,,,,,,,,
+DERIVED STATS,,,,,,,,
+Hit Points,CON mod/lvl + hit die,15 + 2*EN + ST,ST (default),END/10 per lvl,VIG (soft cap 27/50),2-4 per VIT,CON-based,Stamina-based,Body-based
+Mana / Spell Resource,class-dependent,,,INT * multiplier,ATT -> FP,Energy -> Mana,per-encounter,,,
+Stamina / Fatigue,,AP from Agility,HT -> FP,ST+WIL+AGI+END,END -> Stamina,,,,,
+Armor Class / Defense,10 + DEX + armor,Armor + AG,,Armor + AGI,equipment only,equipment only,Deflection (from RES),,Reaction + Intuition
+Melee Damage,STR mod,ST - 5,ST lookup table,STR-based,STR scaling (S/A/B/C/D/E),STR + weapon,MIG (all damage),STR + skill,STR + skill
+Ranged Damage,DEX mod,PER (VATS),DX-based skill,AGI + Marksman,DEX scaling,DEX + weapon,MIG (all damage),DEX + skill,AGI + skill
+Magic Damage,casting stat mod,,IQ-based skill,INT + WIL,INT or FTH scaling,,MIG (all damage),,Magic + skill
+Accuracy / To-Hit,d20 + stat mod + prof,skill %,3d6 <= skill,AGI + weapon skill,flat (no to-hit),DEX -> attack rating,PER -> Accuracy,stat + skill (count 5/6s),stat + skill (count 5/6s)
+Critical Chance,nat 20 (flat 5%),Luck %,,,Luck -> crit meter,,PER (PoE2),,Edge
+Initiative,DEX mod,Sequence = 2*PE,(Basic Speed),,,,,Reaction + Intuition,Reaction + Intuition
+Action Speed / Recovery,,AP from AGI,,,,,,DEX -> action speed,
+AoE / Duration,,,,,,,,INT -> AoE + duration,
+Carry Weight,STR * 15,150 + 10*STR,ST^2/5 lbs,5 * STR,VIT-based,STR-based,,,STR-based
+Healing Rate,,EN/3,,,,,,CON-based,Body-based
+Saving Throws (Physical),CON save,END roll,HT roll,END-based,,,,Stamina,Body
+Saving Throws (Mental),WIS save,,Will roll,WIL-based,,,,Resolve + Composure,Willpower
+Saving Throws (Reflex),DEX save,AG-based,DX or HT,AGI-based,,,,Dexterity,Reaction + Intuition
+,,,,,,,,
+SCALING / RANGES,,,,,,,,
+Typical Range,3-20,1-10,6-18 (human),30-100,10-99,15-300+,3-18,1-5,1-6
+Modifier Formula,floor((stat-10)/2),varies by derived,direct or 3d6<=,varies by formula,soft caps at 27/40/60,linear,+3% per point from 10,dice = stat,dice = stat
+Hard Cap,20 (30 special),10 (base),none,100,99,none,none,5 (dots),6 (human)
+,,,,,,,,
+NOTES,,,,,,,,
+*Pillars Might,"governs ALL damage (physical, magical, healing) - deliberately breaks STR/INT split",,,,,,,,
+**Pillars DEX,"governs action speed, NOT accuracy (which is Perception)",,,,,,,,
+***Pillars INT,"governs AoE size and duration, NOT damage",,,,,,,,
