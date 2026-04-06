@@ -52,6 +52,10 @@ class Tile(Trackable):
         ,sprite_name:str=None
         ,tile_scale:float=None
         ,animation_name:str=None
+        ,warp_map:str=None
+        ,warp_x:int=None
+        ,warp_y:int=None
+        ,warp_auto:bool=False
         ):
         super().__init__()
         tmpl = template or {}
@@ -64,6 +68,10 @@ class Tile(Trackable):
         self.nested_map: Map = map
         self.inventory = Inventory(items=items or [])
         self.tile_template = tile_template
+        self.warp_map  = warp_map
+        self.warp_x    = warp_x
+        self.warp_y    = warp_y
+        self.warp_auto = warp_auto
 
 class Map(Trackable):
     def __init__(

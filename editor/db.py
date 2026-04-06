@@ -253,6 +253,10 @@ def migrate_db():
             "ALTER TABLE composite_anim_keyframes ADD COLUMN tint_g INTEGER",
             "ALTER TABLE composite_anim_keyframes ADD COLUMN tint_b INTEGER",
             "ALTER TABLE composite_anim_keyframes ADD COLUMN opacity REAL NOT NULL DEFAULT 1.0",
+            "ALTER TABLE tile_entries ADD COLUMN warp_map TEXT",
+            "ALTER TABLE tile_entries ADD COLUMN warp_x INTEGER",
+            "ALTER TABLE tile_entries ADD COLUMN warp_y INTEGER",
+            "ALTER TABLE tile_entries ADD COLUMN warp_auto INTEGER NOT NULL DEFAULT 0",
         ]:
             try:
                 con.execute(stmt)

@@ -154,7 +154,7 @@ def _rotate_point(px, py, cx, cy, angle_deg):
 def _resolve_composite_positions(comp, offset_overrides=None,
                                   rotation_overrides=None):
     """Compute layer positions in native pixel coords.
-    Returns {name: (x, y)}.
+    Returns {name: (x, y)} and cumulative_rotations {name: degrees}.
     offset_overrides and rotation_overrides applied during resolution
     so children inherit parent movement and rotation.
     rotation_overrides: {layer_name: degrees} — rotation around connection point.
@@ -163,43 +163,43 @@ def _resolve_composite_positions(comp, offset_overrides=None,
     offsets = offset_overrides or {}
     rotations = rotation_overrides or {}
     positions = {}
-    # Track the cumulative world-space socket position per layer so children
-    # can rotate around it.
-    socket_world = {}  # layer_name → (sx_world, sy_world)
+    cumulative_rot = {}  # layer_name → total inherited rotation in degrees
 
     def resolve(layer_name, depth=0):
         if layer_name in positions or depth > 20:
             return
         if layer_name == root:
             positions[layer_name] = (0, 0)
+            cumulative_rot[layer_name] = rotations.get(layer_name, 0.0)
         else:
             conn = comp['connections'].get(layer_name)
             if not conn:
                 positions[layer_name] = (0, 0)
+                cumulative_rot[layer_name] = rotations.get(layer_name, 0.0)
                 return
             parent = conn['parent_layer']
             resolve(parent, depth + 1)
             pp = positions.get(parent, (0, 0))
             sx, sy = conn['parent_socket']
             ax, ay = conn['child_anchor']
-            # Socket in world coords (before parent rotation is applied to child)
+            # Socket in world coords
             sock_wx = pp[0] + sx
             sock_wy = pp[1] + sy
-            # If parent is rotated, rotate the socket around the parent's
-            # own connection point (or center for root)
-            parent_rot = rotations.get(parent, 0.0)
-            if parent_rot:
+            # If parent has cumulative rotation, rotate the socket around
+            # the parent's anchor point
+            parent_cum_rot = cumulative_rot.get(parent, 0.0)
+            if parent_cum_rot:
                 parent_conn = comp['connections'].get(parent)
                 if parent_conn:
-                    # Parent's anchor in world space is its connection point
                     pcx = pp[0] + parent_conn['child_anchor'][0]
                     pcy = pp[1] + parent_conn['child_anchor'][1]
                 else:
-                    # Root — rotate around center (use socket of this connection)
                     pcx, pcy = pp[0], pp[1]
                 sock_wx, sock_wy = _rotate_point(
-                    sock_wx, sock_wy, pcx, pcy, parent_rot)
+                    sock_wx, sock_wy, pcx, pcy, parent_cum_rot)
             positions[layer_name] = (sock_wx - ax, sock_wy - ay)
+            # This layer's cumulative rotation = parent's cumulative + own
+            cumulative_rot[layer_name] = parent_cum_rot + rotations.get(layer_name, 0.0)
 
         # Apply offset after resolving
         ox, oy = offsets.get(layer_name, (0, 0))
@@ -209,7 +209,7 @@ def _resolve_composite_positions(comp, offset_overrides=None,
 
     for lname in comp['layers']:
         resolve(lname)
-    return positions
+    return positions, cumulative_rot
 
 
 def _assemble_composite_native(comp, positions, sprite_overrides=None,
@@ -220,8 +220,10 @@ def _assemble_composite_native(comp, positions, sprite_overrides=None,
     sprite_overrides: {layer_name: sprite_name} — replace default sprite
     layer_opacity: {layer_name: float 0..1} — per-layer opacity
     layer_tint: {layer_name: (r, g, b)} — per-layer color tint
-    layer_rotation: {layer_name: degrees} — rotate around connection anchor
-    Positions should already include any animation offsets.
+    layer_rotation: {layer_name: degrees} — cumulative rotation (own + ancestors).
+        Used to visually rotate each layer's sprite.
+    Positions should already include any animation offsets (with orbiting
+    from ancestor rotations already baked in).
     Returns (Surface, min_x, min_y) or None.
     """
     sprite_overrides = sprite_overrides or {}
@@ -248,35 +250,27 @@ def _assemble_composite_native(comp, positions, sprite_overrides=None,
         bx, by = px, py
 
         if rot:
-            # Rotate around the connection anchor point.
-            # The anchor is where this layer connects to its parent.
+            # Visually rotate this layer's sprite.
+            # positions[] already accounts for orbital movement from ancestor
+            # rotations, so we just need to rotate the sprite in place around
+            # its connection anchor and adjust the blit offset accordingly.
             conn = comp['connections'].get(lname)
             if conn:
                 ax, ay = conn['child_anchor']
             else:
-                # Root layer — rotate around center
                 ax = native.get_width() // 2
                 ay = native.get_height() // 2
 
-            # pygame.transform.rotate rotates around the surface center.
-            # To rotate around (ax, ay): offset so anchor is at center,
-            # rotate, then compute new blit position.
             ow, oh = native.get_size()
             rotated = pygame.transform.rotate(native, -rot)  # pygame uses CCW
             rw, rh = rotated.get_size()
-            # The anchor point in the rotated surface's coordinate system:
-            # After rotation, the center of the new surface corresponds to the
-            # center of the old one. The anchor was at (ax, ay) in the old surf,
-            # offset from center by (ax - ow/2, ay - oh/2). After rotation the
-            # new surface is larger; the old center is at (rw/2, rh/2).
-            # So anchor in rotated coords = (rw/2, rh/2) + rotated offset.
             import math
             rad = math.radians(-rot)
             cos_a, sin_a = math.cos(rad), math.sin(rad)
             dx, dy = ax - ow / 2, ay - oh / 2
             new_ax = rw / 2 + dx * cos_a - dy * sin_a
             new_ay = rh / 2 + dx * sin_a + dy * cos_a
-            # Blit position: the anchor should land at (px + ax, py + ay)
+            # Anchor should land at (px + ax, py + ay) in world space
             bx = px + ax - new_ax
             by = py + ay - new_ay
             surf = rotated
@@ -336,7 +330,7 @@ def get_composite(composite_name: str, block_size: int,
     if not comp or not comp['layers']:
         return None
 
-    positions = _resolve_composite_positions(comp)
+    positions, _ = _resolve_composite_positions(comp)
     sprite_overrides = dict(variant_key) if variant_key else None
 
     result = _assemble_composite_native(comp, positions, sprite_overrides)
@@ -466,13 +460,13 @@ def pre_render_composite_anim(composite_name: str, anim_name: str,
 
         # Resolve positions with offsets and rotations so children
         # inherit parent movement and rotation
-        positions = _resolve_composite_positions(
+        positions, cumulative_rot = _resolve_composite_positions(
             comp, offset_overrides, rotation_overrides)
         result = _assemble_composite_native(comp, positions,
                                              sprite_overrides,
                                              layer_opacity,
                                              layer_tint,
-                                             rotation_overrides)
+                                             cumulative_rot)
         if result is None:
             frames.append(None)
             continue

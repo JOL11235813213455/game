@@ -154,6 +154,42 @@ class TileSetsTab(ttk.Frame):
         add_tooltip(self.nested_cb, 'Map to enter when stepping on this tile')
         r += 1
 
+        # ---- Warp fields ----
+        ttk.Separator(f, orient=tk.HORIZONTAL).grid(
+            row=r, column=0, columnspan=4, sticky='ew', padx=6, pady=6)
+        r += 1
+        ttk.Label(f, text='Warp', font=('TkDefaultFont', 9, 'bold')).grid(
+            row=r, column=0, columnspan=4, sticky='w', padx=6, pady=(4, 2))
+        r += 1
+
+        ttk.Label(f, text='Warp Map').grid(row=r, column=0, sticky='w', padx=6, pady=3)
+        self.v_warp_map = tk.StringVar()
+        self.warp_map_cb = ttk.Combobox(
+            f, textvariable=self.v_warp_map,
+            values=[''] + fetch_map_names(), state='readonly', width=18)
+        self.warp_map_cb.grid(row=r, column=1, columnspan=3, sticky='w', padx=6, pady=3)
+        add_tooltip(self.warp_map_cb, 'Target map to teleport to')
+        r += 1
+
+        ttk.Label(f, text='Warp X').grid(row=r, column=0, sticky='w', padx=6, pady=3)
+        self.v_warp_x = tk.StringVar()
+        wx_e = ttk.Entry(f, textvariable=self.v_warp_x, width=6)
+        wx_e.grid(row=r, column=1, sticky='w', padx=6, pady=3)
+        add_tooltip(wx_e, 'Target X coordinate (blank = map entrance)')
+        ttk.Label(f, text='Warp Y').grid(row=r, column=2, sticky='w', padx=2, pady=3)
+        self.v_warp_y = tk.StringVar()
+        wy_e = ttk.Entry(f, textvariable=self.v_warp_y, width=6)
+        wy_e.grid(row=r, column=3, sticky='w', padx=2, pady=3)
+        add_tooltip(wy_e, 'Target Y coordinate (blank = map entrance)')
+        r += 1
+
+        self.v_warp_auto = tk.BooleanVar(value=False)
+        warp_auto_cb = ttk.Checkbutton(f, text='Auto-warp (teleport on step)',
+                                        variable=self.v_warp_auto)
+        warp_auto_cb.grid(row=r, column=0, columnspan=4, sticky='w', padx=6, pady=3)
+        add_tooltip(warp_auto_cb, 'If checked, teleport automatically when the player steps on this tile. Otherwise, requires Enter key.')
+        r += 1
+
         btn_f = ttk.Frame(f)
         btn_f.grid(row=r, column=0, columnspan=4, sticky='w', padx=6, pady=6)
         add_btn = ttk.Button(btn_f, text='Add Entry', command=self._add_entry)
@@ -212,7 +248,9 @@ class TileSetsTab(ttk.Frame):
         finally:
             con.close()
         self.template_cb['values'] = [''] + fetch_tile_keys()
-        self.nested_cb['values'] = [''] + fetch_map_names()
+        map_names = [''] + fetch_map_names()
+        self.nested_cb['values'] = map_names
+        self.warp_map_cb['values'] = map_names
         self.entries_listbox.delete(0, tk.END)
         self._entry_ids = []
         self._entry_rows = []
@@ -223,6 +261,13 @@ class TileSetsTab(ttk.Frame):
                 label += f"  sprite={r['sprite_name']}"
             if r['nested_map']:
                 label += f"  nested={r['nested_map']}"
+            if r.get('warp_map'):
+                warp_lbl = f"  warp={r['warp_map']}"
+                if r.get('warp_x') is not None:
+                    warp_lbl += f"({r['warp_x']},{r['warp_y']})"
+                if r.get('warp_auto'):
+                    warp_lbl += '[auto]'
+                label += warp_lbl
             self.entries_listbox.insert(tk.END, label)
             self._entry_ids.append(r['id'])
             self._entry_rows.append(dict(r))
@@ -298,6 +343,10 @@ class TileSetsTab(ttk.Frame):
         self.v_sprite.set(r['sprite_name'] or '')
         self.v_scale.set(str(r['tile_scale']) if r['tile_scale'] is not None else '')
         self.v_nested.set(r['nested_map'] or '')
+        self.v_warp_map.set(r.get('warp_map') or '')
+        self.v_warp_x.set(str(r['warp_x']) if r.get('warp_x') is not None else '')
+        self.v_warp_y.set(str(r['warp_y']) if r.get('warp_y') is not None else '')
+        self.v_warp_auto.set(bool(r.get('warp_auto', 0)))
 
     def _clear_entry_form(self):
         self.v_w.set('0')
@@ -310,6 +359,10 @@ class TileSetsTab(ttk.Frame):
         self.v_sprite.set('')
         self.v_scale.set('')
         self.v_nested.set('')
+        self.v_warp_map.set('')
+        self.v_warp_x.set('')
+        self.v_warp_y.set('')
+        self.v_warp_auto.set(False)
         self.entries_listbox.selection_clear(0, tk.END)
 
     def _read_entry_form(self):
@@ -330,8 +383,15 @@ class TileSetsTab(ttk.Frame):
         covered = None if cov_s == '(template)' else (1 if cov_s == 'yes' else 0)
         scale_s = self.v_scale.get().strip()
         scale = float(scale_s) if scale_s else None
+        warp_map = self.v_warp_map.get().strip() or None
+        warp_x_s = self.v_warp_x.get().strip()
+        warp_x = int(warp_x_s) if warp_x_s else None
+        warp_y_s = self.v_warp_y.get().strip()
+        warp_y = int(warp_y_s) if warp_y_s else None
+        warp_auto = 1 if self.v_warp_auto.get() else 0
         return dict(w=w, x=x, y=y, z=z, tile_template=tmpl, walkable=walkable,
-                    covered=covered, sprite_name=sprite, tile_scale=scale, nested_map=nested)
+                    covered=covered, sprite_name=sprite, tile_scale=scale, nested_map=nested,
+                    warp_map=warp_map, warp_x=warp_x, warp_y=warp_y, warp_auto=warp_auto)
 
     def _add_entry(self):
         name = self._current_ts_name()
@@ -346,11 +406,13 @@ class TileSetsTab(ttk.Frame):
             con.execute(
                 '''INSERT INTO tile_entries
                    (tile_set, w, x, y, z, tile_template, walkable, covered,
-                    sprite_name, tile_scale, nested_map)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?)''',
+                    sprite_name, tile_scale, nested_map,
+                    warp_map, warp_x, warp_y, warp_auto)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
                 (name, vals['w'], vals['x'], vals['y'], vals['z'],
                  vals['tile_template'], vals['walkable'], vals['covered'],
-                 vals['sprite_name'], vals['tile_scale'], vals['nested_map']))
+                 vals['sprite_name'], vals['tile_scale'], vals['nested_map'],
+                 vals['warp_map'], vals['warp_x'], vals['warp_y'], vals['warp_auto']))
             con.commit()
         except sqlite3.Error as e:
             messagebox.showerror('DB Error', str(e))
@@ -373,11 +435,14 @@ class TileSetsTab(ttk.Frame):
             con.execute(
                 '''UPDATE tile_entries SET
                    w=?, x=?, y=?, z=?, tile_template=?, walkable=?, covered=?,
-                   sprite_name=?, tile_scale=?, nested_map=?
+                   sprite_name=?, tile_scale=?, nested_map=?,
+                   warp_map=?, warp_x=?, warp_y=?, warp_auto=?
                    WHERE id=?''',
                 (vals['w'], vals['x'], vals['y'], vals['z'], vals['tile_template'],
                  vals['walkable'], vals['covered'], vals['sprite_name'],
-                 vals['tile_scale'], vals['nested_map'], entry_id))
+                 vals['tile_scale'], vals['nested_map'],
+                 vals['warp_map'], vals['warp_x'], vals['warp_y'], vals['warp_auto'],
+                 entry_id))
             con.commit()
         except sqlite3.Error as e:
             messagebox.showerror('DB Error', str(e))

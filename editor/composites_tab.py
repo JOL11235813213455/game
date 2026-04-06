@@ -93,35 +93,62 @@ class CompositePreview(tk.Canvas):
         anim_opacity = anim_opacity or {}
 
         def _resolve(offsets):
+            import math
             pos = {}
+            cum_rot = {}  # layer_name → cumulative rotation (own + ancestors)
             def resolve(name, depth=0):
                 if name in pos or depth > 20:
                     return
+                ao = offsets.get(name)
+                own_rot = ao[2] if ao else 0.0
                 if name == root_layer:
                     pos[name] = (0, 0)
+                    cum_rot[name] = own_rot
                 else:
                     conn = connections.get(name)
                     if not conn:
                         pos[name] = (0, 0)
+                        cum_rot[name] = own_rot
                         return
-                    resolve(conn['parent_layer'], depth + 1)
-                    pp = pos.get(conn['parent_layer'], (0, 0))
+                    parent = conn['parent_layer']
+                    resolve(parent, depth + 1)
+                    pp = pos.get(parent, (0, 0))
                     sx, sy = conn['parent_socket']
                     ax, ay = conn['child_anchor']
-                    pos[name] = (pp[0] + sx - ax, pp[1] + sy - ay)
-                ao = offsets.get(name)
+                    sock_wx = pp[0] + sx
+                    sock_wy = pp[1] + sy
+                    # Orbit child around parent's anchor by parent's cumulative rotation
+                    parent_cr = cum_rot.get(parent, 0.0)
+                    if parent_cr:
+                        parent_conn = connections.get(parent)
+                        if parent_conn:
+                            pcx = pp[0] + parent_conn['child_anchor'][0]
+                            pcy = pp[1] + parent_conn['child_anchor'][1]
+                        else:
+                            pcx, pcy = pp[0], pp[1]
+                        rad = math.radians(parent_cr)
+                        cos_a, sin_a = math.cos(rad), math.sin(rad)
+                        dx, dy = sock_wx - pcx, sock_wy - pcy
+                        sock_wx = pcx + dx * cos_a - dy * sin_a
+                        sock_wy = pcy + dx * sin_a + dy * cos_a
+                    pos[name] = (sock_wx - ax, sock_wy - ay)
+                    cum_rot[name] = parent_cr + own_rot
+                # Apply offset
                 if ao:
                     ox, oy, _rot = ao
                     px, py = pos[name]
                     pos[name] = (px + ox, py + oy)
             for name in layers:
                 resolve(name)
-            return pos
+            return pos, cum_rot
 
         # Static positions for stable bounding box / scale
-        static_positions = _resolve({})
+        static_positions, _ = _resolve({})
         # Animated positions for rendering
-        positions = _resolve(anim_offsets) if anim_offsets else static_positions
+        if anim_offsets:
+            positions, cum_rot = _resolve(anim_offsets)
+        else:
+            positions, cum_rot = static_positions, {}
 
         min_x = min_y = float('inf')
         max_x = max_y = float('-inf')
@@ -159,9 +186,8 @@ class CompositePreview(tk.Canvas):
                 continue
             px, py = positions.get(name, (0, 0))
             palette = data['palette']
-            # Check if this layer has rotation
-            ao = anim_offsets.get(name)
-            rot = ao[2] if ao else 0.0
+            # Use cumulative rotation (own + ancestors)
+            rot = cum_rot.get(name, 0.0)
             # Rotation pivot = connection anchor point on this layer
             if rot:
                 conn = connections.get(name)
@@ -171,7 +197,7 @@ class CompositePreview(tk.Canvas):
                     w = data.get('width', 0)
                     h = len(data.get('pixels', []))
                     ax, ay = w / 2, h / 2
-                rad = math.radians(-rot)
+                rad = math.radians(rot)
                 cos_a, sin_a = math.cos(rad), math.sin(rad)
             for ri, row_str in enumerate(data.get('pixels', [])):
                 for ci, ch in enumerate(row_str):
@@ -620,6 +646,7 @@ class CompositesTab(ttk.Frame):
         anim_top.pack(fill=tk.X, pady=2)
         ttk.Label(anim_top, text='Name:').pack(side=tk.LEFT)
         self.v_anim_name = tk.StringVar()
+        self._prev_anim_name = None  # track selection for syncing on switch
         self._anim_cb = ttk.Combobox(anim_top, textvariable=self.v_anim_name,
                                       values=[], width=18)
         self._anim_cb.pack(side=tk.LEFT, padx=2)
@@ -676,8 +703,12 @@ class CompositesTab(ttk.Frame):
         outer.add(right, weight=1)
 
         sec = self._section(right, 'Animation Preview')
-        self._anim_preview = CompositePreview(sec, size=300)
-        self._anim_preview.pack(anchor='center', pady=4)
+        preview_row = ttk.Frame(sec)
+        preview_row.pack(anchor='center', pady=4)
+        self._anim_preview = CompositePreview(preview_row, size=300)
+        self._anim_preview.pack(side=tk.LEFT, padx=(0, 4))
+        self._anim_preview_small = CompositePreview(preview_row, size=64)
+        self._anim_preview_small.pack(side=tk.LEFT, anchor='s')
 
         play_row = ttk.Frame(sec)
         play_row.pack(fill=tk.X, pady=4)
@@ -863,7 +894,23 @@ class CompositesTab(ttk.Frame):
         self._apply_keyframes_from_tree()
         self._save_comp()
 
+    def _sync_current_anim_fields(self):
+        """Write the current animation UI fields back into the in-memory dict."""
+        anim = self._get_current_anim()
+        if not anim:
+            return
+        try:
+            anim['duration_ms'] = int(self.v_anim_dur.get())
+        except ValueError:
+            pass
+        anim['loop'] = self.v_anim_loop.get()
+        try:
+            anim['time_scale'] = float(self.v_time_scale.get())
+        except ValueError:
+            pass
+
     def _save_comp(self):
+        self._sync_current_anim_fields()
         name = self.v_comp_name.get().strip()
         if not name:
             messagebox.showerror('Save', 'Composite name is required.')
@@ -915,7 +962,19 @@ class CompositesTab(ttk.Frame):
             old = [r['name'] for r in con.execute(
                 'SELECT name FROM composite_animations'
                 ' WHERE composite_name=?', (name,)).fetchall()]
+            # Preserve bindings that reference these animations
+            saved_bindings = []
+            new_anim_names = {a['name'] for a in self._animations}
             for an in old:
+                rows = con.execute(
+                    'SELECT target_name, behavior, animation_name, flip_h'
+                    ' FROM composite_anim_bindings WHERE animation_name=?',
+                    (an,)).fetchall()
+                for r in rows:
+                    if r['animation_name'] in new_anim_names:
+                        saved_bindings.append(dict(r))
+                con.execute('DELETE FROM composite_anim_bindings'
+                            ' WHERE animation_name=?', (an,))
                 con.execute('DELETE FROM composite_anim_keyframes'
                             ' WHERE animation_name=?', (an,))
             con.execute('DELETE FROM composite_animations'
@@ -944,6 +1003,14 @@ class CompositesTab(ttk.Frame):
                              tint[1] if tint else None,
                              tint[2] if tint else None,
                              kf.get('opacity', 1.0)))
+            # Restore preserved bindings
+            for b in saved_bindings:
+                con.execute(
+                    'INSERT OR IGNORE INTO composite_anim_bindings'
+                    ' (target_name, behavior, animation_name, flip_h)'
+                    ' VALUES (?, ?, ?, ?)',
+                    (b['target_name'], b['behavior'],
+                     b['animation_name'], b['flip_h']))
             con.commit()
         except sqlite3.Error as e:
             messagebox.showerror('DB Error', str(e))
@@ -1204,6 +1271,7 @@ class CompositesTab(ttk.Frame):
     def _refresh_anim_preview_static(self):
         layers = self._build_layers_dict()
         self._anim_preview.render(layers, self._connections, self._root_layer)
+        self._anim_preview_small.render(layers, self._connections, self._root_layer)
 
     # ==================================================================
     # Animations
@@ -1214,10 +1282,19 @@ class CompositesTab(ttk.Frame):
         self._anim_cb['values'] = names
         if names:
             self._anim_cb.set(names[0])
+            anim = self._animations[0]
+            self.v_anim_dur.set(str(anim['duration_ms']))
+            self.v_anim_loop.set(anim['loop'])
+            self.v_time_scale.set(str(anim.get('time_scale', 1.0)))
             self._load_keyframes_to_tree(names[0])
+            self._prev_anim_name = names[0]
         else:
             self._anim_cb.set('')
+            self.v_anim_dur.set('1000')
+            self.v_anim_loop.set(True)
+            self.v_time_scale.set('1.0')
             self._kf_tree.clear()
+            self._prev_anim_name = None
 
     def _get_current_anim(self):
         name = self.v_anim_name.get().strip()
@@ -1228,15 +1305,30 @@ class CompositesTab(ttk.Frame):
 
     def _on_anim_select(self, event=None):
         self._stop_anim_preview()
+        # Sync previous animation's fields before switching
+        if self._prev_anim_name:
+            prev = next((a for a in self._animations if a['name'] == self._prev_anim_name), None)
+            if prev:
+                try:
+                    prev['duration_ms'] = int(self.v_anim_dur.get())
+                except ValueError:
+                    pass
+                prev['loop'] = self.v_anim_loop.get()
+                try:
+                    prev['time_scale'] = float(self.v_time_scale.get())
+                except ValueError:
+                    pass
         anim = self._get_current_anim()
         if anim:
             self.v_anim_dur.set(str(anim['duration_ms']))
             self.v_anim_loop.set(anim['loop'])
             self.v_time_scale.set(str(anim.get('time_scale', 1.0)))
             self._load_keyframes_to_tree(anim['name'])
+            self._prev_anim_name = anim['name']
         else:
             self._kf_tree.clear()
             self.v_time_scale.set('1.0')
+            self._prev_anim_name = None
 
     def _new_anim(self):
         comp = self.v_comp_name.get().strip()
@@ -1307,16 +1399,7 @@ class CompositesTab(ttk.Frame):
         if not anim:
             messagebox.showwarning('Keyframe', 'Select or create an animation.')
             return
-        # Update duration/loop/time_scale from fields
-        try:
-            anim['duration_ms'] = int(self.v_anim_dur.get())
-        except ValueError:
-            pass
-        anim['loop'] = self.v_anim_loop.get()
-        try:
-            anim['time_scale'] = float(self.v_time_scale.get())
-        except ValueError:
-            anim['time_scale'] = 1.0
+        self._sync_current_anim_fields()
 
         rows = self._kf_tree.get_all_rows()
         keyframes = {}
@@ -1397,10 +1480,12 @@ class CompositesTab(ttk.Frame):
                     if data:
                         var_overrides[ln] = data
         layers = self._build_layers_dict()
+        render_kw = dict(variant_overrides=var_overrides,
+                         anim_offsets=offsets, anim_opacity=opacity_map)
         self._anim_preview.render(
-            layers, self._connections, self._root_layer,
-            variant_overrides=var_overrides, anim_offsets=offsets,
-            anim_opacity=opacity_map)
+            layers, self._connections, self._root_layer, **render_kw)
+        self._anim_preview_small.render(
+            layers, self._connections, self._root_layer, **render_kw)
         self._anim_time_ms += 33
         if not anim['loop'] and self._anim_time_ms > dur:
             self._stop_anim_preview()

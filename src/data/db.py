@@ -175,6 +175,10 @@ def _migrate(con: sqlite3.Connection) -> None:
         "ALTER TABLE composite_anim_keyframes ADD COLUMN tint_g INTEGER",
         "ALTER TABLE composite_anim_keyframes ADD COLUMN tint_b INTEGER",
         "ALTER TABLE composite_anim_keyframes ADD COLUMN opacity REAL NOT NULL DEFAULT 1.0",
+        "ALTER TABLE tile_entries ADD COLUMN warp_map TEXT",
+        "ALTER TABLE tile_entries ADD COLUMN warp_x INTEGER",
+        "ALTER TABLE tile_entries ADD COLUMN warp_y INTEGER",
+        "ALTER TABLE tile_entries ADD COLUMN warp_auto INTEGER NOT NULL DEFAULT 0",
     ]:
         try:
             con.execute(stmt)
@@ -367,6 +371,10 @@ def _load_maps(con: sqlite3.Connection) -> None:
                 tile_template = te['tile_template'],
                 sprite_name   = te['sprite_name'] or None,
                 tile_scale    = float(te['tile_scale']) if te['tile_scale'] is not None else None,
+                warp_map      = te['warp_map'] or None,
+                warp_x        = te['warp_x'],
+                warp_y        = te['warp_y'],
+                warp_auto     = bool(te['warp_auto']) if te['warp_auto'] is not None else False,
             )
 
     # Fill remaining coords with default tile

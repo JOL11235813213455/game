@@ -1,0 +1,66 @@
+INCOMPLETE FEATURES
+===================
+Last updated: 2026-04-05
+
+TILE (classes/maps.py)
+- covered: declared and stored but never read — no gameplay or rendering effect
+no use of min/max
+
+CREATURE STATS (classes/creature.py)
+- STR, INT, LCK, PER, CHR, AGL, ARM: loaded 
+/home/jason/proj/game/src/classes/inventory.py:class Equippable(Item):from species_stats but consumed by no mechanic
+- hostile: field exists on Creature but nothing reads it; no aggro or combat system
+
+ITEMS / INVENTORY (classes/inventory.py)
+- damage, defense: defined on Weapon/Ammunition but no combat system to consume them
+- health: defined but no consume/use mechanic
+- poison: defined but no poison mechanic
+- durability / durability_current: defined but never decremented or checked
+- value, weight: defined but no economy or encumbrance system
+- equippable, slots, slot_count: no equip/unequip logic exists
+- consumable, stackable, quantity: Stackable.add() and coalesce() implemented but never called
+- ITEMS dict (data/db.py): populated from DB at load but never accessed during gameplay
+- STRUCTURES dict (data/db.py): populated from DB but never accessed (instances render via WorldObject)
+- No items or structures are spawned at runtime — no drop/pickup/loot system
+
+CREATURE METHODS (classes/creature.py)
+- transfer_item(): fully implemented but never called anywhere
+
+NPC (classes/creature.py)
+- _think() only does random movement — no pathfinding, aggro, patrol, dialogue, or scheduling
+
+COMBAT
+- No combat system exists
+- Attack behaviors (attack_north/south/east/west) are defined but no damage/hit logic
+- No death handling beyond the death animation binding
+
+EQUIPMENT
+- No equip/unequip mechanic — slots and slot_count defined but unused
+- render_on_creature field on Weapon/Wearable has no rendering path
+
+ECONOMY
+- No shop, trade, or currency system
+- Item value field unused
+
+CONSUMABLES
+- Consumable class exists with duration, max_stack_size, quantity
+- No use/consume action or effect system
+
+DURABILITY
+- durability_max and durability_current defined on Weapon/Wearable
+- Never checked or decremented
+
+COMPLETED SYSTEMS (no known gaps)
+==================================
+- Composite sprite system: layers, connections, variants, keyframe animations
+- Composite animation bindings: species → behavior → animation with flip support
+- Simple frame animations: sprites → frames → bindings
+- Day/night cycle with moon phases, shadows, top-lighting
+- Collision system with per-tile and structure collision masks
+- Bounds/entry system: tile traversal bounds + structure entry points
+- Save/load system: SQLite-backed, multiple save files, pickle serialization
+- Sprite cache: native, scaled, tiled, composite, pre-rendered animation frames
+- Per-map object registry (WorldObject._by_map)
+- Dynamic zoom (0.25x–4.0x)
+- Editor: sprites, composites (3 sub-tabs), animations, species with bindings,
+  items, tiles, tile sets, maps — all save correctly
