@@ -38,6 +38,9 @@ class WorldObject(Trackable):
             location = MapKey()
         self.location = location
         self.anim = AnimationState()
+        self._composite_anim = None
+        self._composite_anim_start = 0
+        self._composite_flip_h = False
         # Set via property to register in _by_map
         self.current_map = current_map
 
@@ -57,11 +60,34 @@ class WorldObject(Trackable):
             WorldObject._by_map[id(new_map)].add(self)
 
     def play_animation(self, behavior: str, fallback: str = 'idle'):
-        """Look up and play an animation for this object's species/type + behavior."""
-        from data.db import ANIM_BINDINGS, ANIMATIONS
+        """Look up and play an animation for this object's species/type + behavior.
+
+        For composite objects, checks composite_anim_bindings first.
+        Falls back to simple frame animations if no composite binding exists.
+        """
         target = getattr(self, 'species', None) or self.sprite_name
         if target is None:
             return
+
+        # Try composite animation bindings first
+        if self.composite_name:
+            from data.db import COMPOSITE_ANIM_BINDINGS
+            binding = COMPOSITE_ANIM_BINDINGS.get((target, behavior))
+            if binding is None and behavior != fallback:
+                binding = COMPOSITE_ANIM_BINDINGS.get((target, fallback))
+            if binding is not None:
+                anim_name = binding['animation_name']
+                self._composite_flip_h = binding['flip_h']
+                if self._composite_anim != anim_name:
+                    self.play_composite_anim(anim_name)
+                return
+            # No composite binding — show static pose
+            self.stop_composite_anim()
+            self._composite_flip_h = False
+            return
+
+        # Simple frame animation fallback
+        from data.db import ANIM_BINDINGS, ANIMATIONS
         anim_name = ANIM_BINDINGS.get((target, behavior))
         if anim_name is None and behavior != fallback:
             anim_name = ANIM_BINDINGS.get((target, fallback))
@@ -145,11 +171,28 @@ class WorldObject(Trackable):
                 self.composite_name, comp_anim, time_ms,
                 block_size, self.tile_scale)
             if result:
-                return result
+                return self._apply_composite_flip(result)
 
         # Static composite pose (cached)
-        return get_composite(self.composite_name, block_size,
-                             self.tile_scale, variant_key)
+        result = get_composite(self.composite_name, block_size,
+                               self.tile_scale, variant_key)
+        if result:
+            return self._apply_composite_flip(result)
+        return result
+
+    def _apply_composite_flip(self, result):
+        """Horizontally flip a composite surface + offset if flip_h is set."""
+        if not self._composite_flip_h:
+            return result
+        import pygame
+        surface, (blit_dx, blit_dy) = result
+        flipped = pygame.transform.flip(surface, True, False)
+        # Mirror the x offset: the surface width stays the same,
+        # but the blit offset needs to reflect around tile center
+        from main.config import get_block_size
+        tile_cx = get_block_size() // 2
+        new_dx = 2 * tile_cx - blit_dx - surface.get_width()
+        return flipped, (new_dx, blit_dy)
 
     def play_composite_anim(self, anim_name: str):
         """Start playing a pre-rendered composite animation."""

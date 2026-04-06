@@ -23,6 +23,7 @@ ANIMATIONS: dict[str, dict] = {}    # name → {target_type, frames: [{sprite_na
 ANIM_BINDINGS: dict[tuple, str] = {}  # (target_name, behavior) → animation_name
 COMPOSITES: dict[str, dict] = {}    # name → {root_layer, layers, connections, variants, animations}
 COMPOSITE_ANIMS: dict[str, dict] = {}  # name → {composite_name, loop, duration_ms, keyframes}
+COMPOSITE_ANIM_BINDINGS: dict[tuple, dict] = {}  # (target_name, behavior) → {animation_name, flip_h}
 
 
 def _migrate(con: sqlite3.Connection) -> None:
@@ -161,6 +162,19 @@ def _migrate(con: sqlite3.Connection) -> None:
             rotation_deg REAL NOT NULL DEFAULT 0.0,
             variant_name TEXT,
             UNIQUE(animation_name, layer_name, time_ms))""",
+        "ALTER TABLE composite_animations ADD COLUMN time_scale REAL NOT NULL DEFAULT 1.0",
+        """CREATE TABLE IF NOT EXISTS composite_anim_bindings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            target_name TEXT NOT NULL,
+            behavior TEXT NOT NULL,
+            animation_name TEXT NOT NULL
+                REFERENCES composite_animations(name),
+            flip_h INTEGER NOT NULL DEFAULT 0,
+            UNIQUE(target_name, behavior))""",
+        "ALTER TABLE composite_anim_keyframes ADD COLUMN tint_r INTEGER",
+        "ALTER TABLE composite_anim_keyframes ADD COLUMN tint_g INTEGER",
+        "ALTER TABLE composite_anim_keyframes ADD COLUMN tint_b INTEGER",
+        "ALTER TABLE composite_anim_keyframes ADD COLUMN opacity REAL NOT NULL DEFAULT 1.0",
     ]:
         try:
             con.execute(stmt)
@@ -464,26 +478,43 @@ def _load_composites(con: sqlite3.Connection) -> None:
 
     # Load composite animations
     for r in con.execute(
-        'SELECT name, composite_name, loop, duration_ms FROM composite_animations'
+        'SELECT name, composite_name, loop, duration_ms, time_scale'
+        ' FROM composite_animations'
     ).fetchall():
         COMPOSITE_ANIMS[r['name']] = {
             'composite_name': r['composite_name'],
             'loop': bool(r['loop']),
             'duration_ms': r['duration_ms'],
-            'keyframes': {},  # layer_name → [{time_ms, offset_x, offset_y, rotation_deg, variant_name}]
+            'time_scale': r['time_scale'] if r['time_scale'] is not None else 1.0,
+            'keyframes': {},
         }
 
     for r in con.execute(
         'SELECT animation_name, layer_name, time_ms, offset_x, offset_y,'
-        ' rotation_deg, variant_name'
+        ' rotation_deg, variant_name, tint_r, tint_g, tint_b, opacity'
         ' FROM composite_anim_keyframes ORDER BY animation_name, layer_name, time_ms'
     ).fetchall():
         anim = COMPOSITE_ANIMS.get(r['animation_name'])
         if anim:
+            tint = None
+            if r['tint_r'] is not None and r['tint_g'] is not None and r['tint_b'] is not None:
+                tint = (r['tint_r'], r['tint_g'], r['tint_b'])
             anim['keyframes'].setdefault(r['layer_name'], []).append({
                 'time_ms': r['time_ms'],
                 'offset_x': r['offset_x'],
                 'offset_y': r['offset_y'],
                 'rotation_deg': r['rotation_deg'],
                 'variant_name': r['variant_name'],
+                'tint': tint,
+                'opacity': r['opacity'] if r['opacity'] is not None else 1.0,
             })
+
+    # Load composite animation bindings
+    for r in con.execute(
+        'SELECT target_name, behavior, animation_name, flip_h'
+        ' FROM composite_anim_bindings'
+    ).fetchall():
+        COMPOSITE_ANIM_BINDINGS[(r['target_name'], r['behavior'])] = {
+            'animation_name': r['animation_name'],
+            'flip_h': bool(r['flip_h']),
+        }

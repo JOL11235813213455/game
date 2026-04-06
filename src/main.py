@@ -1,5 +1,16 @@
+import os
 import sys
-import pygame
+
+# Auto-detect working SDL audio driver before pygame initializes audio
+for _drv in ('pipewire', 'pulse', 'alsa', ''):
+    os.environ['SDL_AUDIODRIVER'] = _drv
+    try:
+        import pygame          # noqa: E402
+        pygame.mixer.init()
+        pygame.mixer.quit()
+        break
+    except Exception:
+        pass
 
 from main.config import (
     SCREEN_WIDTH, SCREEN_HEIGHT, FPS, DEBUG,
