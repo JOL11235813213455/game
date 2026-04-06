@@ -141,10 +141,31 @@ def get_tiled(sprite_name: str, target_w: int, target_h: int,
 # Composite sprite assembly
 # ---------------------------------------------------------------------------
 
-def _resolve_composite_positions(comp):
-    """Compute layer positions in native pixel coords. Returns {name: (x,y)}."""
+def _rotate_point(px, py, cx, cy, angle_deg):
+    """Rotate point (px,py) around center (cx,cy) by angle_deg degrees."""
+    import math
+    rad = math.radians(angle_deg)
+    cos_a, sin_a = math.cos(rad), math.sin(rad)
+    dx, dy = px - cx, py - cy
+    return (cx + dx * cos_a - dy * sin_a,
+            cy + dx * sin_a + dy * cos_a)
+
+
+def _resolve_composite_positions(comp, offset_overrides=None,
+                                  rotation_overrides=None):
+    """Compute layer positions in native pixel coords.
+    Returns {name: (x, y)}.
+    offset_overrides and rotation_overrides applied during resolution
+    so children inherit parent movement and rotation.
+    rotation_overrides: {layer_name: degrees} — rotation around connection point.
+    """
     root = comp['root_layer']
+    offsets = offset_overrides or {}
+    rotations = rotation_overrides or {}
     positions = {}
+    # Track the cumulative world-space socket position per layer so children
+    # can rotate around it.
+    socket_world = {}  # layer_name → (sx_world, sy_world)
 
     def resolve(layer_name, depth=0):
         if layer_name in positions or depth > 20:
@@ -156,11 +177,35 @@ def _resolve_composite_positions(comp):
             if not conn:
                 positions[layer_name] = (0, 0)
                 return
-            resolve(conn['parent_layer'], depth + 1)
-            pp = positions.get(conn['parent_layer'], (0, 0))
+            parent = conn['parent_layer']
+            resolve(parent, depth + 1)
+            pp = positions.get(parent, (0, 0))
             sx, sy = conn['parent_socket']
             ax, ay = conn['child_anchor']
-            positions[layer_name] = (pp[0] + sx - ax, pp[1] + sy - ay)
+            # Socket in world coords (before parent rotation is applied to child)
+            sock_wx = pp[0] + sx
+            sock_wy = pp[1] + sy
+            # If parent is rotated, rotate the socket around the parent's
+            # own connection point (or center for root)
+            parent_rot = rotations.get(parent, 0.0)
+            if parent_rot:
+                parent_conn = comp['connections'].get(parent)
+                if parent_conn:
+                    # Parent's anchor in world space is its connection point
+                    pcx = pp[0] + parent_conn['child_anchor'][0]
+                    pcy = pp[1] + parent_conn['child_anchor'][1]
+                else:
+                    # Root — rotate around center (use socket of this connection)
+                    pcx, pcy = pp[0], pp[1]
+                sock_wx, sock_wy = _rotate_point(
+                    sock_wx, sock_wy, pcx, pcy, parent_rot)
+            positions[layer_name] = (sock_wx - ax, sock_wy - ay)
+
+        # Apply offset after resolving
+        ox, oy = offsets.get(layer_name, (0, 0))
+        if ox or oy:
+            px, py = positions[layer_name]
+            positions[layer_name] = (px + ox, py + oy)
 
     for lname in comp['layers']:
         resolve(lname)
@@ -168,20 +213,26 @@ def _resolve_composite_positions(comp):
 
 
 def _assemble_composite_native(comp, positions, sprite_overrides=None,
-                                offset_overrides=None):
+                                layer_opacity=None, layer_tint=None,
+                                layer_rotation=None):
     """
     Blit cached native layer surfaces into a single unscaled Surface.
     sprite_overrides: {layer_name: sprite_name} — replace default sprite
-    offset_overrides: {layer_name: (dx, dy)} — pixel offset from connection point
+    layer_opacity: {layer_name: float 0..1} — per-layer opacity
+    layer_tint: {layer_name: (r, g, b)} — per-layer color tint
+    layer_rotation: {layer_name: degrees} — rotate around connection anchor
+    Positions should already include any animation offsets.
     Returns (Surface, min_x, min_y) or None.
     """
     sprite_overrides = sprite_overrides or {}
-    offset_overrides = offset_overrides or {}
+    layer_opacity = layer_opacity or {}
+    layer_tint = layer_tint or {}
+    layer_rotation = layer_rotation or {}
 
-    # Gather layer surfaces and compute bounding box
+    # Gather layer surfaces, apply rotation, compute bounding box
     min_x = min_y = float('inf')
     max_x = max_y = float('-inf')
-    layer_data = []  # [(layer_name, surface, px, py)]
+    layer_data = []  # [(layer_name, surface, blit_x, blit_y)]
 
     for lname, layer in sorted(comp['layers'].items(),
                                 key=lambda x: x[1]['z_layer']):
@@ -192,27 +243,77 @@ def _assemble_composite_native(comp, positions, sprite_overrides=None,
         if native is None:
             continue
         px, py = positions.get(lname, (0, 0))
-        ox, oy = offset_overrides.get(lname, (0, 0))
-        px += ox
-        py += oy
-        nw, nh = native.get_size()
-        min_x = min(min_x, px)
-        min_y = min(min_y, py)
-        max_x = max(max_x, px + nw)
-        max_y = max(max_y, py + nh)
-        layer_data.append((native, px, py))
+        rot = layer_rotation.get(lname, 0.0)
+        surf = native
+        bx, by = px, py
+
+        if rot:
+            # Rotate around the connection anchor point.
+            # The anchor is where this layer connects to its parent.
+            conn = comp['connections'].get(lname)
+            if conn:
+                ax, ay = conn['child_anchor']
+            else:
+                # Root layer — rotate around center
+                ax = native.get_width() // 2
+                ay = native.get_height() // 2
+
+            # pygame.transform.rotate rotates around the surface center.
+            # To rotate around (ax, ay): offset so anchor is at center,
+            # rotate, then compute new blit position.
+            ow, oh = native.get_size()
+            rotated = pygame.transform.rotate(native, -rot)  # pygame uses CCW
+            rw, rh = rotated.get_size()
+            # The anchor point in the rotated surface's coordinate system:
+            # After rotation, the center of the new surface corresponds to the
+            # center of the old one. The anchor was at (ax, ay) in the old surf,
+            # offset from center by (ax - ow/2, ay - oh/2). After rotation the
+            # new surface is larger; the old center is at (rw/2, rh/2).
+            # So anchor in rotated coords = (rw/2, rh/2) + rotated offset.
+            import math
+            rad = math.radians(-rot)
+            cos_a, sin_a = math.cos(rad), math.sin(rad)
+            dx, dy = ax - ow / 2, ay - oh / 2
+            new_ax = rw / 2 + dx * cos_a - dy * sin_a
+            new_ay = rh / 2 + dx * sin_a + dy * cos_a
+            # Blit position: the anchor should land at (px + ax, py + ay)
+            bx = px + ax - new_ax
+            by = py + ay - new_ay
+            surf = rotated
+
+        sw, sh = surf.get_size()
+        min_x = min(min_x, bx)
+        min_y = min(min_y, by)
+        max_x = max(max_x, bx + sw)
+        max_y = max(max_y, by + sh)
+        layer_data.append((lname, surf, bx, by))
 
     if min_x == float('inf'):
         return None
 
-    total_w = max_x - min_x
-    total_h = max_y - min_y
+    total_w = int(max_x - min_x) + 1
+    total_h = int(max_y - min_y) + 1
     if total_w <= 0 or total_h <= 0:
         return None
 
     composite = pygame.Surface((total_w, total_h), pygame.SRCALPHA)
-    for native, px, py in layer_data:
-        composite.blit(native, (px - min_x, py - min_y))
+    for lname, surf, bx, by in layer_data:
+        opacity = layer_opacity.get(lname)
+        tint = layer_tint.get(lname)
+        if tint or (opacity is not None and opacity < 1.0):
+            surf = surf.copy()
+            if tint:
+                tint_overlay = pygame.Surface(surf.get_size(), pygame.SRCALPHA)
+                tint_overlay.fill((*tint, 64))
+                surf.blit(tint_overlay, (0, 0),
+                          special_flags=pygame.BLEND_RGBA_ADD)
+            if opacity is not None and opacity < 1.0:
+                alpha_factor = max(0, min(255, int(opacity * 255)))
+                alpha_overlay = pygame.Surface(surf.get_size(), pygame.SRCALPHA)
+                alpha_overlay.fill((255, 255, 255, alpha_factor))
+                surf.blit(alpha_overlay, (0, 0),
+                          special_flags=pygame.BLEND_RGBA_MULT)
+        composite.blit(surf, (int(bx - min_x), int(by - min_y)))
 
     return composite, min_x, min_y
 
@@ -269,12 +370,13 @@ def _lerp(a, b, t):
 
 
 def _interp_keyframes(keyframes, time_ms):
-    """Interpolate offset_x, offset_y, rotation_deg, variant_name at time_ms."""
+    """Interpolate offset_x, offset_y, rotation_deg, variant_name, tint, opacity at time_ms."""
     if not keyframes:
-        return 0, 0, 0.0, None
+        return 0, 0, 0.0, None, None, 1.0
     if len(keyframes) == 1:
         k = keyframes[0]
-        return k['offset_x'], k['offset_y'], k['rotation_deg'], k.get('variant_name')
+        return (k['offset_x'], k['offset_y'], k['rotation_deg'],
+                k.get('variant_name'), k.get('tint'), k.get('opacity', 1.0))
     prev = keyframes[0]
     nxt = prev
     for kf in keyframes:
@@ -283,14 +385,31 @@ def _interp_keyframes(keyframes, time_ms):
             break
         prev = kf
     else:
-        return prev['offset_x'], prev['offset_y'], prev['rotation_deg'], prev.get('variant_name')
+        return (prev['offset_x'], prev['offset_y'], prev['rotation_deg'],
+                prev.get('variant_name'), prev.get('tint'),
+                prev.get('opacity', 1.0))
     if prev['time_ms'] == nxt['time_ms']:
-        return prev['offset_x'], prev['offset_y'], prev['rotation_deg'], prev.get('variant_name')
+        return (prev['offset_x'], prev['offset_y'], prev['rotation_deg'],
+                prev.get('variant_name'), prev.get('tint'),
+                prev.get('opacity', 1.0))
     t = (time_ms - prev['time_ms']) / (nxt['time_ms'] - prev['time_ms'])
+    # Interpolate tint
+    tint = None
+    pt, nt = prev.get('tint'), nxt.get('tint')
+    if pt and nt:
+        tint = (int(_lerp(pt[0], nt[0], t)),
+                int(_lerp(pt[1], nt[1], t)),
+                int(_lerp(pt[2], nt[2], t)))
+    elif pt:
+        tint = pt
+    elif nt:
+        tint = nt
     return (_lerp(prev['offset_x'], nxt['offset_x'], t),
             _lerp(prev['offset_y'], nxt['offset_y'], t),
             _lerp(prev['rotation_deg'], nxt['rotation_deg'], t),
-            prev.get('variant_name') or nxt.get('variant_name'))
+            prev.get('variant_name') or nxt.get('variant_name'),
+            tint,
+            _lerp(prev.get('opacity', 1.0), nxt.get('opacity', 1.0), t))
 
 
 def pre_render_composite_anim(composite_name: str, anim_name: str,
@@ -316,9 +435,6 @@ def pre_render_composite_anim(composite_name: str, anim_name: str,
     if duration <= 0:
         return None
 
-    # Build a variant_key for cache (all default variants from keyframes)
-    # We bake one version per distinct variant combination
-    positions = _resolve_composite_positions(comp)
     scale = block_size / 32 * tile_scale
 
     frames = []
@@ -330,18 +446,33 @@ def pre_render_composite_anim(composite_name: str, anim_name: str,
         sprite_overrides = {}
         offset_overrides = {}
 
+        layer_opacity = {}
+        layer_tint = {}
+        rotation_overrides = {}
         for layer_name, kfs in anim['keyframes'].items():
-            ox, oy, rot, var = _interp_keyframes(kfs, t)
+            ox, oy, rot, var, tint, opacity = _interp_keyframes(kfs, t)
             offset_overrides[layer_name] = (int(ox), int(oy))
+            if rot:
+                rotation_overrides[layer_name] = rot
+            if opacity < 1.0:
+                layer_opacity[layer_name] = max(0.0, min(1.0, opacity))
+            if tint:
+                layer_tint[layer_name] = tint
             if var:
                 var_sprites = comp['variants'].get(layer_name, {})
                 spr = var_sprites.get(var)
                 if spr:
                     sprite_overrides[layer_name] = spr
 
+        # Resolve positions with offsets and rotations so children
+        # inherit parent movement and rotation
+        positions = _resolve_composite_positions(
+            comp, offset_overrides, rotation_overrides)
         result = _assemble_composite_native(comp, positions,
                                              sprite_overrides,
-                                             offset_overrides)
+                                             layer_opacity,
+                                             layer_tint,
+                                             rotation_overrides)
         if result is None:
             frames.append(None)
             continue
@@ -415,11 +546,15 @@ def get_composite_anim_frame(composite_name: str, anim_name: str,
     if not frames:
         return None
 
-    # Map time_ms to frame index
+    # Apply time_scale: >1.0 speeds up, <1.0 slows down
+    time_scale = anim.get('time_scale', 1.0)
+    scaled_time = int(time_ms * time_scale) if time_scale != 1.0 else time_ms
+
+    # Map scaled time to frame index
     step = max(1, frame_interval_ms)
     if anim['loop']:
-        t = time_ms % duration
+        t = scaled_time % duration
     else:
-        t = min(time_ms, duration - 1)
+        t = min(scaled_time, duration - 1)
     idx = min(t // step, len(frames) - 1)
     return frames[idx]

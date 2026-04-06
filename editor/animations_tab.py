@@ -9,8 +9,12 @@ from editor.tooltip import add_tooltip
 
 TARGET_TYPES = ['creature', 'tile', 'world_object']
 BEHAVIORS = [
-    'idle', 'walk_north', 'walk_south', 'walk_east', 'walk_west',
-    'attack', 'hurt', 'death', 'activate',
+    'idle', 'idle_combat',
+    'walk_north', 'walk_south', 'walk_east', 'walk_west',
+    'attack_north', 'attack_south', 'attack_east', 'attack_west',
+    'hurt', 'block', 'death',
+    'activate', 'pickup', 'use_item', 'craft',
+    'search', 'dig', 'crouch', 'stagger', 'prone',
 ]
 
 

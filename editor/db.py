@@ -240,6 +240,19 @@ def migrate_db():
                 rotation_deg REAL NOT NULL DEFAULT 0.0,
                 variant_name TEXT,
                 UNIQUE(animation_name, layer_name, time_ms))""",
+            "ALTER TABLE composite_animations ADD COLUMN time_scale REAL NOT NULL DEFAULT 1.0",
+            """CREATE TABLE IF NOT EXISTS composite_anim_bindings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                target_name TEXT NOT NULL,
+                behavior TEXT NOT NULL,
+                animation_name TEXT NOT NULL
+                    REFERENCES composite_animations(name),
+                flip_h INTEGER NOT NULL DEFAULT 0,
+                UNIQUE(target_name, behavior))""",
+            "ALTER TABLE composite_anim_keyframes ADD COLUMN tint_r INTEGER",
+            "ALTER TABLE composite_anim_keyframes ADD COLUMN tint_g INTEGER",
+            "ALTER TABLE composite_anim_keyframes ADD COLUMN tint_b INTEGER",
+            "ALTER TABLE composite_anim_keyframes ADD COLUMN opacity REAL NOT NULL DEFAULT 1.0",
         ]:
             try:
                 con.execute(stmt)

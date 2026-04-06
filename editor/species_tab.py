@@ -7,6 +7,15 @@ from editor.constants import STATS, STAT_LABELS, PREVIEW_SIZE
 from editor.sprite_preview import SpritePreview
 from editor.tooltip import add_tooltip
 
+COMP_BEHAVIORS = [
+    'idle', 'idle_combat',
+    'walk_north', 'walk_south', 'walk_east', 'walk_west',
+    'attack_north', 'attack_south', 'attack_east', 'attack_west',
+    'hurt', 'block', 'death',
+    'activate', 'pickup', 'use_item', 'craft',
+    'search', 'dig', 'crouch', 'stagger', 'prone',
+]
+
 
 class SpeciesTab(ttk.Frame):
     def __init__(self, parent):
@@ -119,8 +128,140 @@ class SpeciesTab(ttk.Frame):
 
         f.columnconfigure(1, weight=1)
 
+        # ---- Animation Bindings ----
+        ttk.Separator(f, orient=tk.HORIZONTAL).grid(
+            row=row, column=0, columnspan=2, sticky='ew', padx=6, pady=6)
+        row += 1
+
+        ttk.Label(f, text='Composite Animation Bindings',
+                  font=('TkDefaultFont', 9, 'bold')).grid(
+            row=row, column=0, columnspan=2, sticky='w', padx=6, pady=2)
+        row += 1
+
+        bind_frame = ttk.Frame(f)
+        bind_frame.grid(row=row, column=0, columnspan=2, sticky='ew', padx=6, pady=2)
+        row += 1
+
+        # Bindings list
+        self._bindings_display = ttk.Frame(bind_frame)
+        self._bindings_display.pack(fill=tk.X)
+
+        # Add binding form
+        add_form = ttk.Frame(bind_frame)
+        add_form.pack(fill=tk.X, pady=(4, 0))
+
+        ttk.Label(add_form, text='Behavior:').pack(side=tk.LEFT)
+        self.v_bind_behavior = tk.StringVar()
+        self._bind_behavior_cb = ttk.Combobox(
+            add_form, textvariable=self.v_bind_behavior,
+            values=COMP_BEHAVIORS, width=12)
+        self._bind_behavior_cb.pack(side=tk.LEFT, padx=2)
+
+        ttk.Label(add_form, text='Animation:').pack(side=tk.LEFT, padx=(4, 0))
+        self.v_bind_anim = tk.StringVar()
+        self._bind_anim_cb = ttk.Combobox(
+            add_form, textvariable=self.v_bind_anim,
+            values=[], state='readonly', width=18)
+        self._bind_anim_cb.pack(side=tk.LEFT, padx=2)
+
+        self.v_bind_flip = tk.BooleanVar()
+        ttk.Checkbutton(add_form, text='Flip H',
+                         variable=self.v_bind_flip).pack(side=tk.LEFT, padx=4)
+
+        ttk.Button(add_form, text='+ Bind',
+                    command=self._add_binding).pack(side=tk.LEFT, padx=2)
+
+        # Update animation dropdown when composite changes
+        self.composite_cb.bind('<<ComboboxSelected>>',
+                                self._on_composite_change)
+
     def _on_sprite_change(self, event=None):
         self.sprite_preview.load(self.v_sprite.get() or None)
+
+    def _on_composite_change(self, event=None):
+        """Refresh animation dropdown when composite selection changes."""
+        comp = self.v_composite.get().strip()
+        if comp:
+            con = get_con()
+            try:
+                rows = con.execute(
+                    'SELECT name FROM composite_animations'
+                    ' WHERE composite_name=? ORDER BY name',
+                    (comp,)).fetchall()
+                names = [r['name'] for r in rows]
+            finally:
+                con.close()
+            self._bind_anim_cb['values'] = names
+        else:
+            self._bind_anim_cb['values'] = []
+        self.v_bind_anim.set('')
+
+    def _load_bindings(self, species_name: str):
+        """Load composite animation bindings for a species."""
+        self._bindings = []
+        con = get_con()
+        try:
+            rows = con.execute(
+                'SELECT behavior, animation_name, flip_h'
+                ' FROM composite_anim_bindings'
+                ' WHERE target_name=? ORDER BY behavior',
+                (species_name,)).fetchall()
+            for r in rows:
+                self._bindings.append({
+                    'behavior': r['behavior'],
+                    'animation_name': r['animation_name'],
+                    'flip_h': bool(r['flip_h']),
+                })
+        finally:
+            con.close()
+        self._rebuild_bindings_display()
+
+    def _rebuild_bindings_display(self):
+        for w in self._bindings_display.winfo_children():
+            w.destroy()
+        if not self._bindings:
+            ttk.Label(self._bindings_display, text='(no bindings)',
+                      foreground='#888').pack(anchor='w')
+            return
+        for b in self._bindings:
+            row = ttk.Frame(self._bindings_display)
+            row.pack(fill=tk.X, pady=1)
+            flip = ' [flip]' if b['flip_h'] else ''
+            text = f"{b['behavior']}  \u2192  {b['animation_name']}{flip}"
+            ttk.Label(row, text=text, font=('TkFixedFont', 9)).pack(side=tk.LEFT)
+
+            def _del(beh=b['behavior']):
+                self._bindings = [x for x in self._bindings
+                                   if x['behavior'] != beh]
+                self._rebuild_bindings_display()
+            ttk.Button(row, text='\u2715', width=2,
+                       command=_del).pack(side=tk.LEFT, padx=4)
+
+    def _add_binding(self):
+        beh = self.v_bind_behavior.get().strip()
+        anim = self.v_bind_anim.get().strip()
+        if not beh or not anim:
+            messagebox.showerror('Binding', 'Behavior and animation required.')
+            return
+        flip = self.v_bind_flip.get()
+        # Update or add
+        self._bindings = [x for x in self._bindings if x['behavior'] != beh]
+        self._bindings.append({
+            'behavior': beh, 'animation_name': anim, 'flip_h': flip})
+        self._bindings.sort(key=lambda x: x['behavior'])
+        self._rebuild_bindings_display()
+
+    def _save_bindings(self, species_name: str, con):
+        """Save bindings within an existing transaction."""
+        con.execute('DELETE FROM composite_anim_bindings'
+                    ' WHERE target_name=?', (species_name,))
+        for b in self._bindings:
+            con.execute(
+                'INSERT INTO composite_anim_bindings'
+                ' (target_name, behavior, animation_name, flip_h)'
+                ' VALUES (?, ?, ?, ?)',
+                (species_name, b['behavior'], b['animation_name'],
+                 int(b['flip_h'])))
 
     def refresh_list(self):
         con = get_con()
@@ -147,6 +288,9 @@ class SpeciesTab(ttk.Frame):
         self.v_tile_scale.set('1.0')
         for var in self.stat_vars.values():
             var.set('')
+        self._bindings = []
+        self._rebuild_bindings_display()
+        self._bind_anim_cb['values'] = []
 
     def _populate_form(self, name: str):
         con = get_con()
@@ -174,6 +318,10 @@ class SpeciesTab(ttk.Frame):
         for stat, var in self.stat_vars.items():
             val = stats.get(stat)
             var.set(str(val) if val is not None else '')
+
+        # Load animation bindings and refresh dropdown
+        self._on_composite_change()
+        self._load_bindings(name)
 
     def _on_select(self, event=None):
         sel = self.listbox.curselection()
@@ -228,6 +376,7 @@ class SpeciesTab(ttk.Frame):
                     'INSERT INTO species_stats VALUES (?, ?, ?)',
                     (name, stat, val)
                 )
+            self._save_bindings(name, con)
             con.commit()
         except sqlite3.Error as e:
             messagebox.showerror('DB Error', str(e))
@@ -252,6 +401,7 @@ class SpeciesTab(ttk.Frame):
             return
         con = get_con()
         try:
+            con.execute('DELETE FROM composite_anim_bindings WHERE target_name=?', (name,))
             con.execute('DELETE FROM species_stats WHERE species_name=?', (name,))
             con.execute('DELETE FROM species WHERE name=?', (name,))
             con.commit()
