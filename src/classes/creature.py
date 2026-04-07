@@ -20,7 +20,6 @@ class Stat(Enum):
     CHR             = 'charisma'
     AGL             = 'agility'
     CON             = 'constitution'
-    ARM             = 'armor'
 
 def level_up_heal(creature, old_level, new_level):
     hd = creature.stats.get(Stat.HD, 6)
@@ -57,7 +56,6 @@ class Creature(WorldObject):
         self.inventory = Inventory(items=items or [])
         self.map_stack: list[tuple[Map, MapKey]] = []
         self.on_level_up: list[callable] = [level_up_heal]
-        self.hostile = False
 
     def _reconcile_exp_level(self):
         has_exp = Stat.EXP in self.stats

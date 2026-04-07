@@ -2,7 +2,7 @@ import sqlite3
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-from editor.db import get_con, fetch_tile_keys, fetch_tile_set_names
+from editor.db import get_con, fetch_tile_template_keys, fetch_tile_set_names
 from editor.tooltip import add_tooltip
 
 
@@ -31,9 +31,12 @@ class MapsTab(ttk.Frame):
         self.listbox.bind('<<ListboxSelect>>', self._on_map_select)
         br = ttk.Frame(left)
         br.pack(fill=tk.X, pady=4)
-        ttk.Button(br, text='New', command=self._new_map).pack(side=tk.LEFT, padx=2)
-        ttk.Button(br, text='Save', command=self._save_map).pack(side=tk.LEFT, padx=2)
-        ttk.Button(br, text='Delete', command=self._delete_map).pack(side=tk.LEFT, padx=2)
+        btn_new = ttk.Button(br, text='New', command=self._new_map); btn_new.pack(side=tk.LEFT, padx=2)
+        add_tooltip(btn_new, 'Clear form to create a new map')
+        btn_save = ttk.Button(br, text='Save', command=self._save_map); btn_save.pack(side=tk.LEFT, padx=2)
+        add_tooltip(btn_save, 'Save the current map to the database')
+        btn_del = ttk.Button(br, text='Delete', command=self._delete_map); btn_del.pack(side=tk.LEFT, padx=2)
+        add_tooltip(btn_del, 'Delete the selected map and its tile entries')
 
         right = ttk.Frame(pane)
         pane.add(right, weight=1)
@@ -57,12 +60,12 @@ class MapsTab(ttk.Frame):
         r += 1
 
         ttk.Label(f, text='Default Tile').grid(row=r, column=0, sticky='w', padx=6, pady=3)
-        self.v_default_tile = tk.StringVar()
-        self.default_tile_cb = ttk.Combobox(
-            f, textvariable=self.v_default_tile,
-            values=[''] + fetch_tile_keys(), state='readonly', width=20)
-        self.default_tile_cb.grid(row=r, column=1, columnspan=3, sticky='w', padx=6, pady=3)
-        add_tooltip(self.default_tile_cb, 'Tile template used to fill empty coordinates')
+        self.v_default_tile_template = tk.StringVar()
+        self.default_template_cb = ttk.Combobox(
+            f, textvariable=self.v_default_tile_template,
+            values=[''] + fetch_tile_template_keys(), state='readonly', width=20)
+        self.default_template_cb.grid(row=r, column=1, columnspan=3, sticky='w', padx=6, pady=3)
+        add_tooltip(self.default_template_cb, 'Tile template used to fill empty coordinates')
         r += 1
 
         ttk.Label(f, text='Entrance x,y').grid(row=r, column=0, sticky='w', padx=6, pady=3)
@@ -143,19 +146,19 @@ class MapsTab(ttk.Frame):
             return
         self.v_name.set(row['name'])
         self.v_tile_set.set(row['tile_set'] or '')
-        self.v_default_tile.set(row['default_tile'] or '')
+        self.v_default_tile_template.set(row['default_tile_template'] or '')
         self.v_ent_x.set(str(row['entrance_x']))
         self.v_ent_y.set(str(row['entrance_y']))
         for axis in ('w', 'x', 'y', 'z'):
             getattr(self, f'v_{axis}_min').set(str(row[f'{axis}_min']))
             getattr(self, f'v_{axis}_max').set(str(row[f'{axis}_max']))
-        self.default_tile_cb['values'] = [''] + fetch_tile_keys()
+        self.default_template_cb['values'] = [''] + fetch_tile_template_keys()
         self.tile_set_cb['values'] = [''] + fetch_tile_set_names()
 
     def _clear_map_form(self):
         self.v_name.set('')
         self.v_tile_set.set('')
-        self.v_default_tile.set('')
+        self.v_default_tile_template.set('')
         self.v_ent_x.set('0')
         self.v_ent_y.set('0')
         for axis in ('w', 'x', 'y', 'z'):
@@ -172,17 +175,17 @@ class MapsTab(ttk.Frame):
             messagebox.showerror('Validation', 'Name is required.')
             return
         ts = self.v_tile_set.get().strip() or None
-        dt = self.v_default_tile.get().strip() or None
+        dt = self.v_default_tile_template.get().strip() or None
         con = get_con()
         try:
             con.execute(
                 '''INSERT INTO maps
-                   (name, tile_set, default_tile, entrance_x, entrance_y,
+                   (name, tile_set, default_tile_template, entrance_x, entrance_y,
                     w_min, w_max, x_min, x_max, y_min, y_max, z_min, z_max)
                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
                    ON CONFLICT(name) DO UPDATE SET
                    tile_set=excluded.tile_set,
-                   default_tile=excluded.default_tile,
+                   default_tile_template=excluded.default_tile_template,
                    entrance_x=excluded.entrance_x, entrance_y=excluded.entrance_y,
                    w_min=excluded.w_min, w_max=excluded.w_max,
                    x_min=excluded.x_min, x_max=excluded.x_max,

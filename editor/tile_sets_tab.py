@@ -2,7 +2,7 @@ import sqlite3
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-from editor.db import get_con, fetch_sprite_names, fetch_tile_keys, fetch_map_names
+from editor.db import get_con, fetch_sprite_names, fetch_tile_template_keys, fetch_map_names, fetch_animation_names
 from editor.tooltip import add_tooltip
 
 
@@ -34,8 +34,10 @@ class TileSetsTab(ttk.Frame):
         self.listbox.bind('<<ListboxSelect>>', self._on_ts_select)
         br = ttk.Frame(left)
         br.pack(fill=tk.X, pady=4)
-        ttk.Button(br, text='New', command=self._new_tile_set).pack(side=tk.LEFT, padx=2)
-        ttk.Button(br, text='Delete', command=self._delete_tile_set).pack(side=tk.LEFT, padx=2)
+        btn_new = ttk.Button(br, text='New', command=self._new_tile_set); btn_new.pack(side=tk.LEFT, padx=2)
+        add_tooltip(btn_new, 'Clear form to create a new tile set')
+        btn_del = ttk.Button(br, text='Delete', command=self._delete_tile_set); btn_del.pack(side=tk.LEFT, padx=2)
+        add_tooltip(btn_del, 'Delete the selected tile set and all its entries')
 
         nf = ttk.Frame(left)
         nf.pack(fill=tk.X, pady=2)
@@ -76,8 +78,10 @@ class TileSetsTab(ttk.Frame):
 
         el_br = ttk.Frame(f)
         el_br.grid(row=2, column=0, columnspan=4, sticky='w', padx=6, pady=2)
-        ttk.Button(el_br, text='Remove Selected', command=self._remove_entry).pack(side=tk.LEFT, padx=2)
-        ttk.Button(el_br, text='Clear Form', command=self._clear_entry_form).pack(side=tk.LEFT, padx=2)
+        btn_rem = ttk.Button(el_br, text='Remove Selected', command=self._remove_entry); btn_rem.pack(side=tk.LEFT, padx=2)
+        add_tooltip(btn_rem, 'Remove the selected tile entry from this set')
+        btn_clr = ttk.Button(el_br, text='Clear Form', command=self._clear_entry_form); btn_clr.pack(side=tk.LEFT, padx=2)
+        add_tooltip(btn_clr, 'Clear the entry form fields')
 
         ttk.Separator(f, orient=tk.HORIZONTAL).grid(
             row=3, column=0, columnspan=4, sticky='ew', padx=6, pady=6)
@@ -104,7 +108,7 @@ class TileSetsTab(ttk.Frame):
         self.v_template = tk.StringVar()
         self.template_cb = ttk.Combobox(
             f, textvariable=self.v_template,
-            values=[''] + fetch_tile_keys(), state='readonly', width=18)
+            values=[''] + fetch_tile_template_keys(), state='readonly', width=18)
         self.template_cb.grid(row=r, column=1, columnspan=3, sticky='w', padx=6, pady=3)
         add_tooltip(self.template_cb, 'Base tile template (provides defaults for walkable, sprite, etc.)')
         r += 1
@@ -153,6 +157,38 @@ class TileSetsTab(ttk.Frame):
         self.nested_cb.grid(row=r, column=1, columnspan=3, sticky='w', padx=6, pady=3)
         add_tooltip(self.nested_cb, 'Map to enter when stepping on this tile')
         r += 1
+
+        ttk.Label(f, text='Animation override').grid(row=r, column=0, sticky='w', padx=6, pady=3)
+        self.v_animation = tk.StringVar()
+        self.anim_cb = ttk.Combobox(
+            f, textvariable=self.v_animation,
+            values=[''] + fetch_animation_names(), state='readonly', width=18)
+        self.anim_cb.grid(row=r, column=1, columnspan=3, sticky='w', padx=6, pady=3)
+        add_tooltip(self.anim_cb, 'Override tile animation (blank = use template animation)')
+        r += 1
+
+        # ---- Bounds overrides ----
+        ttk.Separator(f, orient=tk.HORIZONTAL).grid(
+            row=r, column=0, columnspan=4, sticky='ew', padx=6, pady=6)
+        r += 1
+        ttk.Label(f, text='Bounds Override', font=('TkDefaultFont', 9, 'bold')).grid(
+            row=r, column=0, columnspan=4, sticky='w', padx=6, pady=(4, 2))
+        r += 1
+
+        bound_values = ['', 'wall', 'opening', 'door_open', 'door_closed',
+                        'gate_open', 'gate_closed']
+        self._bound_vars = {}
+        bound_pairs = [('n', 's'), ('e', 'w'), ('ne', 'nw'), ('se', 'sw')]
+        for d1, d2 in bound_pairs:
+            for j, d in enumerate((d1, d2)):
+                var = tk.StringVar()
+                self._bound_vars[d] = var
+                ttk.Label(f, text=d.upper()).grid(row=r, column=j*2, sticky='w', padx=6, pady=2)
+                cb = ttk.Combobox(f, textvariable=var, values=bound_values,
+                                  state='readonly', width=12)
+                cb.grid(row=r, column=j*2+1, sticky='w', padx=2, pady=2)
+                add_tooltip(cb, f'{d.upper()} boundary override (blank = use template)')
+            r += 1
 
         # ---- Warp fields ----
         ttk.Separator(f, orient=tk.HORIZONTAL).grid(
@@ -222,7 +258,7 @@ class TileSetsTab(ttk.Frame):
     def refresh_list(self):
         con = get_con()
         try:
-            rows = con.execute('SELECT name FROM tile_sets ORDER BY name').fetchall()
+            rows = con.execute('SELECT name FROM tile_set_names').fetchall()
         finally:
             con.close()
         self.listbox.delete(0, tk.END)
@@ -242,15 +278,16 @@ class TileSetsTab(ttk.Frame):
         con = get_con()
         try:
             rows = con.execute(
-                'SELECT * FROM tile_entries WHERE tile_set=? ORDER BY w,x,y,z',
+                'SELECT * FROM tile_sets WHERE tile_set=? ORDER BY w,x,y,z',
                 (ts_name,)
             ).fetchall()
         finally:
             con.close()
-        self.template_cb['values'] = [''] + fetch_tile_keys()
+        self.template_cb['values'] = [''] + fetch_tile_template_keys()
         map_names = [''] + fetch_map_names()
         self.nested_cb['values'] = map_names
         self.warp_map_cb['values'] = map_names
+        self.anim_cb['values'] = [''] + fetch_animation_names()
         self.entries_listbox.delete(0, tk.END)
         self._entry_ids = []
         self._entry_rows = []
@@ -281,24 +318,17 @@ class TileSetsTab(ttk.Frame):
         self._clear_entry_form()
 
     def _save_tile_set(self):
+        """Select/refresh the tile set by name. Names are derived from entries."""
         name = self.v_ts_name.get().strip()
         if not name:
             messagebox.showerror('Validation', 'Name is required.')
             return
-        con = get_con()
-        try:
-            con.execute('INSERT OR IGNORE INTO tile_sets (name) VALUES (?)', (name,))
-            con.commit()
-        except sqlite3.Error as e:
-            messagebox.showerror('DB Error', str(e))
-            return
-        finally:
-            con.close()
         self.refresh_list()
         if name in self._list_names:
             idx = self._list_names.index(name)
             self.listbox.selection_set(idx)
             self.listbox.see(idx)
+            self._populate_entries(name)
 
     def _delete_tile_set(self):
         name = self._current_ts_name()
@@ -309,8 +339,7 @@ class TileSetsTab(ttk.Frame):
             return
         con = get_con()
         try:
-            con.execute('DELETE FROM tile_entries WHERE tile_set=?', (name,))
-            con.execute('DELETE FROM tile_sets WHERE name=?', (name,))
+            con.execute('DELETE FROM tile_sets WHERE tile_set=?', (name,))
             con.commit()
         except sqlite3.Error as e:
             messagebox.showerror('DB Error', str(e))
@@ -343,6 +372,9 @@ class TileSetsTab(ttk.Frame):
         self.v_sprite.set(r['sprite_name'] or '')
         self.v_scale.set(str(r['tile_scale']) if r['tile_scale'] is not None else '')
         self.v_nested.set(r['nested_map'] or '')
+        self.v_animation.set(r.get('animation_name') or '')
+        for d in self._bound_vars:
+            self._bound_vars[d].set(r.get(f'bounds_{d}') or '')
         self.v_warp_map.set(r.get('warp_map') or '')
         self.v_warp_x.set(str(r['warp_x']) if r.get('warp_x') is not None else '')
         self.v_warp_y.set(str(r['warp_y']) if r.get('warp_y') is not None else '')
@@ -359,6 +391,9 @@ class TileSetsTab(ttk.Frame):
         self.v_sprite.set('')
         self.v_scale.set('')
         self.v_nested.set('')
+        self.v_animation.set('')
+        for var in self._bound_vars.values():
+            var.set('')
         self.v_warp_map.set('')
         self.v_warp_x.set('')
         self.v_warp_y.set('')
@@ -389,8 +424,12 @@ class TileSetsTab(ttk.Frame):
         warp_y_s = self.v_warp_y.get().strip()
         warp_y = int(warp_y_s) if warp_y_s else None
         warp_auto = 1 if self.v_warp_auto.get() else 0
+        animation = self.v_animation.get().strip() or None
+        bounds = {d: (self._bound_vars[d].get().strip() or None)
+                  for d in ('n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw')}
         return dict(w=w, x=x, y=y, z=z, tile_template=tmpl, walkable=walkable,
                     covered=covered, sprite_name=sprite, tile_scale=scale, nested_map=nested,
+                    animation_name=animation, bounds=bounds,
                     warp_map=warp_map, warp_x=warp_x, warp_y=warp_y, warp_auto=warp_auto)
 
     def _add_entry(self):
@@ -403,15 +442,21 @@ class TileSetsTab(ttk.Frame):
             return
         con = get_con()
         try:
+            b = vals['bounds']
             con.execute(
-                '''INSERT INTO tile_entries
+                '''INSERT INTO tile_sets
                    (tile_set, w, x, y, z, tile_template, walkable, covered,
-                    sprite_name, tile_scale, nested_map,
+                    sprite_name, tile_scale, nested_map, animation_name,
+                    bounds_n, bounds_s, bounds_e, bounds_w,
+                    bounds_ne, bounds_nw, bounds_se, bounds_sw,
                     warp_map, warp_x, warp_y, warp_auto)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
                 (name, vals['w'], vals['x'], vals['y'], vals['z'],
                  vals['tile_template'], vals['walkable'], vals['covered'],
                  vals['sprite_name'], vals['tile_scale'], vals['nested_map'],
+                 vals['animation_name'],
+                 b['n'], b['s'], b['e'], b['w'],
+                 b['ne'], b['nw'], b['se'], b['sw'],
                  vals['warp_map'], vals['warp_x'], vals['warp_y'], vals['warp_auto']))
             con.commit()
         except sqlite3.Error as e:
@@ -432,15 +477,20 @@ class TileSetsTab(ttk.Frame):
             return
         con = get_con()
         try:
+            b = vals['bounds']
             con.execute(
-                '''UPDATE tile_entries SET
+                '''UPDATE tile_sets SET
                    w=?, x=?, y=?, z=?, tile_template=?, walkable=?, covered=?,
-                   sprite_name=?, tile_scale=?, nested_map=?,
+                   sprite_name=?, tile_scale=?, nested_map=?, animation_name=?,
+                   bounds_n=?, bounds_s=?, bounds_e=?, bounds_w=?,
+                   bounds_ne=?, bounds_nw=?, bounds_se=?, bounds_sw=?,
                    warp_map=?, warp_x=?, warp_y=?, warp_auto=?
                    WHERE id=?''',
                 (vals['w'], vals['x'], vals['y'], vals['z'], vals['tile_template'],
                  vals['walkable'], vals['covered'], vals['sprite_name'],
-                 vals['tile_scale'], vals['nested_map'],
+                 vals['tile_scale'], vals['nested_map'], vals['animation_name'],
+                 b['n'], b['s'], b['e'], b['w'],
+                 b['ne'], b['nw'], b['se'], b['sw'],
                  vals['warp_map'], vals['warp_x'], vals['warp_y'], vals['warp_auto'],
                  entry_id))
             con.commit()
@@ -464,7 +514,7 @@ class TileSetsTab(ttk.Frame):
         entry_id = self._entry_ids[sel[0]]
         con = get_con()
         try:
-            con.execute('DELETE FROM tile_entries WHERE id=?', (entry_id,))
+            con.execute('DELETE FROM tile_sets WHERE id=?', (entry_id,))
             con.commit()
         except sqlite3.Error as e:
             messagebox.showerror('DB Error', str(e))

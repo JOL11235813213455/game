@@ -459,12 +459,15 @@ class CompositesTab(ttk.Frame):
 
         btns = ttk.Frame(sec)
         btns.pack(fill=tk.X, pady=2)
-        ttk.Button(btns, text='New', command=self._new_comp).pack(
-            side=tk.LEFT, padx=2)
-        ttk.Button(btns, text='Save All', command=self._save_comp).pack(
-            side=tk.LEFT, padx=2)
-        ttk.Button(btns, text='Delete', command=self._delete_comp).pack(
-            side=tk.LEFT, padx=2)
+        btn_new = ttk.Button(btns, text='New', command=self._new_comp)
+        btn_new.pack(side=tk.LEFT, padx=2)
+        add_tooltip(btn_new, 'Create a new composite sprite')
+        btn_save = ttk.Button(btns, text='Save All', command=self._save_comp)
+        btn_save.pack(side=tk.LEFT, padx=2)
+        add_tooltip(btn_save, 'Save all composite data to the database')
+        btn_del = ttk.Button(btns, text='Delete', command=self._delete_comp)
+        btn_del.pack(side=tk.LEFT, padx=2)
+        add_tooltip(btn_del, 'Delete the selected composite')
 
         nr = ttk.Frame(sec)
         nr.pack(fill=tk.X, pady=2)
@@ -472,6 +475,7 @@ class CompositesTab(ttk.Frame):
         self.v_comp_name = tk.StringVar()
         ne = ttk.Entry(nr, textvariable=self.v_comp_name, width=20)
         ne.pack(side=tk.LEFT, padx=4)
+        add_tooltip(ne, 'Unique name for this composite sprite')
 
         # Sprite set filter
         filt = ttk.Frame(sec)
@@ -494,15 +498,22 @@ class CompositesTab(ttk.Frame):
                                          width=36, height=6)
         self.layer_listbox.pack(fill=tk.X)
         self.layer_listbox.bind('<<ListboxSelect>>', self._on_layer_select)
+        add_tooltip(self.layer_listbox, 'Layers in this composite; select to edit')
 
         lbtns = ttk.Frame(sec)
         lbtns.pack(fill=tk.X, pady=2)
-        ttk.Button(lbtns, text='+ Add Layer',
-                    command=self._add_layer).pack(side=tk.LEFT, padx=2)
-        ttk.Button(lbtns, text='- Remove',
-                    command=self._remove_layer).pack(side=tk.LEFT, padx=2)
-        ttk.Button(lbtns, text='Set as Root',
-                    command=self._set_root).pack(side=tk.LEFT, padx=2)
+        btn_add_layer = ttk.Button(lbtns, text='+ Add Layer',
+                                   command=self._add_layer)
+        btn_add_layer.pack(side=tk.LEFT, padx=2)
+        add_tooltip(btn_add_layer, 'Add a new layer to this composite')
+        btn_rm_layer = ttk.Button(lbtns, text='- Remove',
+                                  command=self._remove_layer)
+        btn_rm_layer.pack(side=tk.LEFT, padx=2)
+        add_tooltip(btn_rm_layer, 'Remove the selected layer')
+        btn_root = ttk.Button(lbtns, text='Set as Root',
+                              command=self._set_root)
+        btn_root.pack(side=tk.LEFT, padx=2)
+        add_tooltip(btn_root, 'Mark the selected layer as the root of the hierarchy')
 
         # Layer detail
         det = ttk.LabelFrame(sec, text='Selected Layer', padding=4)
@@ -512,12 +523,15 @@ class CompositesTab(ttk.Frame):
         r1.pack(fill=tk.X, pady=1)
         ttk.Label(r1, text='Name:').pack(side=tk.LEFT)
         self.v_layer_name = tk.StringVar()
-        ttk.Entry(r1, textvariable=self.v_layer_name, width=12).pack(
-            side=tk.LEFT, padx=4)
+        layer_name_entry = ttk.Entry(r1, textvariable=self.v_layer_name, width=12)
+        layer_name_entry.pack(side=tk.LEFT, padx=4)
+        add_tooltip(layer_name_entry, 'Name for this layer (e.g. torso, head, eye_left)')
         ttk.Label(r1, text='Z:').pack(side=tk.LEFT, padx=(8, 0))
         self.v_z_layer = tk.StringVar(value='0')
-        ttk.Spinbox(r1, from_=-99, to=99, textvariable=self.v_z_layer,
-                     width=4).pack(side=tk.LEFT, padx=2)
+        z_spin = ttk.Spinbox(r1, from_=-99, to=99, textvariable=self.v_z_layer,
+                              width=4)
+        z_spin.pack(side=tk.LEFT, padx=2)
+        add_tooltip(z_spin, 'Draw order; higher values render on top')
 
         r2 = ttk.Frame(det)
         r2.pack(fill=tk.X, pady=1)
@@ -529,12 +543,15 @@ class CompositesTab(ttk.Frame):
         self._layer_sprite_cb.pack(side=tk.LEFT, padx=4)
         self._layer_sprite_cb.bind('<<ComboboxSelected>>',
                                     self._on_layer_sprite_change)
+        add_tooltip(self._layer_sprite_cb, 'Default sprite for this layer')
 
         self._layer_preview = SpritePreview(det, size=PREVIEW_SIZE)
         self._layer_preview.pack(anchor='w', pady=4)
 
-        ttk.Button(det, text='Apply Changes',
-                    command=self._apply_layer_detail).pack(anchor='w', pady=2)
+        btn_apply = ttk.Button(det, text='Apply Changes',
+                               command=self._apply_layer_detail)
+        btn_apply.pack(anchor='w', pady=2)
+        add_tooltip(btn_apply, 'Apply name/z-layer/sprite changes to the selected layer')
 
         # ---- RIGHT: variants + small preview ----
         right = ttk.Frame(outer)
@@ -548,16 +565,20 @@ class CompositesTab(ttk.Frame):
         var_form.pack(fill=tk.X, pady=2)
         ttk.Label(var_form, text='Name:').pack(side=tk.LEFT)
         self.v_var_name = tk.StringVar()
-        ttk.Entry(var_form, textvariable=self.v_var_name, width=8).pack(
-            side=tk.LEFT, padx=2)
+        var_name_entry = ttk.Entry(var_form, textvariable=self.v_var_name, width=8)
+        var_name_entry.pack(side=tk.LEFT, padx=2)
+        add_tooltip(var_name_entry, 'Name for this variant (e.g. happy, angry, closed)')
         ttk.Label(var_form, text='Sprite:').pack(side=tk.LEFT, padx=(4, 0))
         self.v_var_sprite = tk.StringVar()
         self._var_sprite_cb = ttk.Combobox(
             var_form, textvariable=self.v_var_sprite,
             values=fetch_sprite_names(), state='readonly', width=16)
         self._var_sprite_cb.pack(side=tk.LEFT, padx=2)
-        ttk.Button(var_form, text='+', width=2,
-                    command=self._add_variant).pack(side=tk.LEFT, padx=2)
+        add_tooltip(self._var_sprite_cb, 'Sprite to use when this variant is active')
+        btn_add_var = ttk.Button(var_form, text='+', width=2,
+                                 command=self._add_variant)
+        btn_add_var.pack(side=tk.LEFT, padx=2)
+        add_tooltip(btn_add_var, 'Add a sprite variant for the selected layer')
 
         # Small composite preview
         sec = self._section(right, 'Preview')
@@ -590,13 +611,16 @@ class CompositesTab(ttk.Frame):
         self._conn_child_cb = ttk.Combobox(
             cr, textvariable=self.v_conn_child, values=[], width=10)
         self._conn_child_cb.pack(side=tk.LEFT, padx=2)
+        add_tooltip(self._conn_child_cb, 'Layer to connect as a child')
         ttk.Label(cr, text='anchor x,y:').pack(side=tk.LEFT, padx=(6, 0))
         self.v_conn_cax = tk.StringVar(value='0')
         self.v_conn_cay = tk.StringVar(value='0')
-        ttk.Entry(cr, textvariable=self.v_conn_cax, width=3).pack(
-            side=tk.LEFT, padx=1)
-        ttk.Entry(cr, textvariable=self.v_conn_cay, width=3).pack(
-            side=tk.LEFT, padx=1)
+        cax_entry = ttk.Entry(cr, textvariable=self.v_conn_cax, width=3)
+        cax_entry.pack(side=tk.LEFT, padx=1)
+        add_tooltip(cax_entry, 'Pixel on the child sprite that attaches to the parent socket (X)')
+        cay_entry = ttk.Entry(cr, textvariable=self.v_conn_cay, width=3)
+        cay_entry.pack(side=tk.LEFT, padx=1)
+        add_tooltip(cay_entry, 'Pixel on the child sprite that attaches to the parent socket (Y)')
 
         pr = ttk.Frame(conn_form)
         pr.pack(fill=tk.X, pady=1)
@@ -605,19 +629,25 @@ class CompositesTab(ttk.Frame):
         self._conn_parent_cb = ttk.Combobox(
             pr, textvariable=self.v_conn_parent, values=[], width=10)
         self._conn_parent_cb.pack(side=tk.LEFT, padx=2)
+        add_tooltip(self._conn_parent_cb, 'Parent layer this child connects to')
         ttk.Label(pr, text='socket x,y:').pack(side=tk.LEFT, padx=(6, 0))
         self.v_conn_psx = tk.StringVar(value='0')
         self.v_conn_psy = tk.StringVar(value='0')
-        ttk.Entry(pr, textvariable=self.v_conn_psx, width=3).pack(
-            side=tk.LEFT, padx=1)
-        ttk.Entry(pr, textvariable=self.v_conn_psy, width=3).pack(
-            side=tk.LEFT, padx=1)
+        psx_entry = ttk.Entry(pr, textvariable=self.v_conn_psx, width=3)
+        psx_entry.pack(side=tk.LEFT, padx=1)
+        add_tooltip(psx_entry, 'Pixel on the parent sprite where the child attaches (X)')
+        psy_entry = ttk.Entry(pr, textvariable=self.v_conn_psy, width=3)
+        psy_entry.pack(side=tk.LEFT, padx=1)
+        add_tooltip(psy_entry, 'Pixel on the parent sprite where the child attaches (Y)')
 
-        ttk.Button(conn_form, text='Set Connection',
-                    command=self._add_connection).pack(anchor='w', pady=2)
+        btn_set_conn = ttk.Button(conn_form, text='Set Connection',
+                                   command=self._add_connection)
+        btn_set_conn.pack(anchor='w', pady=2)
+        add_tooltip(btn_set_conn, 'Save this parent-child connection')
 
-        ttk.Button(sec, text='Save All', command=self._save_comp).pack(
-            anchor='w', pady=(6, 2))
+        btn_conn_save = ttk.Button(sec, text='Save All', command=self._save_comp)
+        btn_conn_save.pack(anchor='w', pady=(6, 2))
+        add_tooltip(btn_conn_save, 'Save all composite data to the database')
 
         # ---- RIGHT: big preview with socket markers ----
         right = ttk.Frame(outer)
@@ -651,24 +681,28 @@ class CompositesTab(ttk.Frame):
                                       values=[], width=18)
         self._anim_cb.pack(side=tk.LEFT, padx=2)
         self._anim_cb.bind('<<ComboboxSelected>>', self._on_anim_select)
-        ttk.Button(anim_top, text='Del', command=self._delete_anim).pack(
-            side=tk.LEFT, padx=2)
+        add_tooltip(self._anim_cb, 'Select or type an animation name')
+        btn_del_anim = ttk.Button(anim_top, text='Del', command=self._delete_anim)
+        btn_del_anim.pack(side=tk.LEFT, padx=2)
+        add_tooltip(btn_del_anim, 'Delete the selected animation')
 
         anim_props = ttk.Frame(sec)
         anim_props.pack(fill=tk.X, pady=2)
         ttk.Label(anim_props, text='Duration ms:').pack(side=tk.LEFT)
         self.v_anim_dur = tk.StringVar(value='1000')
-        ttk.Entry(anim_props, textvariable=self.v_anim_dur, width=6).pack(
-            side=tk.LEFT, padx=2)
+        dur_entry = ttk.Entry(anim_props, textvariable=self.v_anim_dur, width=6)
+        dur_entry.pack(side=tk.LEFT, padx=2)
+        add_tooltip(dur_entry, 'Total animation length in milliseconds')
         self.v_anim_loop = tk.BooleanVar(value=True)
-        ttk.Checkbutton(anim_props, text='Loop',
-                         variable=self.v_anim_loop).pack(side=tk.LEFT, padx=4)
+        loop_cb = ttk.Checkbutton(anim_props, text='Loop',
+                                   variable=self.v_anim_loop)
+        loop_cb.pack(side=tk.LEFT, padx=4)
+        add_tooltip(loop_cb, 'Repeat the animation continuously')
         ttk.Label(anim_props, text='Speed:').pack(side=tk.LEFT, padx=(8, 0))
         self.v_time_scale = tk.StringVar(value='1.0')
-        ttk.Entry(anim_props, textvariable=self.v_time_scale, width=4).pack(
-            side=tk.LEFT, padx=2)
-        add_tooltip(anim_props,
-                    'Playback speed multiplier — 2.0 = double speed, 0.5 = half speed')
+        speed_entry = ttk.Entry(anim_props, textvariable=self.v_time_scale, width=4)
+        speed_entry.pack(side=tk.LEFT, padx=2)
+        add_tooltip(speed_entry, 'Speed multiplier (0.5 = half speed, 2.0 = double speed)')
 
         # Keyframe spreadsheet
         sec2 = self._section(left, 'Keyframes (double-click to edit)')
@@ -686,17 +720,24 @@ class CompositesTab(ttk.Frame):
         self._kf_layer_cb = ttk.Combobox(add_frame, textvariable=self.v_kf_layer,
                                           values=[], width=8)
         self._kf_layer_cb.pack(side=tk.LEFT, padx=2)
+        add_tooltip(self._kf_layer_cb, 'Layer to add a keyframe for')
         ttk.Label(add_frame, text='@ms:').pack(side=tk.LEFT)
         self.v_kf_time = tk.StringVar(value='0')
-        ttk.Entry(add_frame, textvariable=self.v_kf_time, width=5).pack(
-            side=tk.LEFT, padx=1)
-        ttk.Button(add_frame, text='+ Add Row',
-                    command=self._add_keyframe_row).pack(side=tk.LEFT, padx=4)
-        ttk.Button(add_frame, text='- Delete Row',
-                    command=self._delete_keyframe_row).pack(side=tk.LEFT, padx=2)
-        ttk.Button(add_frame, text='Apply to Animation',
-                    command=self._apply_keyframes_from_tree).pack(
-                        side=tk.LEFT, padx=4)
+        kf_time_entry = ttk.Entry(add_frame, textvariable=self.v_kf_time, width=5)
+        kf_time_entry.pack(side=tk.LEFT, padx=1)
+        add_tooltip(kf_time_entry, 'Time position in milliseconds for this keyframe')
+        btn_add_row = ttk.Button(add_frame, text='+ Add Row',
+                                 command=self._add_keyframe_row)
+        btn_add_row.pack(side=tk.LEFT, padx=4)
+        add_tooltip(btn_add_row, 'Insert a new keyframe row for the selected layer and time')
+        btn_del_row = ttk.Button(add_frame, text='- Delete Row',
+                                 command=self._delete_keyframe_row)
+        btn_del_row.pack(side=tk.LEFT, padx=2)
+        add_tooltip(btn_del_row, 'Remove the selected keyframe row')
+        btn_apply_anim = ttk.Button(add_frame, text='Apply to Animation',
+                                    command=self._apply_keyframes_from_tree)
+        btn_apply_anim.pack(side=tk.LEFT, padx=4)
+        add_tooltip(btn_apply_anim, 'Write keyframe table data back to the animation')
 
         # ---- RIGHT: animation preview ----
         right = ttk.Frame(outer)
@@ -715,8 +756,11 @@ class CompositesTab(ttk.Frame):
         self._play_btn = ttk.Button(play_row, text='\u25b6 Play',
                                      command=self._toggle_anim_preview)
         self._play_btn.pack(side=tk.LEFT, padx=2)
-        ttk.Button(play_row, text='Save All',
-                    command=self._save_from_animate).pack(side=tk.LEFT, padx=6)
+        add_tooltip(self._play_btn, 'Play/stop the animation preview')
+        btn_anim_save = ttk.Button(play_row, text='Save All',
+                                   command=self._save_from_animate)
+        btn_anim_save.pack(side=tk.LEFT, padx=6)
+        add_tooltip(btn_anim_save, 'Apply keyframes and save all composite data')
 
     # ==================================================================
     # Shared helpers

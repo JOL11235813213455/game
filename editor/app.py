@@ -10,6 +10,7 @@ from editor.tile_sets_tab import TileSetsTab
 from editor.maps_tab import MapsTab
 from editor.animations_tab import AnimationsTab
 from editor.composites_tab import CompositesTab
+from editor.sql_tab import SqlTab
 
 
 class EditorApp(tk.Tk):
@@ -29,23 +30,34 @@ class EditorApp(tk.Tk):
         notebook = ttk.Notebook(self)
         notebook.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
 
-        self.items_tab     = ItemsTab(notebook)
-        self.species_tab   = SpeciesTab(notebook)
-        self.sprites_tab   = SpritesTab(notebook, on_sprites_changed=self._on_sprites_changed)
+        # Graphics group — nested notebook
+        graphics_frame = ttk.Frame(notebook)
+        notebook.add(graphics_frame, text='  Graphics  ')
+        gfx_notebook = ttk.Notebook(graphics_frame)
+        gfx_notebook.pack(fill=tk.BOTH, expand=True)
+
+        self.sprites_tab    = SpritesTab(gfx_notebook, on_sprites_changed=self._on_sprites_changed)
+        self.anims_tab      = AnimationsTab(gfx_notebook)
+        self.composites_tab = CompositesTab(gfx_notebook)
+        gfx_notebook.add(self.sprites_tab,    text='  Sprites  ')
+        gfx_notebook.add(self.anims_tab,      text='  Simple  ')
+        gfx_notebook.add(self.composites_tab, text='  Composite  ')
+
         self.tiles_tab     = TilesTab(notebook)
         self.tile_sets_tab = TileSetsTab(notebook)
         self.maps_tab      = MapsTab(notebook)
-        self.anims_tab     = AnimationsTab(notebook)
-        self.composites_tab = CompositesTab(notebook)
+        self.species_tab   = SpeciesTab(notebook)
+        self.items_tab     = ItemsTab(notebook)
+        self.sql_tab       = SqlTab(notebook)
 
-        notebook.add(self.sprites_tab,   text='  Sprites  ')
-        notebook.add(self.composites_tab, text='  Composites  ')
-        notebook.add(self.anims_tab,     text='  Animations  ')
-        notebook.add(self.tiles_tab,     text='  Tiles  ')
+        notebook.add(self.tiles_tab,     text='  Tile Templates  ')
         notebook.add(self.tile_sets_tab, text='  Tile Sets  ')
         notebook.add(self.maps_tab,      text='  Maps  ')
         notebook.add(self.species_tab,   text='  Species  ')
         notebook.add(self.items_tab,     text='  Items  ')
+        notebook.add(self.sql_tab,       text='  SQL  ')
+
+        gfx_notebook.bind('<<NotebookTabChanged>>', self._on_tab_changed)
 
         notebook.bind('<<NotebookTabChanged>>', self._on_tab_changed)
 
@@ -57,14 +69,14 @@ class EditorApp(tk.Tk):
 
     def _on_tab_changed(self, event):
         tab = event.widget.tab(event.widget.select(), 'text').strip()
-        if tab in ('Items', 'Species', 'Tiles', 'Tile Sets'):
+        if tab in ('Items', 'Species', 'Tile Templates', 'Tile Sets'):
             self.items_tab.refresh_sprite_dropdown()
             self.species_tab.refresh_sprite_dropdown()
             self.tiles_tab.refresh_sprite_dropdown()
             self.tile_sets_tab.refresh_sprite_dropdown()
         if tab == 'Maps':
             self.maps_tab.refresh_tile_set_dropdown()
-        if tab == 'Animations':
+        if tab in ('Simple', 'Animations'):
             self.anims_tab.refresh_dropdowns()
-        if tab == 'Composites':
+        if tab in ('Composite', 'Composites'):
             self.composites_tab.refresh_dropdowns()

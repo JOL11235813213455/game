@@ -45,9 +45,12 @@ class AnimationsTab(ttk.Frame):
         self.listbox.bind('<<ListboxSelect>>', self._on_select)
         br = ttk.Frame(left)
         br.pack(fill=tk.X, pady=4)
-        ttk.Button(br, text='New', command=self._new).pack(side=tk.LEFT, padx=2)
-        ttk.Button(br, text='Save', command=self._save).pack(side=tk.LEFT, padx=2)
-        ttk.Button(br, text='Delete', command=self._delete).pack(side=tk.LEFT, padx=2)
+        btn_new = ttk.Button(br, text='New', command=self._new); btn_new.pack(side=tk.LEFT, padx=2)
+        add_tooltip(btn_new, 'Clear form to create a new animation')
+        btn_save = ttk.Button(br, text='Save', command=self._save); btn_save.pack(side=tk.LEFT, padx=2)
+        add_tooltip(btn_save, 'Save the current animation to the database')
+        btn_del = ttk.Button(br, text='Delete', command=self._delete); btn_del.pack(side=tk.LEFT, padx=2)
+        add_tooltip(btn_del, 'Delete the selected animation')
 
         # ---- right: animation editor ----------------------------------------
         right = ttk.Frame(pane)
@@ -108,6 +111,7 @@ class AnimationsTab(ttk.Frame):
 
         self._frames_list_frame = ttk.Frame(self._frames_container)
         self._frames_list_frame.pack(fill=tk.BOTH, expand=True)
+        add_tooltip(self._frames_list_frame, 'Animation frames in play order; select to edit')
 
         frame_btns = ttk.Frame(right)
         frame_btns.pack(fill=tk.X, padx=6, pady=4)
@@ -223,9 +227,12 @@ class AnimationsTab(ttk.Frame):
             cb = ttk.Combobox(row, textvariable=sv, values=sprite_names,
                               state='readonly', width=16)
             cb.pack(side=tk.LEFT, padx=4)
+            add_tooltip(cb, 'Sprite to display for this animation frame')
 
             dv = tk.StringVar(value=str(fr['duration_ms']))
-            ttk.Entry(row, textvariable=dv, width=8).pack(side=tk.LEFT, padx=4)
+            dur_entry = ttk.Entry(row, textvariable=dv, width=8)
+            dur_entry.pack(side=tk.LEFT, padx=4)
+            add_tooltip(dur_entry, 'How long this frame displays in milliseconds')
 
             preview = SpritePreview(row, size=PREVIEW_SIZE // 2)
             preview.pack(side=tk.LEFT, padx=4)
@@ -261,9 +268,12 @@ class AnimationsTab(ttk.Frame):
                 self._frame_rows.pop(idx)
                 self._rebuild_frame_widgets()
 
-            ttk.Button(btn_frame, text='\u25b2', width=2, command=_move_up).pack(side=tk.LEFT)
-            ttk.Button(btn_frame, text='\u25bc', width=2, command=_move_down).pack(side=tk.LEFT)
-            ttk.Button(btn_frame, text='\u2715', width=2, command=_remove).pack(side=tk.LEFT)
+            btn_up = ttk.Button(btn_frame, text='\u25b2', width=2, command=_move_up); btn_up.pack(side=tk.LEFT)
+            add_tooltip(btn_up, 'Move frame up in sequence')
+            btn_down = ttk.Button(btn_frame, text='\u25bc', width=2, command=_move_down); btn_down.pack(side=tk.LEFT)
+            add_tooltip(btn_down, 'Move frame down in sequence')
+            btn_rm = ttk.Button(btn_frame, text='\u2715', width=2, command=_remove); btn_rm.pack(side=tk.LEFT)
+            add_tooltip(btn_rm, 'Remove this frame')
 
     def _add_frame(self):
         self._frame_rows.append({'sprite_name': '', 'duration_ms': 150})
@@ -285,8 +295,9 @@ class AnimationsTab(ttk.Frame):
 
             def _del_binding(binding_id=bid):
                 self._delete_binding(binding_id)
-            ttk.Button(row, text='\u2715', width=2, command=_del_binding).pack(
-                side=tk.LEFT, padx=4)
+            del_btn = ttk.Button(row, text='\u2715', width=2, command=_del_binding)
+            del_btn.pack(side=tk.LEFT, padx=4)
+            add_tooltip(del_btn, 'Remove this animation binding')
 
     def _add_binding(self):
         name = self.v_name.get().strip()

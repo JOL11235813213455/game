@@ -43,9 +43,12 @@ class SpeciesTab(ttk.Frame):
 
         btn_row = ttk.Frame(left)
         btn_row.pack(fill=tk.X, pady=4)
-        ttk.Button(btn_row, text='New',    command=self._new).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_row, text='Save',   command=self._save).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_row, text='Delete', command=self._delete).pack(side=tk.LEFT, padx=2)
+        btn_new = ttk.Button(btn_row, text='New',    command=self._new); btn_new.pack(side=tk.LEFT, padx=2)
+        add_tooltip(btn_new, 'Clear form to create a new species')
+        btn_save = ttk.Button(btn_row, text='Save',   command=self._save); btn_save.pack(side=tk.LEFT, padx=2)
+        add_tooltip(btn_save, 'Save the current species to the database')
+        btn_del = ttk.Button(btn_row, text='Delete', command=self._delete); btn_del.pack(side=tk.LEFT, padx=2)
+        add_tooltip(btn_del, 'Delete the selected species')
 
         right = ttk.Frame(pane)
         pane.add(right, weight=1)
@@ -156,6 +159,7 @@ class SpeciesTab(ttk.Frame):
             add_form, textvariable=self.v_bind_behavior,
             values=COMP_BEHAVIORS, width=12)
         self._bind_behavior_cb.pack(side=tk.LEFT, padx=2)
+        add_tooltip(self._bind_behavior_cb, 'Creature behavior state to bind (e.g. walk_north, idle, attack_east)')
 
         ttk.Label(add_form, text='Animation:').pack(side=tk.LEFT, padx=(4, 0))
         self.v_bind_anim = tk.StringVar()
@@ -163,13 +167,18 @@ class SpeciesTab(ttk.Frame):
             add_form, textvariable=self.v_bind_anim,
             values=[], state='readonly', width=18)
         self._bind_anim_cb.pack(side=tk.LEFT, padx=2)
+        add_tooltip(self._bind_anim_cb, 'Composite animation to play for this behavior')
 
         self.v_bind_flip = tk.BooleanVar()
-        ttk.Checkbutton(add_form, text='Flip H',
-                         variable=self.v_bind_flip).pack(side=tk.LEFT, padx=4)
+        cb_flip = ttk.Checkbutton(add_form, text='Flip H',
+                         variable=self.v_bind_flip)
+        cb_flip.pack(side=tk.LEFT, padx=4)
+        add_tooltip(cb_flip, 'Mirror the animation horizontally (e.g. reuse walk_west for walk_east)')
 
-        ttk.Button(add_form, text='+ Bind',
-                    command=self._add_binding).pack(side=tk.LEFT, padx=2)
+        btn_add_bind = ttk.Button(add_form, text='+ Bind',
+                    command=self._add_binding)
+        btn_add_bind.pack(side=tk.LEFT, padx=2)
+        add_tooltip(btn_add_bind, 'Add this behavior-to-animation binding')
 
         # Update animation dropdown when composite changes
         self.composite_cb.bind('<<ComboboxSelected>>',
@@ -234,8 +243,10 @@ class SpeciesTab(ttk.Frame):
                 self._bindings = [x for x in self._bindings
                                    if x['behavior'] != beh]
                 self._rebuild_bindings_display()
-            ttk.Button(row, text='\u2715', width=2,
-                       command=_del).pack(side=tk.LEFT, padx=4)
+            del_btn = ttk.Button(row, text='\u2715', width=2,
+                       command=_del)
+            del_btn.pack(side=tk.LEFT, padx=4)
+            add_tooltip(del_btn, 'Remove this animation binding')
 
     def _add_binding(self):
         beh = self.v_bind_behavior.get().strip()

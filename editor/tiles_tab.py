@@ -33,9 +33,12 @@ class TilesTab(ttk.Frame):
         self.listbox.bind('<<ListboxSelect>>', self._on_select)
         br = ttk.Frame(left)
         br.pack(fill=tk.X, pady=4)
-        ttk.Button(br, text='New',    command=self._new).pack(side=tk.LEFT, padx=2)
-        ttk.Button(br, text='Save',   command=self._save).pack(side=tk.LEFT, padx=2)
-        ttk.Button(br, text='Delete', command=self._delete).pack(side=tk.LEFT, padx=2)
+        btn_new = ttk.Button(br, text='New',    command=self._new); btn_new.pack(side=tk.LEFT, padx=2)
+        add_tooltip(btn_new, 'Clear form to create a new tile template')
+        btn_save = ttk.Button(br, text='Save',   command=self._save); btn_save.pack(side=tk.LEFT, padx=2)
+        add_tooltip(btn_save, 'Save the current tile template to the database')
+        btn_del = ttk.Button(br, text='Delete', command=self._delete); btn_del.pack(side=tk.LEFT, padx=2)
+        add_tooltip(btn_del, 'Delete the selected tile template')
 
         right = ttk.Frame(pane)
         pane.add(right, weight=1)
@@ -98,12 +101,40 @@ class TilesTab(ttk.Frame):
         add_tooltip(self.anim_cb, 'Animation to play on this tile (overrides static sprite)')
         r += 1
 
+        # ---- Bounds ----
+        ttk.Separator(f, orient=tk.HORIZONTAL).grid(
+            row=r, column=0, columnspan=2, sticky='ew', padx=6, pady=6)
+        r += 1
+        ttk.Label(f, text='Bounds', font=('TkDefaultFont', 9, 'bold')).grid(
+            row=r, column=0, columnspan=2, sticky='w', padx=6, pady=(4, 2))
+        r += 1
+
+        bound_values = ['', 'wall', 'opening', 'door_open', 'door_closed',
+                        'gate_open', 'gate_closed']
+        self._bound_vars = {}
+        bound_tips = {
+            'n': 'North edge boundary', 's': 'South edge boundary',
+            'e': 'East edge boundary', 'w': 'West edge boundary',
+            'ne': 'Northeast corner boundary', 'nw': 'Northwest corner boundary',
+            'se': 'Southeast corner boundary', 'sw': 'Southwest corner boundary',
+        }
+        for direction in ('n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'):
+            ttk.Label(f, text=f'Bound {direction.upper()}').grid(
+                row=r, column=0, sticky='w', padx=6, pady=2)
+            var = tk.StringVar()
+            self._bound_vars[direction] = var
+            cb = ttk.Combobox(f, textvariable=var, values=bound_values,
+                              state='readonly', width=14)
+            cb.grid(row=r, column=1, sticky='w', padx=6, pady=2)
+            add_tooltip(cb, bound_tips[direction])
+            r += 1
+
         f.columnconfigure(1, weight=1)
 
     def refresh_list(self):
         con = get_con()
         try:
-            rows = con.execute('SELECT key FROM tiles ORDER BY key').fetchall()
+            rows = con.execute('SELECT key FROM tile_templates ORDER BY key').fetchall()
         finally:
             con.close()
         self.listbox.delete(0, tk.END)
@@ -126,11 +157,13 @@ class TilesTab(ttk.Frame):
         self.v_sprite.set('')
         self.v_animation.set('')
         self.sprite_preview.load(None)
+        for var in self._bound_vars.values():
+            var.set('')
 
     def _populate_form(self, key: str):
         con = get_con()
         try:
-            row = con.execute('SELECT * FROM tiles WHERE key=?', (key,)).fetchone()
+            row = con.execute('SELECT * FROM tile_templates WHERE key=?', (key,)).fetchone()
         finally:
             con.close()
         if row is None:
@@ -143,6 +176,8 @@ class TilesTab(ttk.Frame):
         self.v_sprite.set(row['sprite_name'] or '')
         self.v_animation.set(row['animation_name'] or '')
         self.sprite_preview.load(row['sprite_name'] or None)
+        for d in self._bound_vars:
+            self._bound_vars[d].set(row[f'bounds_{d}'] or '')
 
     def _on_select(self, event=None):
         sel = self.listbox.curselection()
@@ -164,16 +199,27 @@ class TilesTab(ttk.Frame):
             ts = 1.0
         con = get_con()
         try:
+            bounds = {d: (self._bound_vars[d].get().strip() or None)
+                      for d in ('n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw')}
             con.execute(
-                '''INSERT INTO tiles (key, name, walkable, covered, sprite_name, tile_scale, animation_name)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)
+                '''INSERT INTO tile_templates (key, name, walkable, covered, sprite_name,
+                   tile_scale, animation_name,
+                   bounds_n, bounds_s, bounds_e, bounds_w,
+                   bounds_ne, bounds_nw, bounds_se, bounds_sw)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(key) DO UPDATE SET
                    name=excluded.name, walkable=excluded.walkable,
                    covered=excluded.covered, sprite_name=excluded.sprite_name,
-                   tile_scale=excluded.tile_scale, animation_name=excluded.animation_name''',
+                   tile_scale=excluded.tile_scale, animation_name=excluded.animation_name,
+                   bounds_n=excluded.bounds_n, bounds_s=excluded.bounds_s,
+                   bounds_e=excluded.bounds_e, bounds_w=excluded.bounds_w,
+                   bounds_ne=excluded.bounds_ne, bounds_nw=excluded.bounds_nw,
+                   bounds_se=excluded.bounds_se, bounds_sw=excluded.bounds_sw''',
                 (key, self.v_name.get().strip(), int(self.v_walkable.get()),
                  int(self.v_covered.get()), self.v_sprite.get().strip() or None, ts,
-                 self.v_animation.get().strip() or None)
+                 self.v_animation.get().strip() or None,
+                 bounds['n'], bounds['s'], bounds['e'], bounds['w'],
+                 bounds['ne'], bounds['nw'], bounds['se'], bounds['sw'])
             )
             con.commit()
         except sqlite3.Error as e:
@@ -197,7 +243,7 @@ class TilesTab(ttk.Frame):
             return
         con = get_con()
         try:
-            con.execute('DELETE FROM tiles WHERE key=?', (key,))
+            con.execute('DELETE FROM tile_templates WHERE key=?', (key,))
             con.commit()
         except sqlite3.Error as e:
             messagebox.showerror('DB Error', str(e))

@@ -79,7 +79,7 @@ class Map(Trackable):
         ,tile_set: dict[MapKey, Tile] = None
         ,entrance: tuple[int, int] = (0, 0)
         ,name: str = None
-        ,default_tile: str = None
+        ,default_tile_template: str = None
         ,w_min: int = 0,  w_max: int = 0
         ,x_min: int = -16, x_max: int = 16
         ,y_min: int = -16, y_max: int = 16
@@ -89,7 +89,7 @@ class Map(Trackable):
         self.tiles = tile_set if tile_set is not None else {}
         self.entrance = entrance
         self.name = name
-        self.default_tile = default_tile
+        self.default_tile_template = default_tile_template
         self.w_min = w_min
         self.w_max = w_max
         self.x_min = x_min

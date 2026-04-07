@@ -1,15 +1,12 @@
 INCOMPLETE FEATURES
 ===================
-Last updated: 2026-04-05
+Last updated: 2026-04-06
 
 TILE (classes/maps.py)
 - covered: declared and stored but never read — no gameplay or rendering effect
-no use of min/max
 
 CREATURE STATS (classes/creature.py)
-- STR, INT, LCK, PER, CHR, AGL, ARM: loaded 
-/home/jason/proj/game/src/classes/inventory.py:class Equippable(Item):from species_stats but consumed by no mechanic
-- hostile: field exists on Creature but nothing reads it; no aggro or combat system
+- STR, INT, LCK, PER, CHR, AGL: loaded from species_stats but consumed by no mechanic
 
 ITEMS / INVENTORY (classes/inventory.py)
 - damage, defense: defined on Weapon/Ammunition but no combat system to consume them
@@ -21,6 +18,7 @@ ITEMS / INVENTORY (classes/inventory.py)
 - consumable, stackable, quantity: Stackable.add() and coalesce() implemented but never called
 - ITEMS dict (data/db.py): populated from DB at load but never accessed during gameplay
 - STRUCTURES dict (data/db.py): populated from DB but never accessed (instances render via WorldObject)
+- inventoriable: defined on all items but never checked — no pickup/drop system exists
 - No items or structures are spawned at runtime — no drop/pickup/loot system
 
 CREATURE METHODS (classes/creature.py)
@@ -62,5 +60,8 @@ COMPLETED SYSTEMS (no known gaps)
 - Sprite cache: native, scaled, tiled, composite, pre-rendered animation frames
 - Per-map object registry (WorldObject._by_map)
 - Dynamic zoom (0.25x–4.0x)
-- Editor: sprites, composites (3 sub-tabs), animations, species with bindings,
-  items, tiles, tile sets, maps — all save correctly
+- Tile warp system: auto-warp (teleport on step) and enter-warp (Enter key)
+- Editor: Graphics group (sprites, simple animations, composites with 3 sub-tabs),
+  tiles (with bounds), tile sets (with bounds/animation/warp overrides),
+  maps, species with bindings, items, SQL editor with cheat sheet
+- Full tooltip coverage across all editor widgets
