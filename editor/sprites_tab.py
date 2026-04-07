@@ -73,9 +73,15 @@ class SpritesTab(ttk.Frame):
 
         btn_row = ttk.Frame(left)
         btn_row.pack(fill=tk.X, pady=4)
-        ttk.Button(btn_row, text='New',    command=self._new).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_row, text='Save',   command=self._save).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_row, text='Delete', command=self._delete).pack(side=tk.LEFT, padx=2)
+        new_btn = ttk.Button(btn_row, text='New', command=self._new)
+        new_btn.pack(side=tk.LEFT, padx=2)
+        add_tooltip(new_btn, 'Clear form to create a new sprite')
+        save_btn = ttk.Button(btn_row, text='Save', command=self._save)
+        save_btn.pack(side=tk.LEFT, padx=2)
+        add_tooltip(save_btn, 'Save the current sprite to the database')
+        del_btn = ttk.Button(btn_row, text='Delete', command=self._delete)
+        del_btn.pack(side=tk.LEFT, padx=2)
+        add_tooltip(del_btn, 'Delete the selected sprite')
 
         right_outer = ttk.Frame(pane)
         pane.add(right_outer, weight=1)
@@ -172,8 +178,10 @@ class SpritesTab(ttk.Frame):
         self.palette_frame = ttk.Frame(palette_outer)
         self.palette_frame.pack(fill=tk.X)
 
-        ttk.Button(palette_outer, text='+ Add Palette Entry',
-                   command=self._add_palette_entry).pack(anchor='w', pady=4)
+        add_pal_btn = ttk.Button(palette_outer, text='+ Add Palette Entry',
+                                command=self._add_palette_entry)
+        add_pal_btn.pack(anchor='w', pady=4)
+        add_tooltip(add_pal_btn, 'Add a new color to the palette')
 
         ttk.Separator(palette_outer, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=6)
 
@@ -582,16 +590,20 @@ class SpritesTab(ttk.Frame):
 
         select_btn = tk.Button(frame, text='  ', relief=tk.RAISED, width=2, bg='#e0e0e0')
         select_btn.pack(side=tk.LEFT, padx=(0, 4))
+        add_tooltip(select_btn, 'Select this color for drawing')
 
         char_var = tk.StringVar(value=char)
         char_entry = ttk.Entry(frame, textvariable=char_var, width=3)
         char_entry.pack(side=tk.LEFT, padx=(0, 4))
+        add_tooltip(char_entry, 'Single character used in the pixel grid')
 
         swatch = tk.Button(frame, bg=color, width=3, relief=tk.RAISED)
         swatch.pack(side=tk.LEFT, padx=(0, 4))
+        add_tooltip(swatch, 'Click to change this palette color')
 
         del_btn = ttk.Button(frame, text='\u2715', width=2)
         del_btn.pack(side=tk.LEFT, padx=(0, 4))
+        add_tooltip(del_btn, 'Remove this color from the palette')
 
         entry = {
             'frame': frame, 'char_var': char_var, 'color': color,

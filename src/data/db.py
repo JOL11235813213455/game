@@ -16,7 +16,7 @@ PLAYABLE:    dict[str, dict] = {}
 NONPLAYABLE: dict[str, dict] = {}
 ITEMS:       dict[str, Item] = {}
 SPRITE_DATA: dict[str, dict] = {}
-TILES: dict[str, dict] = {}
+TILE_TEMPLATES: dict[str, dict] = {}
 MAPS:  dict[str, object] = {}
 STRUCTURES: dict[str, 'Structure'] = {}  # key → Structure instance (templates from DB)
 ANIMATIONS: dict[str, dict] = {}    # name → {target_type, frames: [{sprite_name, duration_ms}]}
@@ -35,15 +35,13 @@ def _migrate(con: sqlite3.Connection) -> None:
         "ALTER TABLE sprites ADD COLUMN action_point_y INTEGER",
         "ALTER TABLE items   ADD COLUMN tile_scale REAL NOT NULL DEFAULT 1.0",
         "ALTER TABLE species ADD COLUMN tile_scale REAL NOT NULL DEFAULT 1.0",
-        """CREATE TABLE IF NOT EXISTS tiles (
+        """CREATE TABLE IF NOT EXISTS tile_templates (
     key TEXT PRIMARY KEY, name TEXT NOT NULL DEFAULT '',
     walkable INTEGER NOT NULL DEFAULT 1, covered INTEGER NOT NULL DEFAULT 0,
     sprite_name TEXT, tile_scale REAL NOT NULL DEFAULT 1.0,
     bounds_n TEXT, bounds_s TEXT, bounds_e TEXT, bounds_w TEXT,
     bounds_ne TEXT, bounds_nw TEXT, bounds_se TEXT, bounds_sw TEXT)""",
         """CREATE TABLE IF NOT EXISTS tile_sets (
-    name TEXT PRIMARY KEY)""",
-        """CREATE TABLE IF NOT EXISTS tile_entries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     tile_set TEXT NOT NULL, w INTEGER NOT NULL DEFAULT 0,
     x INTEGER NOT NULL, y INTEGER NOT NULL, z INTEGER NOT NULL DEFAULT 0,
@@ -53,14 +51,14 @@ def _migrate(con: sqlite3.Connection) -> None:
     bounds_ne TEXT, bounds_nw TEXT, bounds_se TEXT, bounds_sw TEXT,
     nested_map TEXT)""",
         """CREATE TABLE IF NOT EXISTS maps (
-    name TEXT PRIMARY KEY, tile_set TEXT, default_tile TEXT,
+    name TEXT PRIMARY KEY, tile_set TEXT, default_tile_template TEXT,
     entrance_x INTEGER NOT NULL DEFAULT 0, entrance_y INTEGER NOT NULL DEFAULT 0,
     w_min INTEGER NOT NULL DEFAULT 0, w_max INTEGER NOT NULL DEFAULT 0,
     x_min INTEGER NOT NULL DEFAULT 0, x_max INTEGER NOT NULL DEFAULT 0,
     y_min INTEGER NOT NULL DEFAULT 0, y_max INTEGER NOT NULL DEFAULT 0,
     z_min INTEGER NOT NULL DEFAULT 0, z_max INTEGER NOT NULL DEFAULT 0)""",
         "ALTER TABLE maps ADD COLUMN tile_set TEXT",
-        "ALTER TABLE tiles ADD COLUMN animation_name TEXT",
+        "ALTER TABLE tile_templates ADD COLUMN animation_name TEXT",
         "ALTER TABLE items ADD COLUMN collision INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE items ADD COLUMN footprint TEXT",
         "ALTER TABLE items ADD COLUMN collision_mask TEXT",
@@ -74,16 +72,24 @@ def _migrate(con: sqlite3.Connection) -> None:
         except sqlite3.OperationalError:
             pass  # column/table already exists
 
-    # Migrate old tile_sets table (has map_name column) → tile_entries
+    # Migrate old tile_sets table (has map_name column) → tile_entries → tile_sets
     try:
         con.execute("SELECT map_name FROM tile_sets LIMIT 1")
     except sqlite3.OperationalError:
         pass  # already new schema or table doesn't exist
     else:
-        # Old schema — rename, recreate, migrate data
+        # Very old schema with map_name column
         con.execute("ALTER TABLE tile_sets RENAME TO _old_tile_sets")
-        con.execute("CREATE TABLE tile_sets (name TEXT PRIMARY KEY)")
-        con.execute("""INSERT OR IGNORE INTO tile_entries
+        con.execute("""CREATE TABLE tile_sets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tile_set TEXT NOT NULL, w INTEGER NOT NULL DEFAULT 0,
+            x INTEGER NOT NULL, y INTEGER NOT NULL, z INTEGER NOT NULL DEFAULT 0,
+            tile_template TEXT, walkable INTEGER, covered INTEGER,
+            sprite_name TEXT, tile_scale REAL,
+            bounds_n TEXT, bounds_s TEXT, bounds_e TEXT, bounds_w TEXT,
+            bounds_ne TEXT, bounds_nw TEXT, bounds_se TEXT, bounds_sw TEXT,
+            nested_map TEXT)""")
+        con.execute("""INSERT OR IGNORE INTO tile_sets
             (tile_set, w, x, y, z, tile_template, walkable, covered,
              sprite_name, tile_scale, bounds_n, bounds_s, bounds_e, bounds_w,
              bounds_ne, bounds_nw, bounds_se, bounds_sw, nested_map)
@@ -91,9 +97,52 @@ def _migrate(con: sqlite3.Connection) -> None:
              sprite_name, tile_scale, bounds_n, bounds_s, bounds_e, bounds_w,
              bounds_ne, bounds_nw, bounds_se, bounds_sw, nested_map
             FROM _old_tile_sets""")
-        con.execute("INSERT OR IGNORE INTO tile_sets (name) SELECT DISTINCT tile_set FROM tile_entries")
         con.execute("UPDATE maps SET tile_set = name WHERE tile_set IS NULL")
         con.execute("DROP TABLE _old_tile_sets")
+
+    # Migrate tile_entries into tile_sets (consolidation)
+    try:
+        con.execute("SELECT id FROM tile_entries LIMIT 1")
+    except sqlite3.OperationalError:
+        pass  # tile_entries doesn't exist — already migrated or fresh DB
+    else:
+        # tile_entries exists alongside a names-only tile_sets — consolidate
+        con.execute("DROP TABLE IF EXISTS tile_sets")
+        con.execute("ALTER TABLE tile_entries RENAME TO tile_sets")
+
+    # Create convenience view for distinct tile set names
+    con.execute("CREATE VIEW IF NOT EXISTS tile_set_names AS "
+                "SELECT DISTINCT tile_set AS name FROM tile_sets ORDER BY tile_set")
+
+    # Migrate tiles → tile_templates
+    try:
+        con.execute("SELECT key FROM tiles LIMIT 1")
+    except sqlite3.OperationalError:
+        pass  # old table doesn't exist
+    else:
+        con.execute("""INSERT OR IGNORE INTO tile_templates
+            (key, name, walkable, covered, sprite_name, tile_scale,
+             bounds_n, bounds_s, bounds_e, bounds_w,
+             bounds_ne, bounds_nw, bounds_se, bounds_sw)
+            SELECT key, name, walkable, covered, sprite_name, tile_scale,
+             bounds_n, bounds_s, bounds_e, bounds_w,
+             bounds_ne, bounds_nw, bounds_se, bounds_sw
+            FROM tiles""")
+        try:
+            for r in con.execute("SELECT key, animation_name FROM tiles WHERE animation_name IS NOT NULL").fetchall():
+                con.execute("UPDATE tile_templates SET animation_name=? WHERE key=?",
+                            (r['animation_name'], r['key']))
+        except sqlite3.OperationalError:
+            pass
+        con.execute("DROP TABLE tiles")
+
+    # Rename maps.default_tile → maps.default_tile_template
+    try:
+        con.execute("SELECT default_tile FROM maps LIMIT 1")
+    except sqlite3.OperationalError:
+        pass  # already renamed or fresh DB
+    else:
+        con.execute("ALTER TABLE maps RENAME COLUMN default_tile TO default_tile_template")
 
     # Animation tables
     for stmt in [
@@ -175,10 +224,11 @@ def _migrate(con: sqlite3.Connection) -> None:
         "ALTER TABLE composite_anim_keyframes ADD COLUMN tint_g INTEGER",
         "ALTER TABLE composite_anim_keyframes ADD COLUMN tint_b INTEGER",
         "ALTER TABLE composite_anim_keyframes ADD COLUMN opacity REAL NOT NULL DEFAULT 1.0",
-        "ALTER TABLE tile_entries ADD COLUMN warp_map TEXT",
-        "ALTER TABLE tile_entries ADD COLUMN warp_x INTEGER",
-        "ALTER TABLE tile_entries ADD COLUMN warp_y INTEGER",
-        "ALTER TABLE tile_entries ADD COLUMN warp_auto INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE tile_sets ADD COLUMN animation_name TEXT",
+        "ALTER TABLE tile_sets ADD COLUMN warp_map TEXT",
+        "ALTER TABLE tile_sets ADD COLUMN warp_x INTEGER",
+        "ALTER TABLE tile_sets ADD COLUMN warp_y INTEGER",
+        "ALTER TABLE tile_sets ADD COLUMN warp_auto INTEGER NOT NULL DEFAULT 0",
     ]:
         try:
             con.execute(stmt)
@@ -199,7 +249,7 @@ def load(db_path: Path = _DB_PATH) -> None:
         _load_species(con)
         _load_items(con)
         _load_sprites(con)
-        _load_tiles(con)
+        _load_tile_templates(con)
         _load_maps(con)
         _load_animations(con)
         _load_composites(con)
@@ -306,12 +356,12 @@ def _load_items(con: sqlite3.Connection) -> None:
             STRUCTURES[key] = obj
 
 
-def _load_tiles(con: sqlite3.Connection) -> None:
+def _load_tile_templates(con: sqlite3.Connection) -> None:
     from classes.maps import Bounds, Bound
     BOUND_ATTRS = ('n','s','e','w','ne','nw','se','sw')
-    for r in con.execute('SELECT * FROM tiles').fetchall():
+    for r in con.execute('SELECT * FROM tile_templates').fetchall():
         b_kwargs = {a: (Bound(r[f'bounds_{a}']) if r[f'bounds_{a}'] else Bound.NONE) for a in BOUND_ATTRS}
-        TILES[r['key']] = {
+        TILE_TEMPLATES[r['key']] = {
             'name':        r['name'],
             'walkable':    bool(r['walkable']),
             'covered':     bool(r['covered']),
@@ -326,9 +376,9 @@ def _load_maps(con: sqlite3.Connection) -> None:
     from classes.maps import Map, MapKey, Tile, Bounds, Bound
 
     map_rows = con.execute('SELECT * FROM maps').fetchall()
-    te_rows  = con.execute('SELECT * FROM tile_entries ORDER BY tile_set').fetchall()
+    te_rows  = con.execute('SELECT * FROM tile_sets ORDER BY tile_set').fetchall()
 
-    # Index tile_entries by tile_set name
+    # Index tile entries by tile_set name
     entries_by_ts: dict[str, list] = {}
     for r in te_rows:
         entries_by_ts.setdefault(r['tile_set'], []).append(r)
@@ -340,7 +390,7 @@ def _load_maps(con: sqlite3.Connection) -> None:
             tile_set  = {},
             entrance  = (r['entrance_x'], r['entrance_y']),
             name      = r['name'],
-            default_tile = r['default_tile'],
+            default_tile_template = r['default_tile_template'],
             w_min=r['w_min'], w_max=r['w_max'],
             x_min=r['x_min'], x_max=r['x_max'],
             y_min=r['y_min'], y_max=r['y_max'],
@@ -355,7 +405,7 @@ def _load_maps(con: sqlite3.Connection) -> None:
         m = map_objs[r['name']]
         entries = entries_by_ts.get(r['tile_set'], []) if r['tile_set'] else []
         for te in entries:
-            tmpl = TILES.get(te['tile_template']) if te['tile_template'] else {}
+            tmpl = TILE_TEMPLATES.get(te['tile_template']) if te['tile_template'] else {}
             has_bounds = any(te[f'bounds_{a}'] for a in BOUND_ATTRS)
             if has_bounds:
                 b_kwargs = {a: (Bound(te[f'bounds_{a}']) if te[f'bounds_{a}'] else Bound.NONE) for a in BOUND_ATTRS}
@@ -363,23 +413,24 @@ def _load_maps(con: sqlite3.Connection) -> None:
             else:
                 bounds = None
             m.tiles[MapKey(te['w'], te['x'], te['y'], te['z'])] = Tile(
-                template      = tmpl,
-                map           = map_objs.get(te['nested_map']),
-                walkable      = bool(te['walkable']) if te['walkable'] is not None else None,
-                covered       = bool(te['covered'])  if te['covered']  is not None else None,
-                bounds        = bounds,
-                tile_template = te['tile_template'],
-                sprite_name   = te['sprite_name'] or None,
-                tile_scale    = float(te['tile_scale']) if te['tile_scale'] is not None else None,
-                warp_map      = te['warp_map'] or None,
-                warp_x        = te['warp_x'],
-                warp_y        = te['warp_y'],
-                warp_auto     = bool(te['warp_auto']) if te['warp_auto'] is not None else False,
+                template       = tmpl,
+                map            = map_objs.get(te['nested_map']),
+                walkable       = bool(te['walkable']) if te['walkable'] is not None else None,
+                covered        = bool(te['covered'])  if te['covered']  is not None else None,
+                bounds         = bounds,
+                tile_template  = te['tile_template'],
+                sprite_name    = te['sprite_name'] or None,
+                tile_scale     = float(te['tile_scale']) if te['tile_scale'] is not None else None,
+                animation_name = te['animation_name'] or None,
+                warp_map       = te['warp_map'] or None,
+                warp_x         = te['warp_x'],
+                warp_y         = te['warp_y'],
+                warp_auto      = bool(te['warp_auto']) if te['warp_auto'] is not None else False,
             )
 
     # Fill remaining coords with default tile
     for m in map_objs.values():
-        tmpl = TILES.get(m.default_tile) if m.default_tile else None
+        tmpl = TILE_TEMPLATES.get(m.default_tile_template) if m.default_tile_template else None
         if tmpl is None:
             continue
         for w in range(m.w_min, m.w_max + 1):
@@ -390,7 +441,7 @@ def _load_maps(con: sqlite3.Connection) -> None:
                         if key not in m.tiles:
                             m.tiles[key] = Tile(
                                 template      = tmpl,
-                                tile_template = m.default_tile,
+                                tile_template = m.default_tile_template,
                             )
 
 

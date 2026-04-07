@@ -47,9 +47,12 @@ class ItemsTab(ttk.Frame):
 
         btn_row = ttk.Frame(left)
         btn_row.pack(fill=tk.X, pady=4)
-        ttk.Button(btn_row, text='New',    command=self._new).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_row, text='Save',   command=self._save).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_row, text='Delete', command=self._delete).pack(side=tk.LEFT, padx=2)
+        btn_new = ttk.Button(btn_row, text='New',    command=self._new); btn_new.pack(side=tk.LEFT, padx=2)
+        add_tooltip(btn_new, 'Clear form to create a new item')
+        btn_save = ttk.Button(btn_row, text='Save',   command=self._save); btn_save.pack(side=tk.LEFT, padx=2)
+        add_tooltip(btn_save, 'Save the current item to the database')
+        btn_del = ttk.Button(btn_row, text='Delete', command=self._delete); btn_del.pack(side=tk.LEFT, padx=2)
+        add_tooltip(btn_del, 'Delete the selected item')
 
         right_outer = ttk.Frame(pane)
         pane.add(right_outer, weight=1)
@@ -197,7 +200,8 @@ class ItemsTab(ttk.Frame):
             self.sprite_preview = SpritePreview(p, size=PREVIEW_SIZE)
             self.sprite_preview.pack(side=tk.LEFT)
             self.sprite_cb.bind('<<ComboboxSelected>>', self._on_sprite_change)
-        add_row('sprite', 'Sprite', _build_sprite)
+        add_row('sprite', 'Sprite', _build_sprite,
+                'Sprite used to display this item in the world')
 
         f.columnconfigure(1, weight=1)
         self._refresh_visible_fields()

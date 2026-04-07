@@ -1,8 +1,16 @@
 {
   "permissions": {
+    "defaultMode": "dontAsk",
     "allow": [
-      "Bash(python *)",
-      "Bash(python3 *)"
+      "Bash(*)",
+      "Read",
+      "Edit",
+      "Write",
+      "Glob",
+      "Grep",
+      "Agent",
+      "TodoWrite",
+      "Skill"
     ]
   }
 }

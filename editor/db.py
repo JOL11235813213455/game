@@ -83,10 +83,10 @@ def fetch_sprite(name: str) -> dict | None:
         con.close()
 
 
-def fetch_tile_keys() -> list[str]:
+def fetch_tile_template_keys() -> list[str]:
     con = get_con()
     try:
-        return [r['key'] for r in con.execute('SELECT key FROM tiles ORDER BY key').fetchall()]
+        return [r['key'] for r in con.execute('SELECT key FROM tile_templates ORDER BY key').fetchall()]
     finally:
         con.close()
 
@@ -94,7 +94,7 @@ def fetch_tile_keys() -> list[str]:
 def fetch_tile_set_names() -> list[str]:
     con = get_con()
     try:
-        return [r['name'] for r in con.execute('SELECT name FROM tile_sets ORDER BY name').fetchall()]
+        return [r['name'] for r in con.execute('SELECT name FROM tile_set_names').fetchall()]
     finally:
         con.close()
 
@@ -117,7 +117,7 @@ def migrate_db():
             "ALTER TABLE sprites ADD COLUMN action_point_x INTEGER",
             "ALTER TABLE sprites ADD COLUMN action_point_y INTEGER",
             "ALTER TABLE items   ADD COLUMN tile_scale REAL NOT NULL DEFAULT 1.0",
-            "ALTER TABLE tiles   ADD COLUMN animation_name TEXT",
+            "ALTER TABLE tile_templates ADD COLUMN animation_name TEXT",
             "ALTER TABLE items   ADD COLUMN collision INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE items   ADD COLUMN footprint TEXT",
             "ALTER TABLE items   ADD COLUMN collision_mask TEXT",
@@ -126,14 +126,13 @@ def migrate_db():
             "ALTER TABLE species ADD COLUMN tile_scale REAL NOT NULL DEFAULT 1.0",
             "ALTER TABLE species ADD COLUMN composite_name TEXT",
             "ALTER TABLE sprites ADD COLUMN sprite_set TEXT",
-            """CREATE TABLE IF NOT EXISTS tiles (
+            """CREATE TABLE IF NOT EXISTS tile_templates (
     key TEXT PRIMARY KEY, name TEXT NOT NULL DEFAULT '',
     walkable INTEGER NOT NULL DEFAULT 1, covered INTEGER NOT NULL DEFAULT 0,
     sprite_name TEXT, tile_scale REAL NOT NULL DEFAULT 1.0,
     bounds_n TEXT, bounds_s TEXT, bounds_e TEXT, bounds_w TEXT,
     bounds_ne TEXT, bounds_nw TEXT, bounds_se TEXT, bounds_sw TEXT)""",
-            "CREATE TABLE IF NOT EXISTS tile_sets (name TEXT PRIMARY KEY)",
-            """CREATE TABLE IF NOT EXISTS tile_entries (
+            """CREATE TABLE IF NOT EXISTS tile_sets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     tile_set TEXT NOT NULL, w INTEGER NOT NULL DEFAULT 0,
     x INTEGER NOT NULL, y INTEGER NOT NULL, z INTEGER NOT NULL DEFAULT 0,
@@ -143,7 +142,7 @@ def migrate_db():
     bounds_ne TEXT, bounds_nw TEXT, bounds_se TEXT, bounds_sw TEXT,
     nested_map TEXT)""",
             """CREATE TABLE IF NOT EXISTS maps (
-    name TEXT PRIMARY KEY, tile_set TEXT, default_tile TEXT,
+    name TEXT PRIMARY KEY, tile_set TEXT, default_tile_template TEXT,
     entrance_x INTEGER NOT NULL DEFAULT 0, entrance_y INTEGER NOT NULL DEFAULT 0,
     w_min INTEGER NOT NULL DEFAULT 0, w_max INTEGER NOT NULL DEFAULT 0,
     x_min INTEGER NOT NULL DEFAULT 0, x_max INTEGER NOT NULL DEFAULT 0,
@@ -155,15 +154,23 @@ def migrate_db():
                 con.execute(stmt)
             except sqlite3.OperationalError:
                 pass  # column/table already exists
-        # Migrate old tile_sets table (has map_name column) → tile_entries
+        # Migrate old tile_sets table (has map_name column)
         try:
             con.execute("SELECT map_name FROM tile_sets LIMIT 1")
         except sqlite3.OperationalError:
             pass  # already new schema or table doesn't exist
         else:
             con.execute("ALTER TABLE tile_sets RENAME TO _old_tile_sets")
-            con.execute("CREATE TABLE tile_sets (name TEXT PRIMARY KEY)")
-            con.execute("""INSERT OR IGNORE INTO tile_entries
+            con.execute("""CREATE TABLE tile_sets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tile_set TEXT NOT NULL, w INTEGER NOT NULL DEFAULT 0,
+                x INTEGER NOT NULL, y INTEGER NOT NULL, z INTEGER NOT NULL DEFAULT 0,
+                tile_template TEXT, walkable INTEGER, covered INTEGER,
+                sprite_name TEXT, tile_scale REAL,
+                bounds_n TEXT, bounds_s TEXT, bounds_e TEXT, bounds_w TEXT,
+                bounds_ne TEXT, bounds_nw TEXT, bounds_se TEXT, bounds_sw TEXT,
+                nested_map TEXT)""")
+            con.execute("""INSERT OR IGNORE INTO tile_sets
                 (tile_set, w, x, y, z, tile_template, walkable, covered,
                  sprite_name, tile_scale, bounds_n, bounds_s, bounds_e, bounds_w,
                  bounds_ne, bounds_nw, bounds_se, bounds_sw, nested_map)
@@ -171,9 +178,49 @@ def migrate_db():
                  sprite_name, tile_scale, bounds_n, bounds_s, bounds_e, bounds_w,
                  bounds_ne, bounds_nw, bounds_se, bounds_sw, nested_map
                 FROM _old_tile_sets""")
-            con.execute("INSERT OR IGNORE INTO tile_sets (name) SELECT DISTINCT tile_set FROM tile_entries")
             con.execute("UPDATE maps SET tile_set = name WHERE tile_set IS NULL")
             con.execute("DROP TABLE _old_tile_sets")
+        # Migrate tile_entries into tile_sets (consolidation)
+        try:
+            con.execute("SELECT id FROM tile_entries LIMIT 1")
+        except sqlite3.OperationalError:
+            pass
+        else:
+            con.execute("DROP TABLE IF EXISTS tile_sets")
+            con.execute("ALTER TABLE tile_entries RENAME TO tile_sets")
+        # Create convenience view for distinct tile set names
+        con.execute("CREATE VIEW IF NOT EXISTS tile_set_names AS "
+                    "SELECT DISTINCT tile_set AS name FROM tile_sets ORDER BY tile_set")
+        # Migrate tiles → tile_templates
+        try:
+            con.execute("SELECT key FROM tiles LIMIT 1")
+        except sqlite3.OperationalError:
+            pass  # old table doesn't exist
+        else:
+            # Merge data from old tiles into tile_templates
+            con.execute("""INSERT OR IGNORE INTO tile_templates
+                (key, name, walkable, covered, sprite_name, tile_scale,
+                 bounds_n, bounds_s, bounds_e, bounds_w,
+                 bounds_ne, bounds_nw, bounds_se, bounds_sw)
+                SELECT key, name, walkable, covered, sprite_name, tile_scale,
+                 bounds_n, bounds_s, bounds_e, bounds_w,
+                 bounds_ne, bounds_nw, bounds_se, bounds_sw
+                FROM tiles""")
+            # Copy animation_name if the old table had it
+            try:
+                for r in con.execute("SELECT key, animation_name FROM tiles WHERE animation_name IS NOT NULL").fetchall():
+                    con.execute("UPDATE tile_templates SET animation_name=? WHERE key=?",
+                                (r['animation_name'], r['key']))
+            except sqlite3.OperationalError:
+                pass
+            con.execute("DROP TABLE tiles")
+        # Rename maps.default_tile → maps.default_tile_template
+        try:
+            con.execute("SELECT default_tile FROM maps LIMIT 1")
+        except sqlite3.OperationalError:
+            pass
+        else:
+            con.execute("ALTER TABLE maps RENAME COLUMN default_tile TO default_tile_template")
         # Animation tables
         for stmt in [
             """CREATE TABLE IF NOT EXISTS animations (
@@ -253,10 +300,11 @@ def migrate_db():
             "ALTER TABLE composite_anim_keyframes ADD COLUMN tint_g INTEGER",
             "ALTER TABLE composite_anim_keyframes ADD COLUMN tint_b INTEGER",
             "ALTER TABLE composite_anim_keyframes ADD COLUMN opacity REAL NOT NULL DEFAULT 1.0",
-            "ALTER TABLE tile_entries ADD COLUMN warp_map TEXT",
-            "ALTER TABLE tile_entries ADD COLUMN warp_x INTEGER",
-            "ALTER TABLE tile_entries ADD COLUMN warp_y INTEGER",
-            "ALTER TABLE tile_entries ADD COLUMN warp_auto INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE tile_sets ADD COLUMN animation_name TEXT",
+            "ALTER TABLE tile_sets ADD COLUMN warp_map TEXT",
+            "ALTER TABLE tile_sets ADD COLUMN warp_x INTEGER",
+            "ALTER TABLE tile_sets ADD COLUMN warp_y INTEGER",
+            "ALTER TABLE tile_sets ADD COLUMN warp_auto INTEGER NOT NULL DEFAULT 0",
         ]:
             try:
                 con.execute(stmt)
