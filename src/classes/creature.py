@@ -82,7 +82,7 @@ class Creature(WorldObject):
         (-1, 0): 'walk_west',  (1, 0): 'walk_east',
         (-1, -1): 'walk_north', (1, -1): 'walk_north',
         (-1,  1): 'walk_south', (1,  1): 'walk_south',
-    }
+        }
 
     @staticmethod
     def _tile_blocked(game_map, x: int, y: int) -> bool:
