@@ -6,11 +6,10 @@ from editor.items_tab import ItemsTab
 from editor.species_tab import SpeciesTab
 from editor.sprites_tab import SpritesTab
 from editor.tiles_tab import TilesTab
-from editor.tile_sets_tab import TileSetsTab
-from editor.maps_tab import MapsTab
 from editor.animations_tab import AnimationsTab
 from editor.composites_tab import CompositesTab
 from editor.sql_tab import SqlTab
+from editor.map_editor_tab import MapEditorTab
 
 
 class EditorApp(tk.Tk):
@@ -43,39 +42,34 @@ class EditorApp(tk.Tk):
         gfx_notebook.add(self.anims_tab,      text='  Simple  ')
         gfx_notebook.add(self.composites_tab, text='  Composite  ')
 
+        self.map_editor_tab = MapEditorTab(notebook)
         self.tiles_tab     = TilesTab(notebook)
-        self.tile_sets_tab = TileSetsTab(notebook)
-        self.maps_tab      = MapsTab(notebook)
         self.species_tab   = SpeciesTab(notebook)
         self.items_tab     = ItemsTab(notebook)
         self.sql_tab       = SqlTab(notebook)
 
+        notebook.add(self.map_editor_tab, text='  Map Editor  ')
         notebook.add(self.tiles_tab,     text='  Tile Templates  ')
-        notebook.add(self.tile_sets_tab, text='  Tile Sets  ')
-        notebook.add(self.maps_tab,      text='  Maps  ')
         notebook.add(self.species_tab,   text='  Species  ')
         notebook.add(self.items_tab,     text='  Items  ')
         notebook.add(self.sql_tab,       text='  SQL  ')
 
         gfx_notebook.bind('<<NotebookTabChanged>>', self._on_tab_changed)
-
         notebook.bind('<<NotebookTabChanged>>', self._on_tab_changed)
 
     def _on_sprites_changed(self):
         self.items_tab.refresh_sprite_dropdown()
         self.species_tab.refresh_sprite_dropdown()
         self.tiles_tab.refresh_sprite_dropdown()
-        self.tile_sets_tab.refresh_sprite_dropdown()
 
     def _on_tab_changed(self, event):
         tab = event.widget.tab(event.widget.select(), 'text').strip()
-        if tab in ('Items', 'Species', 'Tile Templates', 'Tile Sets'):
+        if tab in ('Items', 'Species', 'Tile Templates'):
             self.items_tab.refresh_sprite_dropdown()
             self.species_tab.refresh_sprite_dropdown()
             self.tiles_tab.refresh_sprite_dropdown()
-            self.tile_sets_tab.refresh_sprite_dropdown()
-        if tab == 'Maps':
-            self.maps_tab.refresh_tile_set_dropdown()
+        if tab == 'Map Editor':
+            self.map_editor_tab.refresh_dropdowns()
         if tab in ('Simple', 'Animations'):
             self.anims_tab.refresh_dropdowns()
         if tab in ('Composite', 'Composites'):

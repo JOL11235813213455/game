@@ -7,7 +7,7 @@ def make_map(cols, rows, nested_map=None):
     for x in range(cols):
         for y in range(rows):
             walkable = random.random() > 0.3
-            tiles[MapKey(0, x, y, 0)] = Tile(
+            tiles[MapKey(x, y, 0)] = Tile(
                 walkable=walkable,
                 sprite_name='grass_frame_1' if walkable else None,
                 animation_name='grass_breeze' if walkable else None,

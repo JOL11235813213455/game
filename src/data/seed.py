@@ -77,12 +77,12 @@ CREATE TABLE IF NOT EXISTS tile_templates (
     tile_scale  REAL NOT NULL DEFAULT 1.0,
     bounds_n    TEXT, bounds_s TEXT, bounds_e TEXT, bounds_w  TEXT,
     bounds_ne   TEXT, bounds_nw TEXT, bounds_se TEXT, bounds_sw TEXT,
-    animation_name TEXT REFERENCES animations(name)
+    animation_name TEXT REFERENCES animations(name),
+    stat_mods     TEXT
 );
 CREATE TABLE IF NOT EXISTS tile_sets (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     tile_set      TEXT NOT NULL,
-    w             INTEGER NOT NULL DEFAULT 0,
     x             INTEGER NOT NULL,
     y             INTEGER NOT NULL,
     z             INTEGER NOT NULL DEFAULT 0,
@@ -93,7 +93,14 @@ CREATE TABLE IF NOT EXISTS tile_sets (
     tile_scale    REAL,
     bounds_n      TEXT, bounds_s TEXT, bounds_e TEXT, bounds_w  TEXT,
     bounds_ne     TEXT, bounds_nw TEXT, bounds_se TEXT, bounds_sw TEXT,
-    nested_map    TEXT REFERENCES maps(name)
+    nested_map    TEXT REFERENCES maps(name),
+    linked_map    TEXT REFERENCES maps(name),
+    linked_x      INTEGER,
+    linked_y      INTEGER,
+    linked_z      INTEGER,
+    link_auto     INTEGER NOT NULL DEFAULT 0,
+    stat_mods     TEXT,
+    animation_name TEXT
 );
 CREATE VIEW IF NOT EXISTS tile_set_names AS
     SELECT DISTINCT tile_set AS name FROM tile_sets ORDER BY tile_set;
@@ -103,7 +110,6 @@ CREATE TABLE IF NOT EXISTS maps (
     default_tile_template TEXT REFERENCES tile_templates(key),
     entrance_x   INTEGER NOT NULL DEFAULT 0,
     entrance_y   INTEGER NOT NULL DEFAULT 0,
-    w_min INTEGER NOT NULL DEFAULT 0,  w_max INTEGER NOT NULL DEFAULT 0,
     x_min INTEGER NOT NULL DEFAULT 0,  x_max INTEGER NOT NULL DEFAULT 0,
     y_min INTEGER NOT NULL DEFAULT 0,  y_max INTEGER NOT NULL DEFAULT 0,
     z_min INTEGER NOT NULL DEFAULT 0,  z_max INTEGER NOT NULL DEFAULT 0

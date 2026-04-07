@@ -109,23 +109,21 @@ class TilesTab(ttk.Frame):
             row=r, column=0, columnspan=2, sticky='w', padx=6, pady=(4, 2))
         r += 1
 
-        bound_values = ['', 'wall', 'opening', 'door_open', 'door_closed',
-                        'gate_open', 'gate_closed']
         self._bound_vars = {}
         bound_tips = {
-            'n': 'North edge boundary', 's': 'South edge boundary',
-            'e': 'East edge boundary', 'w': 'West edge boundary',
-            'ne': 'Northeast corner boundary', 'nw': 'Northwest corner boundary',
-            'se': 'Southeast corner boundary', 'sw': 'Southwest corner boundary',
+            'n': 'North edge traversable', 's': 'South edge traversable',
+            'e': 'East edge traversable', 'w': 'West edge traversable',
+            'ne': 'NE corner traversable', 'nw': 'NW corner traversable',
+            'se': 'SE corner traversable', 'sw': 'SW corner traversable',
         }
+        ttk.Label(f, text='(checked = traversable)').grid(
+            row=r, column=0, columnspan=2, sticky='w', padx=6, pady=(0, 2))
+        r += 1
         for direction in ('n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'):
-            ttk.Label(f, text=f'Bound {direction.upper()}').grid(
-                row=r, column=0, sticky='w', padx=6, pady=2)
-            var = tk.StringVar()
+            var = tk.BooleanVar(value=True)
             self._bound_vars[direction] = var
-            cb = ttk.Combobox(f, textvariable=var, values=bound_values,
-                              state='readonly', width=14)
-            cb.grid(row=r, column=1, sticky='w', padx=6, pady=2)
+            cb = ttk.Checkbutton(f, text=f'{direction.upper()}', variable=var)
+            cb.grid(row=r, column=0, columnspan=2, sticky='w', padx=6, pady=1)
             add_tooltip(cb, bound_tips[direction])
             r += 1
 
@@ -158,7 +156,7 @@ class TilesTab(ttk.Frame):
         self.v_animation.set('')
         self.sprite_preview.load(None)
         for var in self._bound_vars.values():
-            var.set('')
+            var.set(True)
 
     def _populate_form(self, key: str):
         con = get_con()
@@ -177,7 +175,8 @@ class TilesTab(ttk.Frame):
         self.v_animation.set(row['animation_name'] or '')
         self.sprite_preview.load(row['sprite_name'] or None)
         for d in self._bound_vars:
-            self._bound_vars[d].set(row[f'bounds_{d}'] or '')
+            val = row[f'bounds_{d}']
+            self._bound_vars[d].set(val != 0 if val is not None else True)
 
     def _on_select(self, event=None):
         sel = self.listbox.curselection()
@@ -199,7 +198,7 @@ class TilesTab(ttk.Frame):
             ts = 1.0
         con = get_con()
         try:
-            bounds = {d: (self._bound_vars[d].get().strip() or None)
+            bounds = {d: (1 if self._bound_vars[d].get() else 0)
                       for d in ('n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw')}
             con.execute(
                 '''INSERT INTO tile_templates (key, name, walkable, covered, sprite_name,

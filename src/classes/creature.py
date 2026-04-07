@@ -1,7 +1,7 @@
 from __future__ import annotations
 from enum import Enum
 import random
-from classes.maps import Map, MapKey, BOUND_TRAVERSABLE, DIRECTION_BOUNDS
+from classes.maps import Map, MapKey, DIRECTION_BOUNDS
 from classes.inventory import Inventory
 from classes.world_object import WorldObject
 from classes.levels import level_from_exp, cumulative_exp
@@ -102,49 +102,48 @@ class Creature(WorldObject):
         nx = max(0, min(cols - 1, self.location.x + dx))
         ny = max(0, min(rows - 1, self.location.y + dy))
         current_tile = self.current_map.tiles.get(self.location)
-        target = self.current_map.tiles.get(MapKey(self.location.w, nx, ny, self.location.z))
+        target = self.current_map.tiles.get(MapKey(nx, ny, self.location.z))
         if not (target and target.walkable):
             return
         if current_tile and (dx, dy) in DIRECTION_BOUNDS:
             exit_attr, entry_attr = DIRECTION_BOUNDS[(dx, dy)]
-            exit_bound = getattr(current_tile.bounds, exit_attr)
-            entry_bound = getattr(target.bounds, entry_attr)
-            if not BOUND_TRAVERSABLE[exit_bound] or not BOUND_TRAVERSABLE[entry_bound]:
+            if not getattr(current_tile.bounds, exit_attr) or not getattr(target.bounds, entry_attr):
                 return
         if self._tile_blocked(self.current_map, nx, ny):
             return
         self.location = self.location._replace(x=nx, y=ny)
         behavior = self._DIR_BEHAVIORS.get((dx, dy), 'walk_south')
         self.play_animation(behavior)
-        # Auto-warp: if the new tile has warp_auto, teleport immediately
+        # Auto-link: if the new tile has link_auto, teleport immediately
         landed = self.current_map.tiles.get(self.location)
-        if landed and landed.warp_auto and landed.warp_map:
-            self._do_warp(landed)
+        if landed and landed.link_auto and landed.linked_map:
+            self._do_link(landed)
 
-    def _do_warp(self, tile):
-        """Teleport to another map/location based on tile warp fields."""
+    def _do_link(self, tile):
+        """Teleport to another map/location based on tile link fields."""
         from data.db import MAPS
-        target_map = MAPS.get(tile.warp_map)
+        target_map = MAPS.get(tile.linked_map)
         if target_map is None:
             return False
         self.map_stack.append((self.current_map, self.location))
         self.current_map = target_map
-        wx = tile.warp_x if tile.warp_x is not None else target_map.entrance[0]
-        wy = tile.warp_y if tile.warp_y is not None else target_map.entrance[1]
-        self.location = MapKey(0, wx, wy, 0)
+        if tile.linked_location is not None:
+            self.location = tile.linked_location
+        else:
+            self.location = MapKey(*target_map.entrance, 0)
         return True
 
     def enter(self):
-        # Check tile warp (enter-key triggered) first
+        # Check tile link (enter-key triggered) first
         tile = self.current_map.tiles.get(self.location)
-        if tile and tile.warp_map and not tile.warp_auto:
-            if self._do_warp(tile):
+        if tile and tile.linked_map and not tile.link_auto:
+            if self._do_link(tile):
                 return True
         # Check tile nested maps
         if tile and tile.nested_map is not None:
             self.map_stack.append((self.current_map, self.location))
             self.current_map = tile.nested_map
-            self.location = MapKey(0, *self.current_map.entrance, 0)
+            self.location = MapKey(*self.current_map.entrance, 0)
             return True
         # Check structure entry points
         from classes.inventory import Structure
@@ -163,14 +162,14 @@ class Creature(WorldObject):
                 self.current_map = nested
                 ep = s.entry_points.get(offset_key)
                 if ep:
-                    self.location = MapKey(0, ep[0], ep[1], 0)
+                    self.location = MapKey(ep[0], ep[1], 0)
                 else:
-                    self.location = MapKey(0, *self.current_map.entrance, 0)
+                    self.location = MapKey(*self.current_map.entrance, 0)
                 return True
         return False
 
     def exit(self):
-        entrance = MapKey(0, *self.current_map.entrance, 0)
+        entrance = MapKey(*self.current_map.entrance, 0)
         if self.location == entrance:
             if self.map_stack:
                 self.current_map, self.location = self.map_stack.pop()
