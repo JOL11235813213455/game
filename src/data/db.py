@@ -254,6 +254,8 @@ def _migrate(con: sqlite3.Connection) -> None:
         "ALTER TABLE tile_templates ADD COLUMN speed_modifier REAL NOT NULL DEFAULT 1.0",
         "ALTER TABLE tile_sets ADD COLUMN search_text TEXT",
         "ALTER TABLE tile_sets ADD COLUMN speed_modifier REAL",
+        "ALTER TABLE tile_templates ADD COLUMN bg_color TEXT",
+        "ALTER TABLE tile_sets ADD COLUMN bg_color TEXT",
     ]:
         try:
             con.execute(stmt)
@@ -392,6 +394,7 @@ def _load_tile_templates(con: sqlite3.Connection) -> None:
             'animation_name': r['animation_name'],
             'stat_mods':   json.loads(r['stat_mods']) if r['stat_mods'] else {},
             'speed_modifier': r['speed_modifier'] if r['speed_modifier'] is not None else 1.0,
+            'bg_color': r['bg_color'],
         }
 
 
@@ -451,6 +454,7 @@ def _load_maps(con: sqlite3.Connection) -> None:
                 link_auto      = bool(te['link_auto']) if te['link_auto'] is not None else False,
                 stat_mods      = json.loads(te['stat_mods']) if te['stat_mods'] else None,
                 speed_modifier = float(te['speed_modifier']) if te['speed_modifier'] is not None else None,
+                bg_color       = te['bg_color'] or None,
             )
 
     # Fill remaining coords with default tile

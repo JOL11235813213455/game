@@ -77,7 +77,8 @@ CREATE TABLE IF NOT EXISTS tile_templates (
     tile_scale     REAL NOT NULL DEFAULT 1.0,
     animation_name TEXT REFERENCES animations(name),
     stat_mods      TEXT,
-    speed_modifier REAL NOT NULL DEFAULT 1.0
+    speed_modifier REAL NOT NULL DEFAULT 1.0,
+    bg_color       TEXT
 );
 CREATE TABLE IF NOT EXISTS tile_sets (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -101,7 +102,8 @@ CREATE TABLE IF NOT EXISTS tile_sets (
     stat_mods      TEXT,
     animation_name TEXT,
     search_text    TEXT,
-    speed_modifier REAL
+    speed_modifier REAL,
+    bg_color       TEXT
 );
 CREATE VIEW IF NOT EXISTS tile_set_names AS
     SELECT DISTINCT tile_set AS name FROM tile_sets ORDER BY tile_set;

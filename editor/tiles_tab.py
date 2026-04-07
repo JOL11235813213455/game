@@ -108,6 +108,13 @@ class TilesTab(ttk.Frame):
         add_tooltip(e_speed, 'Movement speed multiplier (1.0 = normal, 0.5 = half speed, 2.0 = double)')
         r += 1
 
+        ttk.Label(f, text='BG Color').grid(row=r, column=0, sticky='w', padx=6, pady=4)
+        self.v_bg_color = tk.StringVar()
+        e_bg = ttk.Entry(f, textvariable=self.v_bg_color, width=10)
+        e_bg.grid(row=r, column=1, sticky='w', padx=6, pady=4)
+        add_tooltip(e_bg, 'Background fill color as hex RGB (e.g. #3a7a3a). Empty = transparent')
+        r += 1
+
         f.columnconfigure(1, weight=1)
 
     def refresh_list(self):
@@ -136,6 +143,7 @@ class TilesTab(ttk.Frame):
         self.v_sprite.set('')
         self.v_animation.set('')
         self.v_speed_modifier.set('1.0')
+        self.v_bg_color.set('')
         self.sprite_preview.load(None)
 
     def _populate_form(self, key: str):
@@ -154,6 +162,7 @@ class TilesTab(ttk.Frame):
         self.v_sprite.set(row['sprite_name'] or '')
         self.v_animation.set(row['animation_name'] or '')
         self.v_speed_modifier.set(str(row['speed_modifier'] if row['speed_modifier'] is not None else 1.0))
+        self.v_bg_color.set(row['bg_color'] or '')
         self.sprite_preview.load(row['sprite_name'] or None)
 
     def _on_select(self, event=None):
@@ -191,18 +200,19 @@ class TilesTab(ttk.Frame):
             sm = 1.0
         con = get_con()
         try:
+            bg = self.v_bg_color.get().strip() or None
             con.execute(
                 '''INSERT INTO tile_templates (key, name, walkable, covered, sprite_name,
-                   tile_scale, animation_name, speed_modifier)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                   tile_scale, animation_name, speed_modifier, bg_color)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(key) DO UPDATE SET
                    name=excluded.name, walkable=excluded.walkable,
                    covered=excluded.covered, sprite_name=excluded.sprite_name,
                    tile_scale=excluded.tile_scale, animation_name=excluded.animation_name,
-                   speed_modifier=excluded.speed_modifier''',
+                   speed_modifier=excluded.speed_modifier, bg_color=excluded.bg_color''',
                 (key, self.v_name.get().strip(), int(self.v_walkable.get()),
                  int(self.v_covered.get()), self.v_sprite.get().strip() or None, ts,
-                 self.v_animation.get().strip() or None, sm)
+                 self.v_animation.get().strip() or None, sm, bg)
             )
             con.commit()
         except sqlite3.Error as e:

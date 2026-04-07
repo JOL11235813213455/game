@@ -42,19 +42,27 @@ class EditorApp(tk.Tk):
         gfx_notebook.add(self.anims_tab,      text='  Simple  ')
         gfx_notebook.add(self.composites_tab, text='  Composite  ')
 
-        self.map_editor_tab = MapEditorTab(notebook)
-        self.tiles_tab     = TilesTab(notebook)
+        # Maps group — nested notebook
+        maps_frame = ttk.Frame(notebook)
+        notebook.add(maps_frame, text='  Maps  ')
+        maps_notebook = ttk.Notebook(maps_frame)
+        maps_notebook.pack(fill=tk.BOTH, expand=True)
+
+        self.map_editor_tab = MapEditorTab(maps_notebook)
+        self.tiles_tab     = TilesTab(maps_notebook)
+        maps_notebook.add(self.map_editor_tab, text='  Map Editor  ')
+        maps_notebook.add(self.tiles_tab,     text='  Tile Templates  ')
+
         self.species_tab   = SpeciesTab(notebook)
         self.items_tab     = ItemsTab(notebook)
         self.sql_tab       = SqlTab(notebook)
 
-        notebook.add(self.map_editor_tab, text='  Map Editor  ')
-        notebook.add(self.tiles_tab,     text='  Tile Templates  ')
         notebook.add(self.species_tab,   text='  Species  ')
         notebook.add(self.items_tab,     text='  Items  ')
         notebook.add(self.sql_tab,       text='  SQL  ')
 
         gfx_notebook.bind('<<NotebookTabChanged>>', self._on_tab_changed)
+        maps_notebook.bind('<<NotebookTabChanged>>', self._on_tab_changed)
         notebook.bind('<<NotebookTabChanged>>', self._on_tab_changed)
 
     def _on_sprites_changed(self):
@@ -64,11 +72,11 @@ class EditorApp(tk.Tk):
 
     def _on_tab_changed(self, event):
         tab = event.widget.tab(event.widget.select(), 'text').strip()
-        if tab in ('Items', 'Species', 'Tile Templates'):
+        if tab in ('Items', 'Species', 'Tile Templates', 'Maps'):
             self.items_tab.refresh_sprite_dropdown()
             self.species_tab.refresh_sprite_dropdown()
             self.tiles_tab.refresh_sprite_dropdown()
-        if tab == 'Map Editor':
+        if tab in ('Map Editor', 'Maps'):
             self.map_editor_tab.refresh_dropdowns()
         if tab in ('Simple', 'Animations'):
             self.anims_tab.refresh_dropdowns()
