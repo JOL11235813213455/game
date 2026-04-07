@@ -49,7 +49,7 @@ class TilePalette(ttk.Frame):
         list_f.pack(fill=tk.BOTH, expand=True, padx=4, pady=2)
 
         self._listbox = tk.Listbox(list_f, exportselection=False,
-                                    width=20, height=20,
+                                    width=20, height=6,
                                     font=('Courier', 9))
         sb = ttk.Scrollbar(list_f, orient=tk.VERTICAL,
                             command=self._listbox.yview)

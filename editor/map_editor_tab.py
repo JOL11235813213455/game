@@ -4,7 +4,8 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 
 from editor.db import (get_con, fetch_tile_template_keys, fetch_tile_set_names,
-                        fetch_map_names)
+                        fetch_map_names, fetch_sprite_names,
+                        fetch_animation_names)
 from editor.map_canvas import MapCanvas
 from editor.tile_palette import TilePalette
 from editor.tooltip import add_tooltip
@@ -38,11 +39,11 @@ class MapEditorTab(ttk.Frame):
          'Whether creatures can walk on this tile'),
         ('covered', 'Covered', 'check',
          'Whether this tile acts as a roof/ceiling'),
-        ('sprite_name', 'Sprite', 'entry',
+        ('sprite_name', 'Sprite', 'combo_sprite',
          'Override sprite (leave empty to use template)'),
         ('tile_scale', 'Tile Scale', 'entry',
          'Visual scale multiplier (1.0 = normal)'),
-        ('animation_name', 'Animation', 'entry',
+        ('animation_name', 'Animation', 'combo_anim',
          'Animation to play on this tile'),
         ('search_text', 'Search Text', 'entry',
          'Arbitrary text for searching/filtering tiles'),
@@ -168,6 +169,20 @@ class MapEditorTab(ttk.Frame):
         add_tooltip(z_up, 'Go up one Z level')
         r += 1
 
+        ttk.Label(meta_f, text='Z range').grid(row=r, column=0, sticky='w', padx=2, pady=2)
+        zr_f = ttk.Frame(meta_f)
+        zr_f.grid(row=r, column=1, sticky='w', padx=2, pady=2)
+        self.v_z_min = tk.StringVar(value='0')
+        self.v_z_max = tk.StringVar(value='0')
+        e_zmin = ttk.Entry(zr_f, textvariable=self.v_z_min, width=4)
+        e_zmin.pack(side=tk.LEFT, padx=(0, 2))
+        add_tooltip(e_zmin, 'Z minimum coordinate')
+        ttk.Label(zr_f, text='to').pack(side=tk.LEFT, padx=2)
+        e_zmax = ttk.Entry(zr_f, textvariable=self.v_z_max, width=4)
+        e_zmax.pack(side=tk.LEFT)
+        add_tooltip(e_zmax, 'Z maximum coordinate')
+        r += 1
+
         meta_f.columnconfigure(1, weight=1)
 
         # Coordinate display
@@ -225,7 +240,7 @@ class MapEditorTab(ttk.Frame):
             canvas_frame,
             text='Click: paint | Shift+click: range select | '
                  'Ctrl+click: toggle select | Right-click: context menu | '
-                 'Middle-drag: pan | Scroll: zoom',
+                 'Scroll: pan | Shift+scroll: pan horiz | Ctrl+scroll: zoom',
             font=('TkDefaultFont', 8), foreground='#888888')
         hint.pack(fill=tk.X, padx=4, pady=(0, 2))
 
@@ -282,6 +297,8 @@ class MapEditorTab(ttk.Frame):
         self._prop_widgets = {}  # field_key → {var, widget, label, type}
         tmpl_vals = [''] + fetch_tile_template_keys()
         map_vals = [''] + fetch_map_names()
+        sprite_vals = [''] + fetch_sprite_names()
+        anim_vals = [''] + fetch_animation_names()
 
         r = 0
         for field_key, label_text, wtype, tip in self._PROP_FIELDS:
@@ -298,6 +315,12 @@ class MapEditorTab(ttk.Frame):
             elif wtype == 'combo_map':
                 w = ttk.Combobox(self._prop_inner, textvariable=var,
                                   values=map_vals, width=14)
+            elif wtype == 'combo_sprite':
+                w = ttk.Combobox(self._prop_inner, textvariable=var,
+                                  values=sprite_vals, width=14)
+            elif wtype == 'combo_anim':
+                w = ttk.Combobox(self._prop_inner, textvariable=var,
+                                  values=anim_vals, width=14)
             else:
                 w = ttk.Entry(self._prop_inner, textvariable=var, width=16)
             w.grid(row=r, column=1, sticky='ew', padx=2, pady=2)
@@ -474,6 +497,8 @@ class MapEditorTab(ttk.Frame):
         """Refresh combo values in the properties panel."""
         tmpl_vals = [''] + fetch_tile_template_keys()
         map_vals = [''] + fetch_map_names()
+        sprite_vals = [''] + fetch_sprite_names()
+        anim_vals = [''] + fetch_animation_names()
         for field_key, info in self._prop_widgets.items():
             fdef = next((f for f in self._PROP_FIELDS if f[0] == field_key), None)
             if not fdef:
@@ -483,6 +508,10 @@ class MapEditorTab(ttk.Frame):
                 info['widget']['values'] = tmpl_vals
             elif wtype == 'combo_map':
                 info['widget']['values'] = map_vals
+            elif wtype == 'combo_sprite':
+                info['widget']['values'] = sprite_vals
+            elif wtype == 'combo_anim':
+                info['widget']['values'] = anim_vals
 
     # ------------------------------------------------------------------
     # Map list
@@ -535,6 +564,8 @@ class MapEditorTab(ttk.Frame):
             self.v_x_max.set(str(mrow['x_max']))
             self.v_y_min.set(str(mrow['y_min']))
             self.v_y_max.set(str(mrow['y_max']))
+            self.v_z_min.set(str(mrow['z_min']))
+            self.v_z_max.set(str(mrow['z_max']))
 
             # Load tile entries
             tile_set = mrow['tile_set'] or mrow['name']
@@ -596,6 +627,8 @@ class MapEditorTab(ttk.Frame):
             x_max = int(self.v_x_max.get())
             y_min = int(self.v_y_min.get())
             y_max = int(self.v_y_max.get())
+            z_min = int(self.v_z_min.get())
+            z_max = int(self.v_z_max.get())
         except ValueError:
             messagebox.showerror('Save', 'Coordinates must be integers.')
             return
@@ -608,16 +641,17 @@ class MapEditorTab(ttk.Frame):
                    (name, tile_set, default_tile_template, entrance_x, entrance_y,
                     x_min, x_max, y_min, y_max,
                     z_min, z_max)
-                   VALUES (?,?,?,?,?,?,?,?,?,0,0)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?)
                    ON CONFLICT(name) DO UPDATE SET
                    tile_set=excluded.tile_set,
                    default_tile_template=excluded.default_tile_template,
                    entrance_x=excluded.entrance_x,
                    entrance_y=excluded.entrance_y,
                    x_min=excluded.x_min, x_max=excluded.x_max,
-                   y_min=excluded.y_min, y_max=excluded.y_max''',
+                   y_min=excluded.y_min, y_max=excluded.y_max,
+                   z_min=excluded.z_min, z_max=excluded.z_max''',
                 (name, tile_set, self.v_default.get().strip() or None,
-                 ent_x, ent_y, x_min, x_max, y_min, y_max))
+                 ent_x, ent_y, x_min, x_max, y_min, y_max, z_min, z_max))
 
             # Delete old tile entries and rewrite
             con.execute('DELETE FROM tile_sets WHERE tile_set=?', (tile_set,))
@@ -682,6 +716,8 @@ class MapEditorTab(ttk.Frame):
         self.v_x_max.set('31')
         self.v_y_min.set('0')
         self.v_y_max.set('31')
+        self.v_z_min.set('0')
+        self.v_z_max.set('0')
         self._canvas.set_map_data({}, (0, 31), (0, 31), None, (0, 0))
 
     def _delete_map(self):

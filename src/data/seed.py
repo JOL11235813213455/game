@@ -69,16 +69,15 @@ CREATE TABLE IF NOT EXISTS sprites (
     action_point_y INTEGER
 );
 CREATE TABLE IF NOT EXISTS tile_templates (
-    key         TEXT PRIMARY KEY,
-    name        TEXT NOT NULL DEFAULT '',
-    walkable    INTEGER NOT NULL DEFAULT 1,
-    covered     INTEGER NOT NULL DEFAULT 0,
-    sprite_name TEXT REFERENCES sprites(name),
-    tile_scale  REAL NOT NULL DEFAULT 1.0,
-    bounds_n    TEXT, bounds_s TEXT, bounds_e TEXT, bounds_w  TEXT,
-    bounds_ne   TEXT, bounds_nw TEXT, bounds_se TEXT, bounds_sw TEXT,
+    key            TEXT PRIMARY KEY,
+    name           TEXT NOT NULL DEFAULT '',
+    walkable       INTEGER NOT NULL DEFAULT 1,
+    covered        INTEGER NOT NULL DEFAULT 0,
+    sprite_name    TEXT REFERENCES sprites(name),
+    tile_scale     REAL NOT NULL DEFAULT 1.0,
     animation_name TEXT REFERENCES animations(name),
-    stat_mods     TEXT
+    stat_mods      TEXT,
+    speed_modifier REAL NOT NULL DEFAULT 1.0
 );
 CREATE TABLE IF NOT EXISTS tile_sets (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -99,9 +98,10 @@ CREATE TABLE IF NOT EXISTS tile_sets (
     linked_y      INTEGER,
     linked_z      INTEGER,
     link_auto     INTEGER NOT NULL DEFAULT 0,
-    stat_mods     TEXT,
+    stat_mods      TEXT,
     animation_name TEXT,
-    search_text   TEXT
+    search_text    TEXT,
+    speed_modifier REAL
 );
 CREATE VIEW IF NOT EXISTS tile_set_names AS
     SELECT DISTINCT tile_set AS name FROM tile_sets ORDER BY tile_set;

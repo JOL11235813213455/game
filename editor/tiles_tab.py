@@ -101,31 +101,12 @@ class TilesTab(ttk.Frame):
         add_tooltip(self.anim_cb, 'Animation to play on this tile (overrides static sprite)')
         r += 1
 
-        # ---- Bounds ----
-        ttk.Separator(f, orient=tk.HORIZONTAL).grid(
-            row=r, column=0, columnspan=2, sticky='ew', padx=6, pady=6)
+        ttk.Label(f, text='Speed Modifier').grid(row=r, column=0, sticky='w', padx=6, pady=4)
+        self.v_speed_modifier = tk.StringVar(value='1.0')
+        e_speed = ttk.Entry(f, textvariable=self.v_speed_modifier, width=10)
+        e_speed.grid(row=r, column=1, sticky='w', padx=6, pady=4)
+        add_tooltip(e_speed, 'Movement speed multiplier (1.0 = normal, 0.5 = half speed, 2.0 = double)')
         r += 1
-        ttk.Label(f, text='Bounds', font=('TkDefaultFont', 9, 'bold')).grid(
-            row=r, column=0, columnspan=2, sticky='w', padx=6, pady=(4, 2))
-        r += 1
-
-        self._bound_vars = {}
-        bound_tips = {
-            'n': 'North edge traversable', 's': 'South edge traversable',
-            'e': 'East edge traversable', 'w': 'West edge traversable',
-            'ne': 'NE corner traversable', 'nw': 'NW corner traversable',
-            'se': 'SE corner traversable', 'sw': 'SW corner traversable',
-        }
-        ttk.Label(f, text='(checked = traversable)').grid(
-            row=r, column=0, columnspan=2, sticky='w', padx=6, pady=(0, 2))
-        r += 1
-        for direction in ('n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'):
-            var = tk.BooleanVar(value=True)
-            self._bound_vars[direction] = var
-            cb = ttk.Checkbutton(f, text=f'{direction.upper()}', variable=var)
-            cb.grid(row=r, column=0, columnspan=2, sticky='w', padx=6, pady=1)
-            add_tooltip(cb, bound_tips[direction])
-            r += 1
 
         f.columnconfigure(1, weight=1)
 
@@ -154,9 +135,8 @@ class TilesTab(ttk.Frame):
         self.v_tile_scale.set('1.0')
         self.v_sprite.set('')
         self.v_animation.set('')
+        self.v_speed_modifier.set('1.0')
         self.sprite_preview.load(None)
-        for var in self._bound_vars.values():
-            var.set(True)
 
     def _populate_form(self, key: str):
         con = get_con()
@@ -173,10 +153,8 @@ class TilesTab(ttk.Frame):
         self.v_tile_scale.set(str(row['tile_scale'] if row['tile_scale'] is not None else 1.0))
         self.v_sprite.set(row['sprite_name'] or '')
         self.v_animation.set(row['animation_name'] or '')
+        self.v_speed_modifier.set(str(row['speed_modifier'] if row['speed_modifier'] is not None else 1.0))
         self.sprite_preview.load(row['sprite_name'] or None)
-        for d in self._bound_vars:
-            val = row[f'bounds_{d}']
-            self._bound_vars[d].set(val != 0 if val is not None else True)
 
     def _on_select(self, event=None):
         sel = self.listbox.curselection()
@@ -207,29 +185,24 @@ class TilesTab(ttk.Frame):
             ts = float(self.v_tile_scale.get())
         except ValueError:
             ts = 1.0
+        try:
+            sm = float(self.v_speed_modifier.get())
+        except ValueError:
+            sm = 1.0
         con = get_con()
         try:
-            bounds = {d: (1 if self._bound_vars[d].get() else 0)
-                      for d in ('n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw')}
             con.execute(
                 '''INSERT INTO tile_templates (key, name, walkable, covered, sprite_name,
-                   tile_scale, animation_name,
-                   bounds_n, bounds_s, bounds_e, bounds_w,
-                   bounds_ne, bounds_nw, bounds_se, bounds_sw)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   tile_scale, animation_name, speed_modifier)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(key) DO UPDATE SET
                    name=excluded.name, walkable=excluded.walkable,
                    covered=excluded.covered, sprite_name=excluded.sprite_name,
                    tile_scale=excluded.tile_scale, animation_name=excluded.animation_name,
-                   bounds_n=excluded.bounds_n, bounds_s=excluded.bounds_s,
-                   bounds_e=excluded.bounds_e, bounds_w=excluded.bounds_w,
-                   bounds_ne=excluded.bounds_ne, bounds_nw=excluded.bounds_nw,
-                   bounds_se=excluded.bounds_se, bounds_sw=excluded.bounds_sw''',
+                   speed_modifier=excluded.speed_modifier''',
                 (key, self.v_name.get().strip(), int(self.v_walkable.get()),
                  int(self.v_covered.get()), self.v_sprite.get().strip() or None, ts,
-                 self.v_animation.get().strip() or None,
-                 bounds['n'], bounds['s'], bounds['e'], bounds['w'],
-                 bounds['ne'], bounds['nw'], bounds['se'], bounds['sw'])
+                 self.v_animation.get().strip() or None, sm)
             )
             con.commit()
         except sqlite3.Error as e:
