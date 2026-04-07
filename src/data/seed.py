@@ -100,7 +100,8 @@ CREATE TABLE IF NOT EXISTS tile_sets (
     linked_z      INTEGER,
     link_auto     INTEGER NOT NULL DEFAULT 0,
     stat_mods     TEXT,
-    animation_name TEXT
+    animation_name TEXT,
+    search_text   TEXT
 );
 CREATE VIEW IF NOT EXISTS tile_set_names AS
     SELECT DISTINCT tile_set AS name FROM tile_sets ORDER BY tile_set;

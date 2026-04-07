@@ -251,6 +251,7 @@ def _migrate(con: sqlite3.Connection) -> None:
         "ALTER TABLE tile_sets ADD COLUMN link_auto INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE tile_sets ADD COLUMN stat_mods TEXT",
         "ALTER TABLE tile_templates ADD COLUMN stat_mods TEXT",
+        "ALTER TABLE tile_sets ADD COLUMN search_text TEXT",
     ]:
         try:
             con.execute(stmt)

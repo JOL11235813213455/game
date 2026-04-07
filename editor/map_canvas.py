@@ -11,7 +11,7 @@ from editor.tooltip import add_tooltip
 TILE_HEIGHT_RATIO = 0.75
 
 # Colors
-COLOR_GRID = '#333333'
+COLOR_GRID = '#ffffff'
 COLOR_HOVER = '#ffffff'
 COLOR_ENTRANCE = '#4b73c3'
 COLOR_WALKABLE_TINT = (60, 90, 60, 255)
@@ -28,12 +28,13 @@ class MapCanvas(tk.Canvas):
     BASE_TILE_SIZE = 32
 
     def __init__(self, parent, on_paint=None, on_inspect=None,
-                 on_context_menu=None, **kwargs):
+                 on_context_menu=None, on_selection_change=None, **kwargs):
         super().__init__(parent, bg='#1a1a1a', highlightthickness=0, **kwargs)
 
         self._on_paint = on_paint              # callback(x, y) on left click/drag
         self._on_inspect = on_inspect          # callback(x, y) on right click
         self._on_context_menu = on_context_menu  # callback(event, selected_tiles)
+        self._on_selection_change = on_selection_change  # callback(selected_tiles)
 
         # Map state
         self._tiles = {}          # (x, y) → dict with tile_set row data
@@ -139,6 +140,11 @@ class MapCanvas(tk.Canvas):
         self._selected.clear()
         self._select_anchor = None
         self._draw_selection()
+        self._fire_selection_change()
+
+    def _fire_selection_change(self):
+        if self._on_selection_change:
+            self._on_selection_change(set(self._selected))
 
     def get_zoom(self):
         return self._zoom
@@ -263,13 +269,15 @@ class MapCanvas(tk.Canvas):
             sy = (y - self._y_min) * th - self._pan_y
             sx0 = (vx_min - self._x_min) * tw - self._pan_x
             sx1 = (vx_max + 1 - self._x_min) * tw - self._pan_x
-            item = self.create_line(sx0, sy, sx1, sy, fill=COLOR_GRID, width=1)
+            item = self.create_line(sx0, sy, sx1, sy, fill=COLOR_GRID,
+                                    width=1, stipple='gray50')
             self._grid_items.append(item)
         for x in range(vx_min, vx_max + 2):
             sx = (x - self._x_min) * tw - self._pan_x
             sy0 = (vy_min - self._y_min) * th - self._pan_y
             sy1 = (vy_max + 1 - self._y_min) * th - self._pan_y
-            item = self.create_line(sx, sy0, sx, sy1, fill=COLOR_GRID, width=1)
+            item = self.create_line(sx, sy0, sx, sy1, fill=COLOR_GRID,
+                                    width=1, stipple='gray50')
             self._grid_items.append(item)
 
     def _draw_overlays(self):
@@ -323,25 +331,28 @@ class MapCanvas(tk.Canvas):
             self._selection_items.append(item)
 
     def _draw_bounds(self, vx_min, vy_min, vx_max, vy_max):
-        """Draw red lines on tile edges where bounds are blocked (False)."""
+        """Draw dim red highlights on tile edges where bounds are blocked."""
         for item in self._bounds_items:
             self.delete(item)
         self._bounds_items.clear()
 
         tw, th = self._tile_w, self._tile_h
-        # Edge offsets: direction → (x0_frac, y0_frac, x1_frac, y1_frac) within tile
-        edge_lines = {
-            'n':  (0, 0, 1, 0),
-            's':  (0, 1, 1, 1),
-            'e':  (1, 0, 1, 1),
-            'w':  (0, 0, 0, 1),
+        # Edge thickness as fraction of tile size
+        edge_t = max(2, tw // 6)
+        # Edge rects: direction → (x0_frac, y0_frac, x1_frac, y1_frac)
+        # These define thin rectangles along each edge
+        edge_rects = {
+            'n':  (0, 0, tw, edge_t),
+            's':  (0, th - edge_t, tw, th),
+            'e':  (tw - edge_t, 0, tw, th),
+            'w':  (0, 0, edge_t, th),
         }
-        # Corner dots: direction → (x_frac, y_frac)
-        corner_pos = {
-            'ne': (1, 0),
-            'nw': (0, 0),
-            'se': (1, 1),
-            'sw': (0, 1),
+        # Corner rects: small squares at corners
+        corner_rects = {
+            'ne': (tw - edge_t, 0, tw, edge_t),
+            'nw': (0, 0, edge_t, edge_t),
+            'se': (tw - edge_t, th - edge_t, tw, th),
+            'sw': (0, th - edge_t, edge_t, th),
         }
 
         for y in range(vy_min, vy_max + 1):
@@ -360,24 +371,22 @@ class MapCanvas(tk.Canvas):
 
                 sx, sy = self._tile_to_screen(x, y)
 
-                # Draw blocked edges as red lines
-                for d, (x0f, y0f, x1f, y1f) in edge_lines.items():
+                # Draw blocked edges as dim red filled rectangles
+                for d, (x0, y0, x1, y1) in edge_rects.items():
                     if not bounds.get(d, True):
-                        item = self.create_line(
-                            sx + x0f * tw, sy + y0f * th,
-                            sx + x1f * tw, sy + y1f * th,
-                            fill=COLOR_BOUND_BLOCKED, width=2)
+                        item = self.create_rectangle(
+                            sx + x0, sy + y0, sx + x1, sy + y1,
+                            fill=COLOR_BOUND_BLOCKED, outline='',
+                            stipple='gray50')
                         self._bounds_items.append(item)
 
-                # Draw blocked corners as red dots
-                for d, (xf, yf) in corner_pos.items():
+                # Draw blocked corners as dim red filled squares
+                for d, (x0, y0, x1, y1) in corner_rects.items():
                     if not bounds.get(d, True):
-                        cx = sx + xf * tw
-                        cy = sy + yf * th
-                        r = max(2, tw // 8)
-                        item = self.create_oval(
-                            cx - r, cy - r, cx + r, cy + r,
-                            fill=COLOR_BOUND_BLOCKED, outline='')
+                        item = self.create_rectangle(
+                            sx + x0, sy + y0, sx + x1, sy + y1,
+                            fill=COLOR_BOUND_BLOCKED, outline='',
+                            stipple='gray50')
                         self._bounds_items.append(item)
 
     def _resolve_template_bounds(self, template_key: str | None) -> dict:
@@ -444,6 +453,7 @@ class MapCanvas(tk.Canvas):
         self._selected.clear()
         self._select_anchor = (tx, ty)
         self._draw_selection()
+        self._fire_selection_change()
         if self._on_paint:
             self._on_paint(tx, ty)
 
@@ -460,6 +470,7 @@ class MapCanvas(tk.Canvas):
         self._selected = {(x, y) for x in range(x0, x1 + 1)
                           for y in range(y0, y1 + 1)}
         self._draw_selection()
+        self._fire_selection_change()
 
     def _on_ctrl_click(self, event):
         """Toggle a single tile in the selection."""
@@ -472,6 +483,7 @@ class MapCanvas(tk.Canvas):
             self._selected.add((tx, ty))
         self._select_anchor = (tx, ty)
         self._draw_selection()
+        self._fire_selection_change()
 
     def _on_left_drag(self, event):
         tx, ty = self._screen_to_tile(event.x, event.y)
@@ -487,6 +499,7 @@ class MapCanvas(tk.Canvas):
             self._selected = {(tx, ty)}
             self._select_anchor = (tx, ty)
             self._draw_selection()
+            self._fire_selection_change()
         # Fire context menu callback with selected tiles
         if self._on_context_menu:
             self._on_context_menu(event, self._selected)

@@ -26,6 +26,44 @@ class MapEditorTab(ttk.Frame):
     # UI Build
     # ------------------------------------------------------------------
 
+    # Sentinel for mixed values across a multi-tile selection
+    _MIXED = object()
+
+    # All tile property fields: (field_key, label, widget_type, tooltip)
+    # widget_type: 'entry', 'check', 'combo_tmpl', 'combo_map', 'bounds_row'
+    _PROP_FIELDS = [
+        ('tile_template', 'Template', 'combo_tmpl',
+         'Tile template key'),
+        ('walkable', 'Walkable', 'check',
+         'Whether creatures can walk on this tile'),
+        ('covered', 'Covered', 'check',
+         'Whether this tile acts as a roof/ceiling'),
+        ('sprite_name', 'Sprite', 'entry',
+         'Override sprite (leave empty to use template)'),
+        ('tile_scale', 'Tile Scale', 'entry',
+         'Visual scale multiplier (1.0 = normal)'),
+        ('animation_name', 'Animation', 'entry',
+         'Animation to play on this tile'),
+        ('search_text', 'Search Text', 'entry',
+         'Arbitrary text for searching/filtering tiles'),
+        ('stat_mods', 'Stat Mods', 'entry',
+         'JSON dict of stat modifiers (e.g. {"str": 1})'),
+        ('nested_map', 'Nested Map', 'combo_map',
+         'Map contained inside this structure'),
+        ('linked_map', 'Linked Map', 'combo_map',
+         'Target map for teleportation link'),
+        ('linked_x', 'Link X', 'entry',
+         'Target X coordinate for link'),
+        ('linked_y', 'Link Y', 'entry',
+         'Target Y coordinate for link'),
+        ('linked_z', 'Link Z', 'entry',
+         'Target Z coordinate for link'),
+        ('link_auto', 'Link Auto', 'check',
+         'Automatically teleport on step (no interaction)'),
+    ]
+
+    _BOUND_DIRS = ('n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw')
+
     def _build_ui(self):
         outer = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
         outer.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
@@ -137,12 +175,19 @@ class MapEditorTab(ttk.Frame):
         ttk.Label(left, textvariable=self._coord_var,
                    font=('Courier', 9)).pack(anchor='w', padx=6, pady=4)
 
-        # ---- CENTER: Canvas ----
+        # ---- CENTER: Canvas (top) + Palette (bottom) ----
         center = ttk.Frame(outer)
         outer.add(center, weight=1)
 
+        center_pane = ttk.PanedWindow(center, orient=tk.VERTICAL)
+        center_pane.pack(fill=tk.BOTH, expand=True)
+
+        # Top: toolbar + canvas
+        canvas_frame = ttk.Frame(center_pane)
+        center_pane.add(canvas_frame, weight=3)
+
         # Toolbar
-        toolbar = ttk.Frame(center)
+        toolbar = ttk.Frame(canvas_frame)
         toolbar.pack(fill=tk.X, pady=(0, 2))
 
         self._zoom_var = tk.StringVar(value='1.0x')
@@ -177,26 +222,267 @@ class MapEditorTab(ttk.Frame):
 
         # Controls hint
         hint = ttk.Label(
-            center,
+            canvas_frame,
             text='Click: paint | Shift+click: range select | '
-                 'Ctrl+click: toggle select | Right-click: context menu '
-                 '(bounds, walkable, links) | Middle-drag: pan | Scroll: zoom',
+                 'Ctrl+click: toggle select | Right-click: context menu | '
+                 'Middle-drag: pan | Scroll: zoom',
             font=('TkDefaultFont', 8), foreground='#888888')
         hint.pack(fill=tk.X, padx=4, pady=(0, 2))
 
         # Canvas
-        self._canvas = MapCanvas(center,
+        self._canvas = MapCanvas(canvas_frame,
                                   on_paint=self._on_paint,
                                   on_inspect=self._on_inspect,
-                                  on_context_menu=self._on_context_menu)
+                                  on_context_menu=self._on_context_menu,
+                                  on_selection_change=self._on_selection_change)
         self._canvas.pack(fill=tk.BOTH, expand=True)
 
-        # ---- RIGHT: Palette ----
-        right = ttk.Frame(outer, width=200)
-        outer.add(right, weight=0)
+        # Bottom: tile palette
+        palette_frame = ttk.Frame(center_pane)
+        center_pane.add(palette_frame, weight=0)
 
-        self._palette = TilePalette(right, on_select=self._on_palette_select)
+        self._palette = TilePalette(palette_frame, on_select=self._on_palette_select)
         self._palette.pack(fill=tk.BOTH, expand=True)
+
+        # ---- RIGHT: Tile Properties ----
+        right = ttk.Frame(outer, width=240)
+        outer.add(right, weight=0)
+        self._build_properties_panel(right)
+
+    # ------------------------------------------------------------------
+    # Properties Panel
+    # ------------------------------------------------------------------
+
+    def _build_properties_panel(self, parent):
+        """Build the right-side tile properties panel."""
+        ttk.Label(parent, text='Tile Properties',
+                   font=('TkDefaultFont', 9, 'bold')).pack(
+            anchor='w', padx=4, pady=(4, 2))
+
+        self._prop_selection_label = ttk.Label(
+            parent, text='No selection', foreground='#888888',
+            font=('TkDefaultFont', 8))
+        self._prop_selection_label.pack(anchor='w', padx=4, pady=(0, 4))
+
+        # Scrollable frame for properties
+        prop_canvas = tk.Canvas(parent, highlightthickness=0)
+        prop_sb = ttk.Scrollbar(parent, orient=tk.VERTICAL,
+                                 command=prop_canvas.yview)
+        self._prop_inner = ttk.Frame(prop_canvas)
+        self._prop_inner.bind(
+            '<Configure>',
+            lambda e: prop_canvas.configure(
+                scrollregion=prop_canvas.bbox('all')))
+        prop_canvas.create_window((0, 0), window=self._prop_inner, anchor='nw')
+        prop_canvas.configure(yscrollcommand=prop_sb.set)
+        prop_sb.pack(side=tk.RIGHT, fill=tk.Y)
+        prop_canvas.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=4)
+
+        # Build field widgets
+        self._prop_widgets = {}  # field_key → {var, widget, label, type}
+        tmpl_vals = [''] + fetch_tile_template_keys()
+        map_vals = [''] + fetch_map_names()
+
+        r = 0
+        for field_key, label_text, wtype, tip in self._PROP_FIELDS:
+            lbl = ttk.Label(self._prop_inner, text=label_text)
+            lbl.grid(row=r, column=0, sticky='w', padx=2, pady=2)
+            var = tk.StringVar()
+            if wtype == 'check':
+                var = tk.StringVar(value='')
+                w = ttk.Combobox(self._prop_inner, textvariable=var,
+                                  values=['', '0', '1'], width=4, state='readonly')
+            elif wtype == 'combo_tmpl':
+                w = ttk.Combobox(self._prop_inner, textvariable=var,
+                                  values=tmpl_vals, width=14)
+            elif wtype == 'combo_map':
+                w = ttk.Combobox(self._prop_inner, textvariable=var,
+                                  values=map_vals, width=14)
+            else:
+                w = ttk.Entry(self._prop_inner, textvariable=var, width=16)
+            w.grid(row=r, column=1, sticky='ew', padx=2, pady=2)
+            add_tooltip(w, tip)
+            self._prop_widgets[field_key] = {
+                'var': var, 'widget': w, 'label': lbl, 'type': wtype}
+            r += 1
+
+        # Bounds section
+        ttk.Separator(self._prop_inner, orient=tk.HORIZONTAL).grid(
+            row=r, column=0, columnspan=2, sticky='ew', padx=2, pady=4)
+        r += 1
+        ttk.Label(self._prop_inner, text='Bounds',
+                   font=('TkDefaultFont', 8, 'bold')).grid(
+            row=r, column=0, columnspan=2, sticky='w', padx=2, pady=(0, 2))
+        r += 1
+
+        self._bound_prop_vars = {}
+        for d in self._BOUND_DIRS:
+            lbl = ttk.Label(self._prop_inner, text=d.upper())
+            lbl.grid(row=r, column=0, sticky='w', padx=2, pady=1)
+            var = tk.StringVar(value='')
+            w = ttk.Combobox(self._prop_inner, textvariable=var,
+                              values=['', '0', '1'], width=4, state='readonly')
+            w.grid(row=r, column=1, sticky='w', padx=2, pady=1)
+            add_tooltip(w, f'{d.upper()} edge traversable (1) or blocked (0)')
+            self._bound_prop_vars[d] = {'var': var, 'widget': w}
+            r += 1
+
+        self._prop_inner.columnconfigure(1, weight=1)
+
+        # Apply button
+        btn_f = ttk.Frame(parent)
+        btn_f.pack(fill=tk.X, padx=4, pady=6)
+        apply_btn = ttk.Button(btn_f, text='Apply to Selection',
+                                command=self._apply_properties)
+        apply_btn.pack(fill=tk.X)
+        add_tooltip(apply_btn,
+                    'Apply all non-empty property values to selected tiles')
+
+    def _on_selection_change(self, selected_tiles: set):
+        """Called when canvas selection changes. Populate the properties panel."""
+        n = len(selected_tiles)
+        if n == 0:
+            self._prop_selection_label.configure(text='No selection')
+            self._clear_prop_fields()
+            return
+        self._prop_selection_label.configure(
+            text=f'{n} tile{"s" if n != 1 else ""} selected')
+        self._populate_prop_fields(selected_tiles)
+
+    def _clear_prop_fields(self):
+        """Clear all property fields."""
+        for info in self._prop_widgets.values():
+            info['var'].set('')
+            info['widget'].configure(foreground='')
+        for info in self._bound_prop_vars.values():
+            info['var'].set('')
+
+    def _populate_prop_fields(self, selected_tiles: set):
+        """Read values from selected tiles. Uniform → show value (black),
+        mixed → show empty (grey), all-empty → show empty (normal)."""
+        # Gather tile dicts
+        tile_dicts = []
+        for (x, y) in selected_tiles:
+            td = self._tiles.get((x, y))
+            if td:
+                tile_dicts.append(td)
+
+        if not tile_dicts:
+            self._clear_prop_fields()
+            return
+
+        # Regular fields
+        for field_key, _label, wtype, _tip in self._PROP_FIELDS:
+            values = set()
+            for td in tile_dicts:
+                v = td.get(field_key)
+                values.add(v)
+
+            info = self._prop_widgets[field_key]
+            if len(values) == 1:
+                val = values.pop()
+                if val is None:
+                    info['var'].set('')
+                    info['widget'].configure(foreground='')
+                else:
+                    info['var'].set(str(val))
+                    info['widget'].configure(foreground='black')
+            else:
+                # Mixed
+                info['var'].set('')
+                info['widget'].configure(foreground='grey')
+
+        # Bounds fields
+        for d in self._BOUND_DIRS:
+            key = f'bounds_{d}'
+            values = set()
+            for td in tile_dicts:
+                v = td.get(key)
+                values.add(v)
+
+            info = self._bound_prop_vars[d]
+            if len(values) == 1:
+                val = values.pop()
+                if val is None:
+                    info['var'].set('')
+                else:
+                    info['var'].set(str(int(val)))
+            else:
+                info['var'].set('')
+                info['widget'].configure(foreground='grey')
+
+    def _apply_properties(self):
+        """Apply property values from the sidebar to all selected tiles."""
+        selected = self._canvas.get_selected()
+        if not selected:
+            messagebox.showinfo('Apply', 'Select tiles first.')
+            return
+
+        try:
+            z = int(self.v_z_level.get())
+        except ValueError:
+            z = 0
+
+        # Collect values to apply (skip empty = no change)
+        changes = {}
+        for field_key, _label, wtype, _tip in self._PROP_FIELDS:
+            val_str = self._prop_widgets[field_key]['var'].get()
+            if val_str == '':
+                continue
+            if wtype == 'check':
+                changes[field_key] = int(val_str)
+            elif field_key in ('linked_x', 'linked_y', 'linked_z'):
+                try:
+                    changes[field_key] = int(val_str)
+                except ValueError:
+                    continue
+            elif field_key == 'tile_scale':
+                try:
+                    changes[field_key] = float(val_str)
+                except ValueError:
+                    continue
+            elif field_key == 'link_auto':
+                changes[field_key] = int(val_str)
+            else:
+                changes[field_key] = val_str if val_str else None
+
+        # Bounds
+        for d in self._BOUND_DIRS:
+            val_str = self._bound_prop_vars[d]['var'].get()
+            if val_str == '':
+                continue
+            changes[f'bounds_{d}'] = int(val_str)
+
+        if not changes:
+            return
+
+        for (x, y) in selected:
+            td = self._tiles.get((x, y))
+            if td is None:
+                td = {'x': x, 'y': y, 'z': z}
+                self._tiles[(x, y)] = td
+                self._all_tiles[(x, y)] = td
+            td.update(changes)
+            self._canvas.set_tile(x, y, td)
+
+        self._mark_dirty()
+        self._canvas._render_full()
+        # Refresh sidebar to show applied values
+        self._populate_prop_fields(selected)
+
+    def _refresh_prop_dropdowns(self):
+        """Refresh combo values in the properties panel."""
+        tmpl_vals = [''] + fetch_tile_template_keys()
+        map_vals = [''] + fetch_map_names()
+        for field_key, info in self._prop_widgets.items():
+            fdef = next((f for f in self._PROP_FIELDS if f[0] == field_key), None)
+            if not fdef:
+                continue
+            wtype = fdef[2]
+            if wtype == 'combo_tmpl':
+                info['widget']['values'] = tmpl_vals
+            elif wtype == 'combo_map':
+                info['widget']['values'] = map_vals
 
     # ------------------------------------------------------------------
     # Map list
@@ -217,6 +503,7 @@ class MapEditorTab(ttk.Frame):
         """Refresh all dropdowns (called when switching to this tab)."""
         self._default_cb['values'] = [''] + fetch_tile_template_keys()
         self._palette.refresh()
+        self._refresh_prop_dropdowns()
 
     def _on_map_select(self, event=None):
         sel = self._map_listbox.curselection()
@@ -342,8 +629,8 @@ class MapEditorTab(ttk.Frame):
                         bounds_n, bounds_s, bounds_e, bounds_w,
                         bounds_ne, bounds_nw, bounds_se, bounds_sw,
                         nested_map, linked_map, linked_x, linked_y, linked_z,
-                        link_auto, stat_mods)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                        link_auto, stat_mods, search_text)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
                     (tile_set, x, y, td.get('z', 0),
                      td.get('tile_template'), td.get('walkable'), td.get('covered'),
                      td.get('sprite_name'), td.get('tile_scale'),
@@ -355,7 +642,8 @@ class MapEditorTab(ttk.Frame):
                      td.get('nested_map'), td.get('linked_map'),
                      td.get('linked_x'), td.get('linked_y'),
                      td.get('linked_z'),
-                     td.get('link_auto', 0), td.get('stat_mods')))
+                     td.get('link_auto', 0), td.get('stat_mods'),
+                     td.get('search_text')))
             con.commit()
         except sqlite3.Error as e:
             messagebox.showerror('DB Error', str(e))

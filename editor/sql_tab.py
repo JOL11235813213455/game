@@ -766,6 +766,7 @@ class SqlTab(ttk.Frame):
             ('tile_sets', 'stat_mods'): 'JSON: stat modifier dict applied while on this tile',
             ('tile_templates', 'stat_mods'): 'JSON: default stat modifiers for this tile type',
             ('tile_sets', 'animation_name'): 'Override tile animation for this placement',
+            ('tile_sets', 'search_text'): 'Arbitrary text for searching/filtering tiles',
             # maps
             ('maps', 'tile_set'): 'Tile set used to build this map',
             ('maps', 'default_tile_template'): 'Template for unset coordinates',

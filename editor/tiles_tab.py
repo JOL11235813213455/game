@@ -190,8 +190,19 @@ class TilesTab(ttk.Frame):
     def _save(self):
         key = self.v_key.get().strip()
         if not key:
-            messagebox.showerror('Validation', 'Key is required.')
-            return
+            name = self.v_name.get().strip()
+            if not name:
+                messagebox.showerror('Validation', 'Key or Name is required.')
+                return
+            parts = name.split()
+            base = parts[0].lower() + ''.join(w.capitalize() for w in parts[1:])
+            key = base
+            if key in self._list_keys:
+                i = 2
+                while f'{base}{i}' in self._list_keys:
+                    i += 1
+                key = f'{base}{i}'
+            self.v_key.set(key)
         try:
             ts = float(self.v_tile_scale.get())
         except ValueError:
