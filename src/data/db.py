@@ -251,7 +251,9 @@ def _migrate(con: sqlite3.Connection) -> None:
         "ALTER TABLE tile_sets ADD COLUMN link_auto INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE tile_sets ADD COLUMN stat_mods TEXT",
         "ALTER TABLE tile_templates ADD COLUMN stat_mods TEXT",
+        "ALTER TABLE tile_templates ADD COLUMN speed_modifier REAL NOT NULL DEFAULT 1.0",
         "ALTER TABLE tile_sets ADD COLUMN search_text TEXT",
+        "ALTER TABLE tile_sets ADD COLUMN speed_modifier REAL",
     ]:
         try:
             con.execute(stmt)
@@ -380,19 +382,16 @@ def _load_items(con: sqlite3.Connection) -> None:
 
 
 def _load_tile_templates(con: sqlite3.Connection) -> None:
-    from classes.maps import Bounds
-    BOUND_ATTRS = ('n','s','e','w','ne','nw','se','sw')
     for r in con.execute('SELECT * FROM tile_templates').fetchall():
-        b_kwargs = {a: not (r[f'bounds_{a}'] == 0) for a in BOUND_ATTRS}
         TILE_TEMPLATES[r['key']] = {
             'name':        r['name'],
             'walkable':    bool(r['walkable']),
             'covered':     bool(r['covered']),
             'sprite_name': r['sprite_name'],
             'tile_scale':  r['tile_scale'] if r['tile_scale'] is not None else 1.0,
-            'bounds':      Bounds(**b_kwargs),
             'animation_name': r['animation_name'],
             'stat_mods':   json.loads(r['stat_mods']) if r['stat_mods'] else {},
+            'speed_modifier': r['speed_modifier'] if r['speed_modifier'] is not None else 1.0,
         }
 
 
@@ -451,6 +450,7 @@ def _load_maps(con: sqlite3.Connection) -> None:
                 linked_z       = te['linked_z'],
                 link_auto      = bool(te['link_auto']) if te['link_auto'] is not None else False,
                 stat_mods      = json.loads(te['stat_mods']) if te['stat_mods'] else None,
+                speed_modifier = float(te['speed_modifier']) if te['speed_modifier'] is not None else None,
             )
 
     # Fill remaining coords with default tile

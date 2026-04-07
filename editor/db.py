@@ -325,7 +325,9 @@ def migrate_db():
             "ALTER TABLE tile_sets ADD COLUMN link_auto INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE tile_sets ADD COLUMN stat_mods TEXT",
             "ALTER TABLE tile_templates ADD COLUMN stat_mods TEXT",
+            "ALTER TABLE tile_templates ADD COLUMN speed_modifier REAL NOT NULL DEFAULT 1.0",
             "ALTER TABLE tile_sets ADD COLUMN search_text TEXT",
+            "ALTER TABLE tile_sets ADD COLUMN speed_modifier REAL",
         ]:
             try:
                 con.execute(stmt)

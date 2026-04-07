@@ -70,6 +70,13 @@ class MapCanvas(tk.Canvas):
         # Photo reference holder (prevent GC)
         self._photos = {}
 
+        # Animation state
+        self._anim_cache = {}     # animation_name → [(sprite_name, duration_ms), ...]
+        self._anim_tiles = {}     # (x, y) → animation_name — tiles with active animations
+        self._anim_time_ms = 0
+        self._anim_after_id = None
+        self._anim_interval = 100  # ms between ticks
+
         # Bind events
         self.bind('<Configure>', self._on_configure)
         self.bind('<Button-1>', self._on_left_click)
@@ -82,10 +89,16 @@ class MapCanvas(tk.Canvas):
         self.bind('<ButtonRelease-2>', self._on_middle_up)
         self.bind('<Motion>', self._on_mouse_move)
         self.bind('<Leave>', self._on_mouse_leave)
-        # Zoom
-        self.bind('<Button-4>', lambda e: self._zoom_at(e, 1))
-        self.bind('<Button-5>', lambda e: self._zoom_at(e, -1))
-        self.bind('<MouseWheel>', lambda e: self._zoom_at(e, 1 if e.delta > 0 else -1))
+        # Scroll to pan, Ctrl+scroll to zoom
+        self.bind('<Button-4>', self._on_scroll)
+        self.bind('<Button-5>', self._on_scroll)
+        self.bind('<MouseWheel>', self._on_scroll)
+        self.bind('<Shift-Button-4>', self._on_shift_scroll)
+        self.bind('<Shift-Button-5>', self._on_shift_scroll)
+        self.bind('<Shift-MouseWheel>', self._on_shift_scroll)
+        self.bind('<Control-Button-4>', lambda e: self._zoom_at(e, 1))
+        self.bind('<Control-Button-5>', lambda e: self._zoom_at(e, -1))
+        self.bind('<Control-MouseWheel>', lambda e: self._zoom_at(e, 1 if e.delta > 0 else -1))
 
     # ------------------------------------------------------------------
     # Public API
@@ -179,11 +192,13 @@ class MapCanvas(tk.Canvas):
 
     def _render_full(self):
         """Clear and redraw everything."""
+        self._stop_anim_timer()
         self.delete('all')
         self._tile_items.clear()
         self._grid_items.clear()
         self._overlay_items.clear()
         self._photos.clear()
+        self._anim_tiles.clear()
 
         tw, th = self._tile_w, self._tile_h
         canvas_w = self.winfo_width() or 800
@@ -209,6 +224,7 @@ class MapCanvas(tk.Canvas):
         self._draw_bounds(vx_min, vy_min, vx_max, vy_max)
         self._draw_overlays()
         self._draw_selection()
+        self._start_anim_timer()
 
     def _render_tile(self, x: int, y: int):
         """Render a single tile at grid position (x, y)."""
@@ -222,10 +238,21 @@ class MapCanvas(tk.Canvas):
 
         tile_data = self._tiles.get((x, y))
         photo = None
-        if tile_data:
+
+        # Check for animation first (animation overrides static sprite)
+        anim_name = self._resolve_tile_animation(tile_data)
+        if anim_name:
+            self._anim_tiles[(x, y)] = anim_name
+            sprite = self._resolve_anim_sprite(anim_name, self._anim_time_ms)
+            if sprite:
+                photo = sprite_to_photoimage(sprite, tw, th)
+        else:
+            self._anim_tiles.pop((x, y), None)
+
+        # Fall back to static sprite
+        if photo is None and tile_data:
             sprite = tile_data.get('sprite_name') or None
             if not sprite and tile_data.get('tile_template'):
-                # Resolve from template
                 sprite = self._resolve_template_sprite(tile_data['tile_template'])
             if sprite:
                 photo = sprite_to_photoimage(sprite, tw, th)
@@ -360,10 +387,8 @@ class MapCanvas(tk.Canvas):
                 td = self._tiles.get((x, y))
                 if not td:
                     continue
-                # Check template bounds
-                tmpl_key = td.get('tile_template')
-                bounds = self._resolve_template_bounds(tmpl_key)
-                # Override with tile-specific bounds
+                # Bounds come from tile_sets data only
+                bounds = {}
                 for d in ('n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'):
                     val = td.get(f'bounds_{d}')
                     if val is not None:
@@ -415,6 +440,104 @@ class MapCanvas(tk.Canvas):
         finally:
             con.close()
         return {}
+
+    # ------------------------------------------------------------------
+    # Tile Animations
+    # ------------------------------------------------------------------
+
+    def _resolve_tile_animation(self, tile_data: dict | None) -> str | None:
+        """Get the animation_name for a tile (direct or via template)."""
+        if not tile_data:
+            return None
+        anim = tile_data.get('animation_name')
+        if anim:
+            return anim
+        tmpl = tile_data.get('tile_template')
+        if tmpl:
+            return self._resolve_template_animation(tmpl)
+        return None
+
+    def _resolve_template_animation(self, template_key: str) -> str | None:
+        """Look up a tile template's animation_name from DB (cached)."""
+        if not hasattr(self, '_tmpl_anim_cache'):
+            self._tmpl_anim_cache = {}
+        if template_key in self._tmpl_anim_cache:
+            return self._tmpl_anim_cache[template_key]
+        from editor.db import get_con
+        con = get_con()
+        try:
+            row = con.execute(
+                'SELECT animation_name FROM tile_templates WHERE key=?',
+                (template_key,)).fetchone()
+            anim = row['animation_name'] if row else None
+        finally:
+            con.close()
+        self._tmpl_anim_cache[template_key] = anim
+        return anim
+
+    def _get_anim_frames(self, anim_name: str) -> list:
+        """Fetch animation frames from DB (cached).
+        Returns [(sprite_name, duration_ms), ...]."""
+        if anim_name in self._anim_cache:
+            return self._anim_cache[anim_name]
+        from editor.db import get_con
+        con = get_con()
+        try:
+            rows = con.execute(
+                'SELECT sprite_name, duration_ms FROM animation_frames'
+                ' WHERE animation_name=? ORDER BY frame_index',
+                (anim_name,)).fetchall()
+            frames = [(r['sprite_name'], r['duration_ms']) for r in rows]
+        finally:
+            con.close()
+        self._anim_cache[anim_name] = frames
+        return frames
+
+    def _resolve_anim_sprite(self, anim_name: str, time_ms: int) -> str | None:
+        """Return the sprite_name for the current animation frame at time_ms."""
+        frames = self._get_anim_frames(anim_name)
+        if not frames:
+            return None
+        total = sum(d for _, d in frames)
+        if total <= 0:
+            return frames[0][0]
+        t = time_ms % total
+        acc = 0
+        for sprite, dur in frames:
+            acc += dur
+            if t < acc:
+                return sprite
+        return frames[-1][0]
+
+    def _start_anim_timer(self):
+        """Start the animation tick loop if there are animated tiles."""
+        if self._anim_after_id is not None:
+            return  # already running
+        if self._anim_tiles:
+            self._anim_time_ms = 0
+            self._tick_anim()
+
+    def _stop_anim_timer(self):
+        """Stop the animation tick loop."""
+        if self._anim_after_id is not None:
+            self.after_cancel(self._anim_after_id)
+            self._anim_after_id = None
+
+    def _tick_anim(self):
+        """Advance animation time and update animated tile images."""
+        self._anim_time_ms += self._anim_interval
+        tw, th = self._tile_w, self._tile_h
+        for (x, y), anim_name in self._anim_tiles.items():
+            item = self._tile_items.get((x, y))
+            if item is None:
+                continue
+            sprite = self._resolve_anim_sprite(anim_name, self._anim_time_ms)
+            if sprite:
+                photo = sprite_to_photoimage(sprite, tw, th)
+                if photo:
+                    self._photos[(x, y)] = photo
+                    self.itemconfig(item, image=photo)
+        self._anim_after_id = self.after(self._anim_interval, self._tick_anim)
 
     # ------------------------------------------------------------------
     # Hover
@@ -525,6 +648,30 @@ class MapCanvas(tk.Canvas):
         self._drag_start = None
 
     # ------------------------------------------------------------------
+    # Scroll to pan
+    # ------------------------------------------------------------------
+
+    def _scroll_direction(self, event):
+        """Return -1 or +1 for scroll direction."""
+        if event.num == 4:
+            return -1
+        if event.num == 5:
+            return 1
+        return -1 if event.delta > 0 else 1
+
+    def _on_scroll(self, event):
+        """Scroll vertically to pan."""
+        d = self._scroll_direction(event)
+        self._pan_y += d * self._tile_h * 2
+        self._render_full()
+
+    def _on_shift_scroll(self, event):
+        """Shift+scroll to pan horizontally."""
+        d = self._scroll_direction(event)
+        self._pan_x += d * self._tile_w * 2
+        self._render_full()
+
+    # ------------------------------------------------------------------
     # Zoom
     # ------------------------------------------------------------------
 
@@ -542,6 +689,9 @@ class MapCanvas(tk.Canvas):
         self._photos.clear()
         if hasattr(self, '_template_cache'):
             self._template_cache.clear()
+        if hasattr(self, '_tmpl_anim_cache'):
+            self._tmpl_anim_cache.clear()
+        self._anim_cache.clear()
 
         # Adjust pan so the tile under cursor stays put
         new_sx = (tx - self._x_min) * self._tile_w - event.x
