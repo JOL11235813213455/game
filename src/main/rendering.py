@@ -63,7 +63,7 @@ def draw_map_row(surface, game_map, cols, y, block_size, cam, has_parent=False, 
         sx = x * block_size - cx
         if sx + block_size < 0 or sx > SCREEN_WIDTH:
             continue
-        tile = game_map.tiles.get(MapKey(0, x, y, 0))
+        tile = game_map.tiles.get(MapKey(x, y, 0))
         if (x, y) == game_map.entrance and has_parent:
             color = COLOR_EXIT
         elif tile is None:

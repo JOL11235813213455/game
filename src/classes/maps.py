@@ -1,31 +1,10 @@
 from __future__ import annotations
 from collections import namedtuple
-from enum import Enum
 from classes.trackable import Trackable
 from classes.inventory import Inventory
 
-MapKey = namedtuple("MapKey",["w","x","y","z"],defaults=[0,0,0,0])
-
-class Bound(Enum):
-    NONE        = None
-    WALL        = 'wall'
-    OPENING     = 'opening'
-    DOOR_OPEN   = 'door_open'
-    DOOR_CLOSED = 'door_closed'
-    GATE_OPEN   = 'gate_open'
-    GATE_CLOSED = 'gate_closed'
-
-Bounds = namedtuple("Bounds",["n","s","e","w","ne","nw","se","sw"],defaults=[Bound.NONE]*8)
-
-BOUND_TRAVERSABLE: dict[Bound, bool] = {
-    Bound.NONE:         True
-    ,Bound.OPENING:     True
-    ,Bound.DOOR_OPEN:   True
-    ,Bound.DOOR_CLOSED: False
-    ,Bound.GATE_OPEN:   True
-    ,Bound.GATE_CLOSED: False
-    ,Bound.WALL:        False
-    }
+MapKey = namedtuple("MapKey",["x","y","z"],defaults=[0,0,0])
+Bounds = namedtuple("Bounds",["n","s","e","w","ne","nw","se","sw"],defaults=[True]*8)
 
 # Maps (dx,dy) to (exit_attr_on_current, entry_attr_on_target)
 DIRECTION_BOUNDS: dict[tuple, tuple[str, str]] = {
@@ -52,10 +31,12 @@ class Tile(Trackable):
         ,sprite_name:str=None
         ,tile_scale:float=None
         ,animation_name:str=None
-        ,warp_map:str=None
-        ,warp_x:int=None
-        ,warp_y:int=None
-        ,warp_auto:bool=False
+        ,linked_map:str=None
+        ,linked_x:int=None
+        ,linked_y:int=None
+        ,linked_z:int=None
+        ,link_auto:bool=False
+        ,stat_mods:dict=None
         ):
         super().__init__()
         tmpl = template or {}
@@ -68,10 +49,11 @@ class Tile(Trackable):
         self.nested_map: Map = map
         self.inventory = Inventory(items=items or [])
         self.tile_template = tile_template
-        self.warp_map  = warp_map
-        self.warp_x    = warp_x
-        self.warp_y    = warp_y
-        self.warp_auto = warp_auto
+        self.linked_map    = linked_map
+        self.linked_location = (MapKey(linked_x, linked_y, linked_z or 0)
+                                if linked_x is not None else None)
+        self.link_auto     = link_auto
+        self.stat_mods     = stat_mods or {}
 
 class Map(Trackable):
     def __init__(
@@ -80,7 +62,6 @@ class Map(Trackable):
         ,entrance: tuple[int, int] = (0, 0)
         ,name: str = None
         ,default_tile_template: str = None
-        ,w_min: int = 0,  w_max: int = 0
         ,x_min: int = -16, x_max: int = 16
         ,y_min: int = -16, y_max: int = 16
         ,z_min: int = -16, z_max: int = 16
@@ -90,8 +71,6 @@ class Map(Trackable):
         self.entrance = entrance
         self.name = name
         self.default_tile_template = default_tile_template
-        self.w_min = w_min
-        self.w_max = w_max
         self.x_min = x_min
         self.x_max = x_max
         self.y_min = y_min

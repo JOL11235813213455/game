@@ -28,11 +28,12 @@ def _lerp(a, b, t):
 
 def _interp_keyframes(keyframes, time_ms):
     if not keyframes:
-        return 0, 0, 0.0, None, None, 1.0
+        return 0, 0, 0.0, None, None, 1.0, 1.0
     if len(keyframes) == 1:
         k = keyframes[0]
         return (k['offset_x'], k['offset_y'], k['rotation_deg'],
-                k.get('variant_name'), k.get('tint'), k.get('opacity', 1.0))
+                k.get('variant_name'), k.get('tint'), k.get('opacity', 1.0),
+                k.get('scale', 1.0))
     prev = keyframes[0]
     for kf in keyframes:
         if kf['time_ms'] > time_ms:
@@ -42,11 +43,11 @@ def _interp_keyframes(keyframes, time_ms):
     else:
         return (prev['offset_x'], prev['offset_y'], prev['rotation_deg'],
                 prev.get('variant_name'), prev.get('tint'),
-                prev.get('opacity', 1.0))
+                prev.get('opacity', 1.0), prev.get('scale', 1.0))
     if prev['time_ms'] == nxt['time_ms']:
         return (prev['offset_x'], prev['offset_y'], prev['rotation_deg'],
                 prev.get('variant_name'), prev.get('tint'),
-                prev.get('opacity', 1.0))
+                prev.get('opacity', 1.0), prev.get('scale', 1.0))
     t = (time_ms - prev['time_ms']) / (nxt['time_ms'] - prev['time_ms'])
     # Interpolate tint
     tint = None
@@ -64,7 +65,8 @@ def _interp_keyframes(keyframes, time_ms):
             _lerp(prev['rotation_deg'], nxt['rotation_deg'], t),
             prev.get('variant_name') or nxt.get('variant_name'),
             tint,
-            _lerp(prev.get('opacity', 1.0), nxt.get('opacity', 1.0), t))
+            _lerp(prev.get('opacity', 1.0), nxt.get('opacity', 1.0), t),
+            _lerp(prev.get('scale', 1.0), nxt.get('scale', 1.0), t))
 
 
 # ---------------------------------------------------------------------------
@@ -83,7 +85,7 @@ class CompositePreview(tk.Canvas):
 
     def render(self, layers, connections, root_layer,
                variant_overrides=None, anim_offsets=None,
-               anim_opacity=None, show_sockets=False):
+               anim_opacity=None, anim_scale=None, show_sockets=False):
         self.delete('all')
         if not layers:
             self._checkerboard()
@@ -91,6 +93,7 @@ class CompositePreview(tk.Canvas):
         variant_overrides = variant_overrides or {}
         anim_offsets = anim_offsets or {}
         anim_opacity = anim_opacity or {}
+        anim_scale = anim_scale or {}
 
         def _resolve(offsets):
             import math
@@ -188,17 +191,19 @@ class CompositePreview(tk.Canvas):
             palette = data['palette']
             # Use cumulative rotation (own + ancestors)
             rot = cum_rot.get(name, 0.0)
-            # Rotation pivot = connection anchor point on this layer
+            lscale = anim_scale.get(name, 1.0)
+            # Anchor for rotation and scale pivot
+            conn = connections.get(name)
+            if conn:
+                ax, ay = conn['child_anchor']
+            else:
+                w = data.get('width', 0)
+                h = len(data.get('pixels', []))
+                ax, ay = w / 2, h / 2
             if rot:
-                conn = connections.get(name)
-                if conn:
-                    ax, ay = conn['child_anchor']
-                else:
-                    w = data.get('width', 0)
-                    h = len(data.get('pixels', []))
-                    ax, ay = w / 2, h / 2
                 rad = math.radians(rot)
                 cos_a, sin_a = math.cos(rad), math.sin(rad)
+            pixel_scale = scale * lscale
             for ri, row_str in enumerate(data.get('pixels', [])):
                 for ci, ch in enumerate(row_str):
                     if ch == '.' or ch not in palette:
@@ -212,15 +217,19 @@ class CompositePreview(tk.Canvas):
                             color = f'#{cr:02x}{cg:02x}{cb:02x}'
                         except (ValueError, IndexError):
                             pass
-                    # Pixel position, optionally rotated around anchor
+                    # Pixel position: scale around anchor, then rotate
                     lx, ly = ci, ri
+                    if lscale != 1.0:
+                        lx = ax + (lx - ax) * lscale
+                        ly = ay + (ly - ay) * lscale
                     if rot:
                         dx, dy = lx - ax, ly - ay
                         lx = ax + dx * cos_a - dy * sin_a
                         ly = ay + dx * sin_a + dy * cos_a
                     sx = pad + (px - min_x + lx) * scale
                     sy = pad + (py - min_y + ly) * scale
-                    self.create_rectangle(sx, sy, sx + scale, sy + scale,
+                    self.create_rectangle(sx, sy, sx + pixel_scale,
+                                          sy + pixel_scale,
                                           fill=color, outline='')
 
         if show_sockets:
@@ -255,9 +264,9 @@ class CompositePreview(tk.Canvas):
 class EditableTree(ttk.Frame):
     """Treeview with inline editing on double-click."""
 
-    COLS = ('layer', 'time_ms', 'dx', 'dy', 'rot', 'variant',
+    COLS = ('layer', 'time_ms', 'dx', 'dy', 'rot', 'scale', 'variant',
             'tint_r', 'tint_g', 'tint_b', 'opacity')
-    WIDTHS = (80, 60, 40, 40, 45, 90, 40, 40, 40, 50)
+    WIDTHS = (80, 60, 40, 40, 45, 45, 90, 40, 40, 40, 50)
 
     def __init__(self, parent, get_variant_choices=None, **kwargs):
         super().__init__(parent, **kwargs)
@@ -889,7 +898,7 @@ class CompositesTab(ttk.Frame):
                 for kf in con.execute(
                         'SELECT layer_name, time_ms, offset_x, offset_y,'
                         ' rotation_deg, variant_name, tint_r, tint_g, tint_b,'
-                        ' opacity'
+                        ' opacity, scale'
                         ' FROM composite_anim_keyframes'
                         ' WHERE animation_name=?'
                         ' ORDER BY layer_name, time_ms',
@@ -907,6 +916,7 @@ class CompositesTab(ttk.Frame):
                             'variant_name': kf['variant_name'],
                             'tint': tint,
                             'opacity': kf['opacity'] if kf['opacity'] is not None else 1.0,
+                            'scale': kf['scale'] if kf['scale'] is not None else 1.0,
                         })
                 self._animations.append(anim)
         finally:
@@ -1038,15 +1048,16 @@ class CompositesTab(ttk.Frame):
                             ' (animation_name, layer_name, time_ms,'
                             '  offset_x, offset_y, rotation_deg,'
                             '  variant_name, tint_r, tint_g, tint_b,'
-                            '  opacity)'
-                            ' VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                            '  opacity, scale)'
+                            ' VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                             (anim['name'], ln, kf['time_ms'],
                              kf['offset_x'], kf['offset_y'],
                              kf['rotation_deg'], kf.get('variant_name'),
                              tint[0] if tint else None,
                              tint[1] if tint else None,
                              tint[2] if tint else None,
-                             kf.get('opacity', 1.0)))
+                             kf.get('opacity', 1.0),
+                             kf.get('scale', 1.0)))
             # Restore preserved bindings
             for b in saved_bindings:
                 con.execute(
@@ -1414,6 +1425,7 @@ class CompositesTab(ttk.Frame):
                     kf['offset_x'],
                     kf['offset_y'],
                     f"{kf['rotation_deg']:.1f}",
+                    f"{kf.get('scale', 1.0):.2f}",
                     kf.get('variant_name') or '',
                     tint[0] if tint else '',
                     tint[1] if tint else '',
@@ -1432,7 +1444,7 @@ class CompositesTab(ttk.Frame):
         except ValueError:
             messagebox.showerror('Keyframe', 'Time must be an integer.')
             return
-        self._kf_tree.add_row((layer, t, 0, 0, '0.0', '', '', '', '', '1.00'))
+        self._kf_tree.add_row((layer, t, 0, 0, '0.0', '1.00', '', '', '', '', '1.00'))
 
     def _delete_keyframe_row(self):
         self._kf_tree.delete_selected()
@@ -1454,19 +1466,20 @@ class CompositesTab(ttk.Frame):
                 ox = int(row[2])
                 oy = int(row[3])
                 rot = float(row[4])
-                var = str(row[5]).strip() or None
-                tr = int(row[6]) if str(row[6]).strip() else None
-                tg = int(row[7]) if str(row[7]).strip() else None
-                tb = int(row[8]) if str(row[8]).strip() else None
+                kf_scale = float(row[5]) if str(row[5]).strip() else 1.0
+                var = str(row[6]).strip() or None
+                tr = int(row[7]) if str(row[7]).strip() else None
+                tg = int(row[8]) if str(row[8]).strip() else None
+                tb = int(row[9]) if str(row[9]).strip() else None
                 tint = (tr, tg, tb) if (tr is not None and tg is not None
                                          and tb is not None) else None
-                opacity = float(row[9]) if str(row[9]).strip() else 1.0
+                opacity = float(row[10]) if str(row[10]).strip() else 1.0
             except (ValueError, IndexError):
                 continue
             keyframes.setdefault(ln, []).append({
                 'time_ms': t, 'offset_x': ox, 'offset_y': oy,
-                'rotation_deg': rot, 'variant_name': var,
-                'tint': tint, 'opacity': opacity,
+                'rotation_deg': rot, 'scale': kf_scale,
+                'variant_name': var, 'tint': tint, 'opacity': opacity,
             })
         # Sort each layer's keyframes by time
         for ln in keyframes:
@@ -1513,10 +1526,12 @@ class CompositesTab(ttk.Frame):
         offsets = {}
         var_overrides = {}
         opacity_map = {}
+        scale_map = {}
         for ln, kfs in anim['keyframes'].items():
-            ox, oy, rot, var, _tint, opacity = _interp_keyframes(kfs, t)
+            ox, oy, rot, var, _tint, opacity, kf_scale = _interp_keyframes(kfs, t)
             offsets[ln] = (int(ox), int(oy), rot)
             opacity_map[ln] = opacity
+            scale_map[ln] = kf_scale
             if var:
                 sn = self._variants.get(ln, {}).get(var)
                 if sn:
@@ -1525,7 +1540,8 @@ class CompositesTab(ttk.Frame):
                         var_overrides[ln] = data
         layers = self._build_layers_dict()
         render_kw = dict(variant_overrides=var_overrides,
-                         anim_offsets=offsets, anim_opacity=opacity_map)
+                         anim_offsets=offsets, anim_opacity=opacity_map,
+                         anim_scale=scale_map)
         self._anim_preview.render(
             layers, self._connections, self._root_layer, **render_kw)
         self._anim_preview_small.render(

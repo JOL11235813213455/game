@@ -89,16 +89,15 @@ class TileSetsTab(ttk.Frame):
             row=4, column=0, columnspan=4, sticky='w', padx=6, pady=(4, 2))
 
         r = 5
-        for i, label in enumerate(('w', 'x', 'y', 'z')):
+        for i, label in enumerate(('x', 'y', 'z')):
             ttk.Label(f, text=label.upper()).grid(
                 row=r, column=i, padx=(6 if i == 0 else 2, 2), pady=3, sticky='w')
         r += 1
-        self.v_w = tk.StringVar(value='0')
         self.v_x = tk.StringVar()
         self.v_y = tk.StringVar()
         self.v_z = tk.StringVar(value='0')
-        coord_tips = ['W: world/layer index', 'X: horizontal position', 'Y: vertical position', 'Z: elevation/floor']
-        for i, (v, tip) in enumerate(zip((self.v_w, self.v_x, self.v_y, self.v_z), coord_tips)):
+        coord_tips = ['X: horizontal position', 'Y: vertical position', 'Z: elevation/floor']
+        for i, (v, tip) in enumerate(zip((self.v_x, self.v_y, self.v_z), coord_tips)):
             e = ttk.Entry(f, textvariable=v, width=6)
             e.grid(row=r, column=i, padx=(6 if i == 0 else 2, 2), pady=3, sticky='w')
             add_tooltip(e, tip)
@@ -278,7 +277,7 @@ class TileSetsTab(ttk.Frame):
         con = get_con()
         try:
             rows = con.execute(
-                'SELECT * FROM tile_sets WHERE tile_set=? ORDER BY w,x,y,z',
+                'SELECT * FROM tile_sets WHERE tile_set=? ORDER BY x,y,z',
                 (ts_name,)
             ).fetchall()
         finally:
@@ -292,22 +291,23 @@ class TileSetsTab(ttk.Frame):
         self._entry_ids = []
         self._entry_rows = []
         for r in rows:
-            tmpl = r['tile_template'] or ''
-            label = f"({r['w']},{r['x']},{r['y']},{r['z']})  [{tmpl}]"
-            if r['sprite_name']:
-                label += f"  sprite={r['sprite_name']}"
-            if r['nested_map']:
-                label += f"  nested={r['nested_map']}"
-            if r.get('warp_map'):
-                warp_lbl = f"  warp={r['warp_map']}"
-                if r.get('warp_x') is not None:
-                    warp_lbl += f"({r['warp_x']},{r['warp_y']})"
-                if r.get('warp_auto'):
+            rd = dict(r)
+            tmpl = rd.get('tile_template') or ''
+            label = f"({rd['x']},{rd['y']},{rd['z']})  [{tmpl}]"
+            if rd.get('sprite_name'):
+                label += f"  sprite={rd['sprite_name']}"
+            if rd.get('nested_map'):
+                label += f"  nested={rd['nested_map']}"
+            if rd.get('warp_map'):
+                warp_lbl = f"  warp={rd['warp_map']}"
+                if rd.get('warp_x') is not None:
+                    warp_lbl += f"({rd['warp_x']},{rd['warp_y']})"
+                if rd.get('warp_auto'):
                     warp_lbl += '[auto]'
                 label += warp_lbl
             self.entries_listbox.insert(tk.END, label)
-            self._entry_ids.append(r['id'])
-            self._entry_rows.append(dict(r))
+            self._entry_ids.append(rd['id'])
+            self._entry_rows.append(rd)
 
     def _new_tile_set(self):
         self.listbox.selection_clear(0, tk.END)
@@ -356,7 +356,6 @@ class TileSetsTab(ttk.Frame):
         if not sel:
             return
         r = self._entry_rows[sel[0]]
-        self.v_w.set(str(r['w']))
         self.v_x.set(str(r['x']))
         self.v_y.set(str(r['y']))
         self.v_z.set(str(r['z']))
@@ -381,7 +380,6 @@ class TileSetsTab(ttk.Frame):
         self.v_warp_auto.set(bool(r.get('warp_auto', 0)))
 
     def _clear_entry_form(self):
-        self.v_w.set('0')
         self.v_x.set('')
         self.v_y.set('')
         self.v_z.set('0')
@@ -402,12 +400,11 @@ class TileSetsTab(ttk.Frame):
 
     def _read_entry_form(self):
         try:
-            w = self._int_field(self.v_w)
             x = int(self.v_x.get())
             y = int(self.v_y.get())
             z = self._int_field(self.v_z)
         except ValueError:
-            messagebox.showerror('Validation', 'w, x, y, z must be integers.')
+            messagebox.showerror('Validation', 'x, y, z must be integers.')
             return None
         tmpl = self.v_template.get().strip() or None
         sprite = self.v_sprite.get().strip() or None
@@ -427,7 +424,7 @@ class TileSetsTab(ttk.Frame):
         animation = self.v_animation.get().strip() or None
         bounds = {d: (self._bound_vars[d].get().strip() or None)
                   for d in ('n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw')}
-        return dict(w=w, x=x, y=y, z=z, tile_template=tmpl, walkable=walkable,
+        return dict(x=x, y=y, z=z, tile_template=tmpl, walkable=walkable,
                     covered=covered, sprite_name=sprite, tile_scale=scale, nested_map=nested,
                     animation_name=animation, bounds=bounds,
                     warp_map=warp_map, warp_x=warp_x, warp_y=warp_y, warp_auto=warp_auto)
@@ -445,13 +442,13 @@ class TileSetsTab(ttk.Frame):
             b = vals['bounds']
             con.execute(
                 '''INSERT INTO tile_sets
-                   (tile_set, w, x, y, z, tile_template, walkable, covered,
+                   (tile_set, x, y, z, tile_template, walkable, covered,
                     sprite_name, tile_scale, nested_map, animation_name,
                     bounds_n, bounds_s, bounds_e, bounds_w,
                     bounds_ne, bounds_nw, bounds_se, bounds_sw,
                     warp_map, warp_x, warp_y, warp_auto)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
-                (name, vals['w'], vals['x'], vals['y'], vals['z'],
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                (name, vals['x'], vals['y'], vals['z'],
                  vals['tile_template'], vals['walkable'], vals['covered'],
                  vals['sprite_name'], vals['tile_scale'], vals['nested_map'],
                  vals['animation_name'],
@@ -480,13 +477,13 @@ class TileSetsTab(ttk.Frame):
             b = vals['bounds']
             con.execute(
                 '''UPDATE tile_sets SET
-                   w=?, x=?, y=?, z=?, tile_template=?, walkable=?, covered=?,
+                   x=?, y=?, z=?, tile_template=?, walkable=?, covered=?,
                    sprite_name=?, tile_scale=?, nested_map=?, animation_name=?,
                    bounds_n=?, bounds_s=?, bounds_e=?, bounds_w=?,
                    bounds_ne=?, bounds_nw=?, bounds_se=?, bounds_sw=?,
                    warp_map=?, warp_x=?, warp_y=?, warp_auto=?
                    WHERE id=?''',
-                (vals['w'], vals['x'], vals['y'], vals['z'], vals['tile_template'],
+                (vals['x'], vals['y'], vals['z'], vals['tile_template'],
                  vals['walkable'], vals['covered'], vals['sprite_name'],
                  vals['tile_scale'], vals['nested_map'], vals['animation_name'],
                  b['n'], b['s'], b['e'], b['w'],

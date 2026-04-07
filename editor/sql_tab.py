@@ -357,7 +357,7 @@ class SqlTab(ttk.Frame):
         ('maps', 'default_tile_template', 'tile_templates', 'key'),
         ('tile_sets', 'tile_template', 'tile_templates', 'key'),
         ('tile_sets', 'nested_map', 'maps', 'name'),
-        ('tile_sets', 'warp_map', 'maps', 'name'),
+        ('tile_sets', 'linked_map', 'maps', 'name'),
         ('items', 'nested_map', 'maps', 'name'),
     ]
 
@@ -718,6 +718,7 @@ class SqlTab(ttk.Frame):
             ('composite_anim_keyframes', 'tint_g'): 'Green tint overlay (0-255)',
             ('composite_anim_keyframes', 'tint_b'): 'Blue tint overlay (0-255)',
             ('composite_anim_keyframes', 'opacity'): 'Layer opacity (0.0=invisible, 1.0=solid)',
+            ('composite_anim_keyframes', 'scale'): 'Layer scale factor (1.0=normal, 0.5=half, 2.0=double)',
             ('composite_anim_bindings', 'flip_h'): 'Mirror animation horizontally',
             # species
             ('species', 'playable'): '1 = player-selectable species',
@@ -757,10 +758,13 @@ class SqlTab(ttk.Frame):
             ('tile_sets', 'tile_set'): 'Name of the tile set this entry belongs to',
             ('tile_sets', 'tile_template'): 'Base tile template providing defaults',
             ('tile_sets', 'nested_map'): 'Map entered when stepping on this tile',
-            ('tile_sets', 'warp_map'): 'Target map for teleportation',
-            ('tile_sets', 'warp_x'): 'Target X coordinate (blank = map entrance)',
-            ('tile_sets', 'warp_y'): 'Target Y coordinate (blank = map entrance)',
-            ('tile_sets', 'warp_auto'): '1 = auto-teleport on step, 0 = requires Enter key',
+            ('tile_sets', 'linked_map'): 'Target map for teleportation',
+            ('tile_sets', 'linked_x'): 'Target X coordinate (blank = map entrance)',
+            ('tile_sets', 'linked_y'): 'Target Y coordinate (blank = map entrance)',
+            ('tile_sets', 'linked_z'): 'Target Z level (blank = 0)',
+            ('tile_sets', 'link_auto'): '1 = auto-teleport on step, 0 = requires Enter key',
+            ('tile_sets', 'stat_mods'): 'JSON: stat modifier dict applied while on this tile',
+            ('tile_templates', 'stat_mods'): 'JSON: default stat modifiers for this tile type',
             ('tile_sets', 'animation_name'): 'Override tile animation for this placement',
             # maps
             ('maps', 'tile_set'): 'Tile set used to build this map',

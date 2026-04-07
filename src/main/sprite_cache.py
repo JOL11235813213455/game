@@ -214,7 +214,7 @@ def _resolve_composite_positions(comp, offset_overrides=None,
 
 def _assemble_composite_native(comp, positions, sprite_overrides=None,
                                 layer_opacity=None, layer_tint=None,
-                                layer_rotation=None):
+                                layer_rotation=None, layer_scale=None):
     """
     Blit cached native layer surfaces into a single unscaled Surface.
     sprite_overrides: {layer_name: sprite_name} — replace default sprite
@@ -222,6 +222,7 @@ def _assemble_composite_native(comp, positions, sprite_overrides=None,
     layer_tint: {layer_name: (r, g, b)} — per-layer color tint
     layer_rotation: {layer_name: degrees} — cumulative rotation (own + ancestors).
         Used to visually rotate each layer's sprite.
+    layer_scale: {layer_name: float} — per-layer scale factor (1.0 = normal).
     Positions should already include any animation offsets (with orbiting
     from ancestor rotations already baked in).
     Returns (Surface, min_x, min_y) or None.
@@ -230,6 +231,7 @@ def _assemble_composite_native(comp, positions, sprite_overrides=None,
     layer_opacity = layer_opacity or {}
     layer_tint = layer_tint or {}
     layer_rotation = layer_rotation or {}
+    layer_scale = layer_scale or {}
 
     # Gather layer surfaces, apply rotation, compute bounding box
     min_x = min_y = float('inf')
@@ -246,8 +248,25 @@ def _assemble_composite_native(comp, positions, sprite_overrides=None,
             continue
         px, py = positions.get(lname, (0, 0))
         rot = layer_rotation.get(lname, 0.0)
+        lscale = layer_scale.get(lname, 1.0)
         surf = native
         bx, by = px, py
+
+        if lscale != 1.0:
+            ow, oh = native.get_size()
+            sw = max(1, int(ow * lscale))
+            sh = max(1, int(oh * lscale))
+            surf = pygame.transform.scale(native, (sw, sh))
+            # Re-center: anchor stays at same position
+            conn = comp['connections'].get(lname)
+            if conn:
+                ax, ay = conn['child_anchor']
+            else:
+                ax, ay = ow / 2, oh / 2
+            new_ax = ax * lscale
+            new_ay = ay * lscale
+            bx = px + ax - new_ax
+            by = py + ay - new_ay
 
         if rot:
             # Visually rotate this layer's sprite.
@@ -257,12 +276,14 @@ def _assemble_composite_native(comp, positions, sprite_overrides=None,
             conn = comp['connections'].get(lname)
             if conn:
                 ax, ay = conn['child_anchor']
+                if lscale != 1.0:
+                    ax, ay = ax * lscale, ay * lscale
             else:
-                ax = native.get_width() // 2
-                ay = native.get_height() // 2
+                ax = surf.get_width() // 2
+                ay = surf.get_height() // 2
 
-            ow, oh = native.get_size()
-            rotated = pygame.transform.rotate(native, -rot)  # pygame uses CCW
+            ow, oh = surf.get_size()
+            rotated = pygame.transform.rotate(surf, -rot)  # pygame uses CCW
             rw, rh = rotated.get_size()
             import math
             rad = math.radians(-rot)
@@ -270,9 +291,12 @@ def _assemble_composite_native(comp, positions, sprite_overrides=None,
             dx, dy = ax - ow / 2, ay - oh / 2
             new_ax = rw / 2 + dx * cos_a - dy * sin_a
             new_ay = rh / 2 + dx * sin_a + dy * cos_a
-            # Anchor should land at (px + ax, py + ay) in world space
-            bx = px + ax - new_ax
-            by = py + ay - new_ay
+            # Anchor should land at (bx + ax, by + ay) in world space
+            # bx/by already account for scale offset if applicable
+            world_ax = bx + ax
+            world_ay = by + ay
+            bx = world_ax - new_ax
+            by = world_ay - new_ay
             surf = rotated
 
         sw, sh = surf.get_size()
@@ -364,13 +388,14 @@ def _lerp(a, b, t):
 
 
 def _interp_keyframes(keyframes, time_ms):
-    """Interpolate offset_x, offset_y, rotation_deg, variant_name, tint, opacity at time_ms."""
+    """Interpolate offset_x, offset_y, rotation_deg, variant_name, tint, opacity, scale at time_ms."""
     if not keyframes:
-        return 0, 0, 0.0, None, None, 1.0
+        return 0, 0, 0.0, None, None, 1.0, 1.0
     if len(keyframes) == 1:
         k = keyframes[0]
         return (k['offset_x'], k['offset_y'], k['rotation_deg'],
-                k.get('variant_name'), k.get('tint'), k.get('opacity', 1.0))
+                k.get('variant_name'), k.get('tint'), k.get('opacity', 1.0),
+                k.get('scale', 1.0))
     prev = keyframes[0]
     nxt = prev
     for kf in keyframes:
@@ -381,11 +406,11 @@ def _interp_keyframes(keyframes, time_ms):
     else:
         return (prev['offset_x'], prev['offset_y'], prev['rotation_deg'],
                 prev.get('variant_name'), prev.get('tint'),
-                prev.get('opacity', 1.0))
+                prev.get('opacity', 1.0), prev.get('scale', 1.0))
     if prev['time_ms'] == nxt['time_ms']:
         return (prev['offset_x'], prev['offset_y'], prev['rotation_deg'],
                 prev.get('variant_name'), prev.get('tint'),
-                prev.get('opacity', 1.0))
+                prev.get('opacity', 1.0), prev.get('scale', 1.0))
     t = (time_ms - prev['time_ms']) / (nxt['time_ms'] - prev['time_ms'])
     # Interpolate tint
     tint = None
@@ -403,7 +428,8 @@ def _interp_keyframes(keyframes, time_ms):
             _lerp(prev['rotation_deg'], nxt['rotation_deg'], t),
             prev.get('variant_name') or nxt.get('variant_name'),
             tint,
-            _lerp(prev.get('opacity', 1.0), nxt.get('opacity', 1.0), t))
+            _lerp(prev.get('opacity', 1.0), nxt.get('opacity', 1.0), t),
+            _lerp(prev.get('scale', 1.0), nxt.get('scale', 1.0), t))
 
 
 def pre_render_composite_anim(composite_name: str, anim_name: str,
@@ -443,13 +469,16 @@ def pre_render_composite_anim(composite_name: str, anim_name: str,
         layer_opacity = {}
         layer_tint = {}
         rotation_overrides = {}
+        layer_scale = {}
         for layer_name, kfs in anim['keyframes'].items():
-            ox, oy, rot, var, tint, opacity = _interp_keyframes(kfs, t)
+            ox, oy, rot, var, tint, opacity, kf_scale = _interp_keyframes(kfs, t)
             offset_overrides[layer_name] = (int(ox), int(oy))
             if rot:
                 rotation_overrides[layer_name] = rot
             if opacity < 1.0:
                 layer_opacity[layer_name] = max(0.0, min(1.0, opacity))
+            if kf_scale != 1.0:
+                layer_scale[layer_name] = kf_scale
             if tint:
                 layer_tint[layer_name] = tint
             if var:
@@ -466,7 +495,8 @@ def pre_render_composite_anim(composite_name: str, anim_name: str,
                                              sprite_overrides,
                                              layer_opacity,
                                              layer_tint,
-                                             cumulative_rot)
+                                             cumulative_rot,
+                                             layer_scale)
         if result is None:
             frames.append(None)
             continue

@@ -80,12 +80,11 @@ class MapsTab(ttk.Frame):
         r += 1
 
         axis_tips = {
-            'w': 'World/layer dimension bounds',
             'x': 'Horizontal dimension bounds (map width)',
             'y': 'Vertical dimension bounds (map height)',
             'z': 'Elevation/floor dimension bounds',
         }
-        for axis in ('w', 'x', 'y', 'z'):
+        for axis in ('x', 'y', 'z'):
             ttk.Label(f, text=f'{axis.upper()} min / max').grid(
                 row=r, column=0, sticky='w', padx=6, pady=3)
             vmin = tk.StringVar(value='0')
@@ -149,7 +148,7 @@ class MapsTab(ttk.Frame):
         self.v_default_tile_template.set(row['default_tile_template'] or '')
         self.v_ent_x.set(str(row['entrance_x']))
         self.v_ent_y.set(str(row['entrance_y']))
-        for axis in ('w', 'x', 'y', 'z'):
+        for axis in ('x', 'y', 'z'):
             getattr(self, f'v_{axis}_min').set(str(row[f'{axis}_min']))
             getattr(self, f'v_{axis}_max').set(str(row[f'{axis}_max']))
         self.default_template_cb['values'] = [''] + fetch_tile_template_keys()
@@ -161,7 +160,7 @@ class MapsTab(ttk.Frame):
         self.v_default_tile_template.set('')
         self.v_ent_x.set('0')
         self.v_ent_y.set('0')
-        for axis in ('w', 'x', 'y', 'z'):
+        for axis in ('x', 'y', 'z'):
             getattr(self, f'v_{axis}_min').set('0')
             getattr(self, f'v_{axis}_max').set('0')
 
@@ -181,19 +180,17 @@ class MapsTab(ttk.Frame):
             con.execute(
                 '''INSERT INTO maps
                    (name, tile_set, default_tile_template, entrance_x, entrance_y,
-                    w_min, w_max, x_min, x_max, y_min, y_max, z_min, z_max)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    x_min, x_max, y_min, y_max, z_min, z_max)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?)
                    ON CONFLICT(name) DO UPDATE SET
                    tile_set=excluded.tile_set,
                    default_tile_template=excluded.default_tile_template,
                    entrance_x=excluded.entrance_x, entrance_y=excluded.entrance_y,
-                   w_min=excluded.w_min, w_max=excluded.w_max,
                    x_min=excluded.x_min, x_max=excluded.x_max,
                    y_min=excluded.y_min, y_max=excluded.y_max,
                    z_min=excluded.z_min, z_max=excluded.z_max''',
                 (name, ts, dt,
                  self._int_field(self.v_ent_x), self._int_field(self.v_ent_y),
-                 self._int_field(self.v_w_min), self._int_field(self.v_w_max),
                  self._int_field(self.v_x_min), self._int_field(self.v_x_max),
                  self._int_field(self.v_y_min), self._int_field(self.v_y_max),
                  self._int_field(self.v_z_min), self._int_field(self.v_z_max)))

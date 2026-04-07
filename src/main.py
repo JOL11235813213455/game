@@ -44,12 +44,12 @@ def main():
 
     player = Creature(
         current_map=game_map,
-        location=MapKey(0, *game_map.entrance, 0),
+        location=MapKey(*game_map.entrance, 0),
         species='human',
         stats={Stat.CON: 10},
     )
     # Place NPC on a walkable tile near the entrance
-    npc_loc = MapKey(0, game_map.entrance[0] + 3, game_map.entrance[1] + 2, 0)
+    npc_loc = MapKey(game_map.entrance[0] + 3, game_map.entrance[1] + 2, 0)
     npcs = [NPC(current_map=game_map, location=npc_loc, species='automaton')]
 
     font       = pygame.font.SysFont(None, 28)

@@ -134,7 +134,7 @@ def migrate_db():
     bounds_ne TEXT, bounds_nw TEXT, bounds_se TEXT, bounds_sw TEXT)""",
             """CREATE TABLE IF NOT EXISTS tile_sets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tile_set TEXT NOT NULL, w INTEGER NOT NULL DEFAULT 0,
+    tile_set TEXT NOT NULL,
     x INTEGER NOT NULL, y INTEGER NOT NULL, z INTEGER NOT NULL DEFAULT 0,
     tile_template TEXT, walkable INTEGER, covered INTEGER,
     sprite_name TEXT, tile_scale REAL,
@@ -144,7 +144,6 @@ def migrate_db():
             """CREATE TABLE IF NOT EXISTS maps (
     name TEXT PRIMARY KEY, tile_set TEXT, default_tile_template TEXT,
     entrance_x INTEGER NOT NULL DEFAULT 0, entrance_y INTEGER NOT NULL DEFAULT 0,
-    w_min INTEGER NOT NULL DEFAULT 0, w_max INTEGER NOT NULL DEFAULT 0,
     x_min INTEGER NOT NULL DEFAULT 0, x_max INTEGER NOT NULL DEFAULT 0,
     y_min INTEGER NOT NULL DEFAULT 0, y_max INTEGER NOT NULL DEFAULT 0,
     z_min INTEGER NOT NULL DEFAULT 0, z_max INTEGER NOT NULL DEFAULT 0)""",
@@ -221,6 +220,23 @@ def migrate_db():
             pass
         else:
             con.execute("ALTER TABLE maps RENAME COLUMN default_tile TO default_tile_template")
+        # Drop vestigial W columns
+        for stmt in [
+            "ALTER TABLE maps DROP COLUMN w_min",
+            "ALTER TABLE maps DROP COLUMN w_max",
+            "ALTER TABLE tile_sets DROP COLUMN w",
+        ]:
+            try:
+                con.execute(stmt)
+            except sqlite3.OperationalError:
+                pass
+        # Rename warp_* → linked_*
+        for old, new in [('warp_map', 'linked_map'), ('warp_x', 'linked_x'),
+                          ('warp_y', 'linked_y'), ('warp_auto', 'link_auto')]:
+            try:
+                con.execute(f'ALTER TABLE tile_sets RENAME COLUMN {old} TO {new}')
+            except sqlite3.OperationalError:
+                pass
         # Animation tables
         for stmt in [
             """CREATE TABLE IF NOT EXISTS animations (
@@ -300,11 +316,15 @@ def migrate_db():
             "ALTER TABLE composite_anim_keyframes ADD COLUMN tint_g INTEGER",
             "ALTER TABLE composite_anim_keyframes ADD COLUMN tint_b INTEGER",
             "ALTER TABLE composite_anim_keyframes ADD COLUMN opacity REAL NOT NULL DEFAULT 1.0",
+            "ALTER TABLE composite_anim_keyframes ADD COLUMN scale REAL NOT NULL DEFAULT 1.0",
             "ALTER TABLE tile_sets ADD COLUMN animation_name TEXT",
-            "ALTER TABLE tile_sets ADD COLUMN warp_map TEXT",
-            "ALTER TABLE tile_sets ADD COLUMN warp_x INTEGER",
-            "ALTER TABLE tile_sets ADD COLUMN warp_y INTEGER",
-            "ALTER TABLE tile_sets ADD COLUMN warp_auto INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE tile_sets ADD COLUMN linked_map TEXT",
+            "ALTER TABLE tile_sets ADD COLUMN linked_x INTEGER",
+            "ALTER TABLE tile_sets ADD COLUMN linked_y INTEGER",
+            "ALTER TABLE tile_sets ADD COLUMN linked_z INTEGER",
+            "ALTER TABLE tile_sets ADD COLUMN link_auto INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE tile_sets ADD COLUMN stat_mods TEXT",
+            "ALTER TABLE tile_templates ADD COLUMN stat_mods TEXT",
         ]:
             try:
                 con.execute(stmt)
