@@ -85,7 +85,8 @@ class CompositePreview(tk.Canvas):
 
     def render(self, layers, connections, root_layer,
                variant_overrides=None, anim_offsets=None,
-               anim_opacity=None, anim_scale=None, show_sockets=False):
+               anim_opacity=None, anim_scale=None, anim_tint=None,
+               show_sockets=False):
         self.delete('all')
         if not layers:
             self._checkerboard()
@@ -94,6 +95,7 @@ class CompositePreview(tk.Canvas):
         anim_offsets = anim_offsets or {}
         anim_opacity = anim_opacity or {}
         anim_scale = anim_scale or {}
+        anim_tint = anim_tint or {}
 
         def _resolve(offsets):
             import math
@@ -187,6 +189,7 @@ class CompositePreview(tk.Canvas):
             opacity = anim_opacity.get(name, 1.0)
             if opacity <= 0.01:
                 continue
+            tint = anim_tint.get(name)
             px, py = positions.get(name, (0, 0))
             palette = data['palette']
             # Use cumulative rotation (own + ancestors)
@@ -200,37 +203,87 @@ class CompositePreview(tk.Canvas):
                 w = data.get('width', 0)
                 h = len(data.get('pixels', []))
                 ax, ay = w / 2, h / 2
-            if rot:
+            pixel_rows = data.get('pixels', [])
+            sw = data.get('width', 0)
+            sh = len(pixel_rows)
+            if sw <= 0 or sh <= 0:
+                continue
+
+            # Pre-resolve palette colors with tint/opacity applied
+            color_cache = {}
+            for ch, color in palette.items():
+                if ch == '.':
+                    continue
+                try:
+                    cr = int(color[1:3], 16)
+                    cg = int(color[3:5], 16)
+                    cb = int(color[5:7], 16)
+                    if tint:
+                        cr = min(255, cr + tint[0])
+                        cg = min(255, cg + tint[1])
+                        cb = min(255, cb + tint[2])
+                    if opacity < 1.0:
+                        cr = int(cr * opacity)
+                        cg = int(cg * opacity)
+                        cb = int(cb * opacity)
+                    color_cache[ch] = (f'#{cr:02x}{cg:02x}{cb:02x}'
+                                       if tint or opacity < 1.0 else color)
+                except (ValueError, IndexError):
+                    color_cache[ch] = color
+
+            # Inverse mapping: iterate destination pixels, sample source
+            has_rot = bool(rot)
+            if has_rot:
                 rad = math.radians(rot)
                 cos_a, sin_a = math.cos(rad), math.sin(rad)
-            pixel_scale = scale * lscale
-            for ri, row_str in enumerate(data.get('pixels', [])):
-                for ci, ch in enumerate(row_str):
-                    if ch == '.' or ch not in palette:
-                        continue
-                    color = palette[ch]
-                    if opacity < 1.0:
-                        try:
-                            cr = int(int(color[1:3], 16) * opacity)
-                            cg = int(int(color[3:5], 16) * opacity)
-                            cb = int(int(color[5:7], 16) * opacity)
-                            color = f'#{cr:02x}{cg:02x}{cb:02x}'
-                        except (ValueError, IndexError):
-                            pass
-                    # Pixel position: scale around anchor, then rotate
-                    lx, ly = ci, ri
+                # Inverse rotation (negative angle)
+                inv_cos, inv_sin = cos_a, -sin_a
+
+            # Compute destination bounding box from the 4 corners
+            corners = [(0, 0), (sw, 0), (sw, sh), (0, sh)]
+            dest_xs = []
+            dest_ys = []
+            for cx, cy in corners:
+                lx, ly = cx, cy
+                if lscale != 1.0:
+                    lx = ax + (lx - ax) * lscale
+                    ly = ay + (ly - ay) * lscale
+                if has_rot:
+                    dx, dy = lx - ax, ly - ay
+                    lx = ax + dx * cos_a - dy * sin_a
+                    ly = ay + dx * sin_a + dy * cos_a
+                dest_xs.append(lx)
+                dest_ys.append(ly)
+            d_x0 = math.floor(min(dest_xs))
+            d_y0 = math.floor(min(dest_ys))
+            d_x1 = math.ceil(max(dest_xs))
+            d_y1 = math.ceil(max(dest_ys))
+
+            pixel_scale = scale  # each source pixel = scale screen px
+            for dy in range(d_y0, d_y1):
+                for dx in range(d_x0, d_x1):
+                    # Map destination back to source
+                    sx_l, sy_l = float(dx) + 0.5, float(dy) + 0.5
+                    if has_rot:
+                        rx, ry = sx_l - ax, sy_l - ay
+                        sx_l = ax + rx * inv_cos - ry * inv_sin
+                        sy_l = ay + rx * inv_sin + ry * inv_cos
                     if lscale != 1.0:
-                        lx = ax + (lx - ax) * lscale
-                        ly = ay + (ly - ay) * lscale
-                    if rot:
-                        dx, dy = lx - ax, ly - ay
-                        lx = ax + dx * cos_a - dy * sin_a
-                        ly = ay + dx * sin_a + dy * cos_a
-                    sx = pad + (px - min_x + lx) * scale
-                    sy = pad + (py - min_y + ly) * scale
-                    self.create_rectangle(sx, sy, sx + pixel_scale,
-                                          sy + pixel_scale,
-                                          fill=color, outline='')
+                        sx_l = ax + (sx_l - ax) / lscale
+                        sy_l = ay + (sy_l - ay) / lscale
+                    si, sj = int(sy_l), int(sx_l)
+                    if si < 0 or si >= sh or sj < 0 or sj >= sw:
+                        continue
+                    ch = pixel_rows[si][sj]
+                    c = color_cache.get(ch)
+                    if not c:
+                        continue
+                    screen_x = pad + (px - min_x + dx) * scale
+                    screen_y = pad + (py - min_y + dy) * scale
+                    self.create_rectangle(
+                        screen_x, screen_y,
+                        screen_x + pixel_scale, screen_y + pixel_scale,
+                        fill=c, outline='')
 
         if show_sockets:
             for child, conn in connections.items():
@@ -795,7 +848,7 @@ class CompositesTab(ttk.Frame):
         names = [l['layer_name'] for l in self._layers]
         self._conn_child_cb['values'] = names
         self._conn_parent_cb['values'] = names
-        self._kf_layer_cb['values'] = names
+        self._kf_layer_cb['values'] = self._layer_order() if self._layers else names
 
     def _get_variant_choices_for_layer(self, layer_name: str) -> list[str]:
         """Return variant names available for a layer (for keyframe dropdown)."""
@@ -1410,13 +1463,37 @@ class CompositesTab(ttk.Frame):
 
     # -- Keyframe spreadsheet --
 
+    def _layer_order(self):
+        """Return layer names sorted parent-before-child using connections."""
+        ordered = []
+        visited = set()
+        by_child = self._connections  # child_name → {parent_layer: ...}
+        names = {l['layer_name'] for l in self._layers}
+        def visit(name):
+            if name in visited or name not in names:
+                return
+            visited.add(name)
+            conn = by_child.get(name)
+            if conn:
+                visit(conn['parent_layer'])
+            ordered.append(name)
+        # Start from root, then remaining
+        if self._root_layer in names:
+            visit(self._root_layer)
+        for l in self._layers:
+            visit(l['layer_name'])
+        return ordered
+
     def _load_keyframes_to_tree(self, anim_name):
         self._kf_tree.clear()
         anim = next((a for a in self._animations
                      if a['name'] == anim_name), None)
         if not anim or not anim['keyframes']:
             return
-        for ln, kfs in sorted(anim['keyframes'].items()):
+        layer_order = self._layer_order()
+        layer_rank = {n: i for i, n in enumerate(layer_order)}
+        for ln, kfs in sorted(anim['keyframes'].items(),
+                               key=lambda x: layer_rank.get(x[0], 999)):
             for kf in kfs:
                 tint = kf.get('tint')
                 self._kf_tree.add_row((
@@ -1527,11 +1604,14 @@ class CompositesTab(ttk.Frame):
         var_overrides = {}
         opacity_map = {}
         scale_map = {}
+        tint_map = {}
         for ln, kfs in anim['keyframes'].items():
-            ox, oy, rot, var, _tint, opacity, kf_scale = _interp_keyframes(kfs, t)
+            ox, oy, rot, var, tint, opacity, kf_scale = _interp_keyframes(kfs, t)
             offsets[ln] = (int(ox), int(oy), rot)
             opacity_map[ln] = opacity
             scale_map[ln] = kf_scale
+            if tint:
+                tint_map[ln] = tint
             if var:
                 sn = self._variants.get(ln, {}).get(var)
                 if sn:
@@ -1541,7 +1621,7 @@ class CompositesTab(ttk.Frame):
         layers = self._build_layers_dict()
         render_kw = dict(variant_overrides=var_overrides,
                          anim_offsets=offsets, anim_opacity=opacity_map,
-                         anim_scale=scale_map)
+                         anim_scale=scale_map, anim_tint=tint_map)
         self._anim_preview.render(
             layers, self._connections, self._root_layer, **render_kw)
         self._anim_preview_small.render(

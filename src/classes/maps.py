@@ -38,6 +38,7 @@ class Tile(Trackable):
         ,link_auto:bool=False
         ,stat_mods:dict=None
         ,speed_modifier:float=None
+        ,bg_color:str=None
         ):
         super().__init__()
         tmpl = template or {}
@@ -48,6 +49,7 @@ class Tile(Trackable):
         self.tile_scale     = tile_scale  if tile_scale  is not None else tmpl.get('tile_scale',  1.0)
         self.animation_name = animation_name if animation_name is not None else tmpl.get('animation_name', None)
         self.speed_modifier = speed_modifier if speed_modifier is not None else tmpl.get('speed_modifier', 1.0)
+        self.bg_color       = bg_color     if bg_color     is not None else tmpl.get('bg_color',     None)
         self.nested_map: Map = map
         self.inventory = Inventory(items=items or [])
         self.tile_template = tile_template

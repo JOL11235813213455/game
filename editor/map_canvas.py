@@ -64,6 +64,7 @@ class MapCanvas(tk.Canvas):
 
         # Canvas item tracking
         self._tile_items = {}    # (x, y) → canvas item id
+        self._bg_items = {}      # (x, y) → bg color rect item id
         self._grid_items = []
         self._overlay_items = []
 
@@ -195,6 +196,7 @@ class MapCanvas(tk.Canvas):
         self._stop_anim_timer()
         self.delete('all')
         self._tile_items.clear()
+        self._bg_items.clear()
         self._grid_items.clear()
         self._overlay_items.clear()
         self._photos.clear()
@@ -267,12 +269,26 @@ class MapCanvas(tk.Canvas):
             color = COLOR_WALKABLE_TINT if walkable else COLOR_BLOCKED_TINT
             photo = make_default_tile_photo(tw, th, color)
 
+        # Background color fill (from tile or template)
+        old_bg = self._bg_items.pop((x, y), None)
+        if old_bg:
+            self.delete(old_bg)
+        bg = None
+        if tile_data:
+            bg = tile_data.get('bg_color')
+            if not bg and tile_data.get('tile_template'):
+                bg = self._resolve_template_bg_color(tile_data['tile_template'])
+        if bg:
+            bg_item = self.create_rectangle(sx, sy, sx + tw, sy + th,
+                                             fill=bg, outline='')
+            self._bg_items[(x, y)] = bg_item
+
         self._photos[(x, y)] = photo
         item = self.create_image(sx, sy, image=photo, anchor='nw')
         self._tile_items[(x, y)] = item
 
-    def _resolve_template_sprite(self, template_key: str) -> str | None:
-        """Look up a tile template's sprite_name from DB (cached)."""
+    def _fetch_template(self, template_key: str) -> dict | None:
+        """Look up tile template fields from DB (cached)."""
         if not hasattr(self, '_template_cache'):
             self._template_cache = {}
         if template_key in self._template_cache:
@@ -281,13 +297,21 @@ class MapCanvas(tk.Canvas):
         con = get_con()
         try:
             row = con.execute(
-                'SELECT sprite_name FROM tile_templates WHERE key=?',
+                'SELECT sprite_name, bg_color FROM tile_templates WHERE key=?',
                 (template_key,)).fetchone()
-            sprite = row['sprite_name'] if row else None
+            data = dict(row) if row else None
         finally:
             con.close()
-        self._template_cache[template_key] = sprite
-        return sprite
+        self._template_cache[template_key] = data
+        return data
+
+    def _resolve_template_sprite(self, template_key: str) -> str | None:
+        data = self._fetch_template(template_key)
+        return data['sprite_name'] if data else None
+
+    def _resolve_template_bg_color(self, template_key: str) -> str | None:
+        data = self._fetch_template(template_key)
+        return data['bg_color'] if data else None
 
     def _draw_grid(self, vx_min, vy_min, vx_max, vy_max):
         """Draw grid lines over the visible area."""
@@ -413,33 +437,6 @@ class MapCanvas(tk.Canvas):
                             fill=COLOR_BOUND_BLOCKED, outline='',
                             stipple='gray50')
                         self._bounds_items.append(item)
-
-    def _resolve_template_bounds(self, template_key: str | None) -> dict:
-        """Get bounds from a tile template as a dict of {direction: bool}."""
-        if not template_key:
-            return {}
-        if not hasattr(self, '_bounds_cache'):
-            self._bounds_cache = {}
-        if template_key in self._bounds_cache:
-            return dict(self._bounds_cache[template_key])
-        from editor.db import get_con
-        con = get_con()
-        try:
-            row = con.execute(
-                'SELECT bounds_n, bounds_s, bounds_e, bounds_w, '
-                'bounds_ne, bounds_nw, bounds_se, bounds_sw '
-                'FROM tile_templates WHERE key=?',
-                (template_key,)).fetchone()
-            if row:
-                result = {}
-                for d in ('n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'):
-                    val = row[f'bounds_{d}']
-                    result[d] = (val != 0) if val is not None else True
-                self._bounds_cache[template_key] = result
-                return dict(result)
-        finally:
-            con.close()
-        return {}
 
     # ------------------------------------------------------------------
     # Tile Animations

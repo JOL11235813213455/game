@@ -767,6 +767,10 @@ class SqlTab(ttk.Frame):
             ('tile_templates', 'stat_mods'): 'JSON: default stat modifiers for this tile type',
             ('tile_sets', 'animation_name'): 'Override tile animation for this placement',
             ('tile_sets', 'search_text'): 'Arbitrary text for searching/filtering tiles',
+            ('tile_sets', 'speed_modifier'): 'Movement speed multiplier (1.0 = normal)',
+            ('tile_templates', 'speed_modifier'): 'Movement speed multiplier default (1.0 = normal)',
+            ('tile_templates', 'bg_color'): 'Background fill color hex RGB (e.g. #3a7a3a). NULL = transparent',
+            ('tile_sets', 'bg_color'): 'Override background fill color hex RGB. NULL = use template',
             # maps
             ('maps', 'tile_set'): 'Tile set used to build this map',
             ('maps', 'default_tile_template'): 'Template for unset coordinates',

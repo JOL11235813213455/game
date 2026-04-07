@@ -45,6 +45,10 @@ class MapEditorTab(ttk.Frame):
          'Visual scale multiplier (1.0 = normal)'),
         ('animation_name', 'Animation', 'combo_anim',
          'Animation to play on this tile'),
+        ('speed_modifier', 'Speed Mod', 'entry',
+         'Movement speed multiplier (1.0 = normal, 0.5 = half, 2.0 = double)'),
+        ('bg_color', 'BG Color', 'entry',
+         'Background fill color as hex RGB (e.g. #3a7a3a). Empty = transparent'),
         ('search_text', 'Search Text', 'entry',
          'Arbitrary text for searching/filtering tiles'),
         ('stat_mods', 'Stat Mods', 'entry',
@@ -339,16 +343,27 @@ class MapEditorTab(ttk.Frame):
         r += 1
 
         self._bound_prop_vars = {}
-        for d in self._BOUND_DIRS:
-            lbl = ttk.Label(self._prop_inner, text=d.upper())
-            lbl.grid(row=r, column=0, sticky='w', padx=2, pady=1)
+        # Compass grid: 3 rows × 3 cols matching directions
+        bounds_frame = ttk.Frame(self._prop_inner)
+        bounds_frame.grid(row=r, column=0, columnspan=2, sticky='ew', padx=2)
+        r += 1
+        compass = [
+            ('nw', 0, 0), ('n',  0, 1), ('ne', 0, 2),
+            ('w',  1, 0),               ('e',  1, 2),
+            ('sw', 2, 0), ('s',  2, 1), ('se', 2, 2),
+        ]
+        for d, gr, gc in compass:
+            f = ttk.Frame(bounds_frame)
+            f.grid(row=gr, column=gc, padx=1, pady=1, sticky='ew')
+            ttk.Label(f, text=d.upper(), width=3).pack(side=tk.LEFT)
             var = tk.StringVar(value='')
-            w = ttk.Combobox(self._prop_inner, textvariable=var,
-                              values=['', '0', '1'], width=4, state='readonly')
-            w.grid(row=r, column=1, sticky='w', padx=2, pady=1)
+            w = ttk.Combobox(f, textvariable=var,
+                              values=['', '0', '1'], width=3, state='readonly')
+            w.pack(side=tk.LEFT, padx=(0, 2))
             add_tooltip(w, f'{d.upper()} edge traversable (1) or blocked (0)')
             self._bound_prop_vars[d] = {'var': var, 'widget': w}
-            r += 1
+        for c in range(3):
+            bounds_frame.columnconfigure(c, weight=1)
 
         self._prop_inner.columnconfigure(1, weight=1)
 
@@ -459,7 +474,7 @@ class MapEditorTab(ttk.Frame):
                     changes[field_key] = int(val_str)
                 except ValueError:
                     continue
-            elif field_key == 'tile_scale':
+            elif field_key in ('tile_scale', 'speed_modifier'):
                 try:
                     changes[field_key] = float(val_str)
                 except ValueError:
@@ -663,8 +678,9 @@ class MapEditorTab(ttk.Frame):
                         bounds_n, bounds_s, bounds_e, bounds_w,
                         bounds_ne, bounds_nw, bounds_se, bounds_sw,
                         nested_map, linked_map, linked_x, linked_y, linked_z,
-                        link_auto, stat_mods, search_text)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                        link_auto, stat_mods, search_text, speed_modifier,
+                        bg_color)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
                     (tile_set, x, y, td.get('z', 0),
                      td.get('tile_template'), td.get('walkable'), td.get('covered'),
                      td.get('sprite_name'), td.get('tile_scale'),
@@ -677,7 +693,8 @@ class MapEditorTab(ttk.Frame):
                      td.get('linked_x'), td.get('linked_y'),
                      td.get('linked_z'),
                      td.get('link_auto', 0), td.get('stat_mods'),
-                     td.get('search_text')))
+                     td.get('search_text'), td.get('speed_modifier'),
+                     td.get('bg_color')))
             con.commit()
         except sqlite3.Error as e:
             messagebox.showerror('DB Error', str(e))
