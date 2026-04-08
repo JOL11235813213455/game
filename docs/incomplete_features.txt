@@ -52,9 +52,18 @@ MATING / PAIRING (partially implemented)
 - Pregnancy buffs: LOOT_GINI bonus
 - Hatching: creates proper Creature from egg data, maternal stat buff from time with mother
 - solicit_rumor(): ask for gossip about weak acquaintances
-- NOT YET: witness reactions to forced encounters, tent sprite, egg eating reputation,
-  amorous pair travel/work together, gender competition dynamics, age-based behavioral
-  modifiers, egg world limits
+- witness_forced_encounter(): sentiment based on perception of male vs female
+- eat_egg(): cannibalism detection (same species), massive negative from witnesses
+- bond_with_child(): parent-child deep bonding (+15 both ways) at hatching
+- Age properties: is_adult, is_child, is_fertile, is_mother
+- age_sentiment_modifier(): older exploit young, mothers kind to children,
+  older women hostile to younger attractive fertile women, older men favor young women
+- Gender competition: attractiveness_rank_nearby(), pairing_eagerness()
+  Males increase effort with attractive rivals, females lower standards
+- Egg world limits: count_eggs_in_world(), egg_limit_reached()
+- Tent sprite placeholder (tent_pairing, 32x32 red circus tent)
+- NOT YET: amorous pair travel/work together, tent rendering during act,
+  children no-collide with parents until adult
 
 DIALOGUE SYSTEM (classes/creature.py, data/db.py, editor/dialogue_tab.py)
 - dialogue table: conversation trees with parent-child nodes (parent_id=NULL for roots)

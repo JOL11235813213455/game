@@ -1764,6 +1764,194 @@ class Creature(WorldObject):
         target.record_interaction(self, 0.5)
         return True
 
+    # -- Witness / Reputation Events ----------------------------------------
+
+    def witness_forced_encounter(self, male: 'Creature', female: 'Creature'):
+        """Record a witness reaction to a forced pairing encounter.
+
+        Reaction based on relative sentiment toward male vs female:
+        - Favor male: neutral (don't record)
+        - Favor female: negative for male
+        - Strongly hate female AND love male: positive (rare)
+        """
+        rel_m = self.get_relationship(male)
+        rel_f = self.get_relationship(female)
+        sent_m = rel_m[0] if rel_m else 0.0
+        sent_f = rel_f[0] if rel_f else 0.0
+
+        if sent_m > sent_f:
+            # Favor male → neutral, don't record
+            return
+        elif sent_f > sent_m:
+            # Favor female → negative for male
+            self.record_interaction(male, -5.0)
+        # Edge case: strongly hate female and love male → positive
+        if sent_f < -15 and sent_m > 15:
+            self.record_interaction(male, 3.0)
+
+    def eat_egg(self, egg: 'Egg') -> dict:
+        """Eat an egg. Major reputation event if same species.
+
+        Returns dict: eaten, cannibalism (bool).
+        """
+        result = {'eaten': False, 'cannibalism': False}
+
+        if not isinstance(egg, Egg):
+            return result
+
+        # Remove from wherever it is
+        if egg in self.inventory.items:
+            self.inventory.items.remove(egg)
+        else:
+            tile = self.current_map.tiles.get(self.location)
+            if tile and egg in tile.inventory.items:
+                tile.inventory.items.remove(egg)
+            else:
+                return result
+
+        result['eaten'] = True
+        egg.live = False
+
+        # Check cannibalism: egg species matches eater's species
+        if (egg.mother_species == self.species or egg.father_species == self.species):
+            result['cannibalism'] = True
+            # All witnesses record MASSIVE negative
+            for obj in WorldObject.on_map(self.current_map):
+                if isinstance(obj, Creature) and obj is not self and obj.can_see(self):
+                    obj.record_interaction(self, -20.0)
+
+        return result
+
+    def bond_with_child(self, child: 'Creature'):
+        """Parent-child bonding at hatching. Both parents present gain deep bond.
+
+        The child also records massive positive toward present parents.
+        Parents always side with bonded children.
+        """
+        # Parent → child: massive positive
+        self.record_interaction(child, 15.0)
+        # Child → parent: massive positive
+        child.record_interaction(self, 15.0)
+
+    # -- Age-Based Behavioral Modifiers -------------------------------------
+
+    @property
+    def is_adult(self) -> bool:
+        return self.age >= self.ADULT_AGE
+
+    @property
+    def is_child(self) -> bool:
+        return self.age < self.ADULT_AGE
+
+    @property
+    def is_fertile(self) -> bool:
+        if self.sex == 'female':
+            return self.fecundity() > 0
+        return self.age >= self.ADULT_AGE
+
+    @property
+    def is_mother(self) -> bool:
+        """True if this creature has successfully hatched a child."""
+        return getattr(self, '_has_hatched_child', False)
+
+    def mark_as_mother(self):
+        """Mark this creature as having hatched a child."""
+        self._has_hatched_child = True
+
+    def age_sentiment_modifier(self, other: 'Creature') -> float:
+        """Return a sentiment modifier based on age dynamics.
+
+        - Older creatures exploit young (negative for young)
+        - Mothers are kinder to children
+        - Older women hostile to younger attractive fertile women
+        - Older men favorable to younger women (inverse age curve)
+        """
+        mod = 0.0
+
+        # Older creatures exploit children
+        if other.is_child and self.is_adult:
+            mod -= 2.0  # tendency to deceive/intimidate
+
+        # Mothers are kinder to children
+        if self.is_mother and other.is_child:
+            mod += 3.0
+
+        # Older women hostile to younger attractive fertile women
+        if (self.sex == 'female' and other.sex == 'female' and
+                self.age > other.age and other.is_adult and other.is_fertile):
+            # More hostile if other is more attractive
+            other_desir = self.desirability(other, self)
+            self_desir = self.desirability(self, self)
+            if other_desir >= self_desir:
+                mod -= 3.0
+
+        # Older men favorable to younger women
+        if (self.sex == 'male' and other.sex == 'female' and
+                self.age > other.age and other.is_adult):
+            age_gap = self.age - other.age
+            # Inverse curve: bigger gap = more favorable (capped)
+            mod += min(3.0, age_gap / 50.0)
+
+        return mod
+
+    # -- Gender Competition Dynamics ----------------------------------------
+
+    def attractiveness_rank_nearby(self) -> float:
+        """How this creature ranks in attractiveness among visible same-sex creatures.
+
+        Returns 0.0 (least attractive) to 1.0 (most attractive).
+        Used for gender competition dynamics.
+        """
+        same_sex = []
+        for obj in WorldObject.on_map(self.current_map):
+            if (isinstance(obj, Creature) and obj is not self and
+                    obj.sex == self.sex and obj.is_alive and self.can_see(obj)):
+                same_sex.append(obj)
+
+        if not same_sex:
+            return 0.5  # no competitors → neutral
+
+        my_desir = self.desirability(self, self)  # self-assessment proxy
+        higher = sum(1 for c in same_sex
+                     if self.desirability(c, self) > my_desir)
+        return 1.0 - (higher / len(same_sex))
+
+    def pairing_eagerness(self) -> float:
+        """How eager this creature is to pursue pairing, considering competition.
+
+        Males: increase eagerness with more attractive rivals (competitive drive)
+        Females: reduce standards with more attractive rivals (scarcity pressure)
+
+        Returns modifier in [-1, 1] — applied to willingness thresholds.
+        """
+        rank = self.attractiveness_rank_nearby()
+
+        if self.sex == 'male':
+            # More attractive rivals → more eager (competitive)
+            # rank near 0 (I'm least attractive) → highest eagerness
+            return 0.5 - rank  # -0.5 to +0.5
+        else:
+            # More attractive rivals → lower standards (accept worse deals)
+            # rank near 0 (I'm least attractive) → standards drop
+            return rank - 0.5  # -0.5 to +0.5
+
+    # -- Egg World Limits ---------------------------------------------------
+
+    @staticmethod
+    def count_eggs_in_world() -> int:
+        """Count total live eggs across all inventories and tiles."""
+        count = 0
+        from classes.trackable import Trackable
+        for obj in Trackable.all_instances():
+            if isinstance(obj, Egg) and obj.live:
+                count += 1
+        return count
+
+    @staticmethod
+    def egg_limit_reached(max_eggs: int = 20) -> bool:
+        """Check if the world egg cap has been reached."""
+        return Creature.count_eggs_in_world() >= max_eggs
+
     # -- Utility Actions ----------------------------------------------------
 
     def flee(self, threat: 'Creature', cols: int, rows: int) -> bool:

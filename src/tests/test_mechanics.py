@@ -2281,6 +2281,138 @@ male_fec = make_creature(m55, x=5, y=0, name='MaleF', sex='male', age=25)
 check(f"Male fecundity: {male_fec.fecundity():.2f} (= 0)", male_fec.fecundity() == 0.0)
 
 # ==========================================================================
+print("\n=== Witness Reactions ===")
+m56 = make_map()
+witness = make_creature(m56, x=2, y=0, name='Witness', stats={Stat.PER: 14})
+perp = make_creature(m56, x=0, y=0, name='Perp', sex='male')
+victim_w = make_creature(m56, x=1, y=0, name='Victim', sex='female')
+
+# Witness favors female → negative for male
+witness.record_interaction(victim_w, 10.0)
+witness.record_interaction(perp, -5.0)
+sent_before = witness.get_relationship(perp)[0]
+witness.witness_forced_encounter(perp, victim_w)
+sent_after = witness.get_relationship(perp)[0]
+check(f"Witness favors female: perp sentiment {sent_before} → {sent_after} (more negative)",
+      sent_after < sent_before)
+
+# Witness favors male → neutral (no change)
+witness2 = make_creature(m56, x=3, y=0, name='Witness2')
+witness2.record_interaction(perp, 10.0)
+witness2.record_interaction(victim_w, -2.0)
+witness2.witness_forced_encounter(perp, victim_w)
+rel_w2 = witness2.get_relationship(perp)
+check("Witness favors male: no additional negative recorded",
+      rel_w2[0] == 10.0)  # unchanged
+
+# ==========================================================================
+print("\n=== Egg Eating ===")
+m57 = make_map()
+eater = make_creature(m57, x=0, y=0, name='Eater')
+eater.species = 'human'
+witness_e = make_creature(m57, x=1, y=0, name='EggWitness', stats={Stat.PER: 14})
+
+# Non-cannibalism (eating orc egg as human)
+orc_egg = Egg(creature=None, mother_species='orc', father_species='orc')
+eater.inventory.items.append(orc_egg)
+r = eater.eat_egg(orc_egg)
+check("Ate orc egg", r['eaten'])
+check("Not cannibalism", not r['cannibalism'])
+
+# Cannibalism (eating human egg as human)
+human_egg = Egg(creature=None, mother_species='human', father_species='human')
+eater.inventory.items.append(human_egg)
+witness_e_sent_before = witness_e.get_relationship(eater)
+r = eater.eat_egg(human_egg)
+check("Ate human egg", r['eaten'])
+check("IS cannibalism", r['cannibalism'])
+witness_e_rel = witness_e.get_relationship(eater)
+check(f"Witness recorded massive negative: {witness_e_rel[0]}",
+      witness_e_rel[0] <= -20.0)
+
+# ==========================================================================
+print("\n=== Parent-Child Bonding ===")
+m58 = make_map()
+parent_p = make_creature(m58, x=0, y=0, name='BondParent')
+child_p = make_creature(m58, x=0, y=0, name='BondChild', age=0)
+
+parent_p.bond_with_child(child_p)
+check("Parent → child sentiment = 15.0", parent_p.get_relationship(child_p)[0] == 15.0)
+check("Child → parent sentiment = 15.0", child_p.get_relationship(parent_p)[0] == 15.0)
+
+# ==========================================================================
+print("\n=== Age Properties ===")
+m59 = make_map()
+baby = make_creature(m59, x=0, y=0, name='Baby', age=5)
+adult_a = make_creature(m59, x=1, y=0, name='Adult', age=25)
+old_a = make_creature(m59, x=2, y=0, name='Elder', age=400)
+
+check("Baby is child", baby.is_child)
+check("Baby not adult", not baby.is_adult)
+check("Adult is adult", adult_a.is_adult)
+check("Adult not child", not adult_a.is_child)
+
+# ==========================================================================
+print("\n=== Age Sentiment Modifiers ===")
+m60 = make_map()
+elder_m = make_creature(m60, x=0, y=0, name='Elder', sex='male', age=200)
+young_f = make_creature(m60, x=1, y=0, name='YoungWoman', sex='female', age=20)
+child_c = make_creature(m60, x=2, y=0, name='Kid', age=10)
+mother_m = make_creature(m60, x=3, y=0, name='Mom', sex='female', age=100)
+mother_m._has_hatched_child = True
+
+# Older male → younger woman: favorable
+mod_m = elder_m.age_sentiment_modifier(young_f)
+check(f"Elder male → young woman: {mod_m:.2f} (positive)", mod_m > 0)
+
+# Adult → child: exploit tendency
+mod_exploit = elder_m.age_sentiment_modifier(child_c)
+check(f"Adult → child: {mod_exploit:.2f} (negative)", mod_exploit < 0)
+
+# Mother → child: kindness
+mod_mother = mother_m.age_sentiment_modifier(child_c)
+check(f"Mother → child: {mod_mother:.2f} (positive, overrides exploit)", mod_mother > 0)
+
+# ==========================================================================
+print("\n=== Gender Competition ===")
+m61 = make_map(cols=10, rows=10)
+male_comp = make_creature(m61, x=5, y=5, name='CompMale', sex='male', age=25,
+                          stats={Stat.STR: 14, Stat.CHR: 14, Stat.PER: 14})
+# Add some competitors
+for i in range(3):
+    make_creature(m61, x=6+i, y=5, name=f'RivalM{i}', sex='male', age=25,
+                  stats={Stat.STR: 16, Stat.CHR: 16, Stat.PER: 14})
+
+rank = male_comp.attractiveness_rank_nearby()
+check(f"Male rank with 3 stronger rivals: {rank:.2f} (low)", rank < 0.5)
+
+eagerness = male_comp.pairing_eagerness()
+check(f"Male eagerness (low rank = high drive): {eagerness:.2f} (positive)", eagerness > 0)
+
+# Female with less attractive rivals
+female_comp = make_creature(m61, x=5, y=6, name='CompFemale', sex='female', age=25,
+                            stats={Stat.VIT: 16, Stat.CHR: 16, Stat.AGL: 14, Stat.PER: 14})
+for i in range(3):
+    make_creature(m61, x=6+i, y=6, name=f'RivalF{i}', sex='female', age=25,
+                  stats={Stat.VIT: 8, Stat.CHR: 8, Stat.PER: 14})
+
+f_rank = female_comp.attractiveness_rank_nearby()
+check(f"Female rank with weaker rivals: {f_rank:.2f} (high)", f_rank > 0.5)
+
+f_eagerness = female_comp.pairing_eagerness()
+check(f"Female eagerness (high rank = higher standards): {f_eagerness:.2f}", f_eagerness > 0)
+
+# ==========================================================================
+print("\n=== Egg World Limits ===")
+# Count should reflect eggs created during pairing tests
+egg_count = Creature.count_eggs_in_world()
+check(f"Egg count in world: {egg_count}", egg_count >= 0)
+
+# Test the limit check
+check("Egg limit with max=99999: not reached", not Creature.egg_limit_reached(99999))
+check("Egg limit with max=0: reached", Creature.egg_limit_reached(0))
+
+# ==========================================================================
 print("\n=== Gym Single-Agent Environment ===")
 from simulation.env import CreatureEnv, MultiAgentCreatureEnv
 
