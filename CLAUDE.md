@@ -1,3 +1,5 @@
+commit with comments frequentlys
+
 # Project: Tile-Based RPG
 
 Python/pygame tile-based RPG with a tkinter database editor. Unknown genre, though
