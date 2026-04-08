@@ -144,7 +144,9 @@ def _accuracy(g):
     return _dmod(g(Stat.PER))
 
 def _crit_chance(g):
-    return _dmod(g(Stat.LCK))
+    # lvl/2 + lck_mod + 1 + item/weapon/feat/consumable/racial bonuses (via mods)
+    # floor 0, expressed as percentage
+    return max(0, g(Stat.LVL) // 2 + _dmod(g(Stat.LCK)) + 1)
 
 def _crit_dmg(g):
     return 150 + max(_dmod(g(Stat.STR)), _dmod(g(Stat.PER))) * 5  # percent
@@ -240,7 +242,13 @@ def _durability_use(g):
     return max(1, 10 - _dmod(g(Stat.STR)))  # lower is better
 
 def _xp_mod(g):
-    return _dmod(g(Stat.INT)) // 2 + _dmod(g(Stat.LCK)) // 2
+    # Probability (0.0–1.0) of a 15% XP boost per XP event
+    # dmod(LCK) / (dmod(LCK) + 2), clamped to 0
+    lck_mod = _dmod(g(Stat.LCK))
+    denom = lck_mod + 2
+    if denom <= 0 or lck_mod <= 0:
+        return 0.0
+    return lck_mod / denom
 
 
 DERIVED_FORMULAS: dict[Stat, callable] = {
@@ -432,8 +440,10 @@ class Stats:
 
     def gain_exp(self, amount: int):
         """Award experience. Triggers level-up callbacks if level increases."""
-        xp_bonus = self.active[Stat.XP_MOD]()
-        effective = amount + int(amount * xp_bonus / 100)
+        xp_chance = self.active[Stat.XP_MOD]()
+        effective = amount
+        if xp_chance > 0 and random.random() < xp_chance:
+            effective = int(amount * 1.15)
         old_level = self.base.get(Stat.LVL, 0)
         self.base[Stat.EXP] = self.base.get(Stat.EXP, 0) + effective
         self._reconcile_exp_level()
