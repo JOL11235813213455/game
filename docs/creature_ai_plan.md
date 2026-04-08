@@ -20,6 +20,16 @@ via reinforcement learning in headless multi-agent simulations.
 - **NumPy for inference** — small feedforward net (3 layers, 64-128 neurons), no PyTorch
   dependency at runtime
 - **Stat-weighted decision tables as fallback** — usable immediately while ML is in development
+- **Curiosity as default behavior** — unfamiliarity breeds curiosity, not hostility.
+  Creatures with little information about others or surroundings are rewarded for
+  exploration and information-gathering. Hostility requires a basis: negative
+  relationship, bad rumor, territorial trigger, fear, or being attacked first.
+  Curiosity score: `1 / (1 + interactions_with_target)` — high for strangers,
+  decays as familiarity grows. Bases for forming opinions:
+  1. Direct interaction history (relationships)
+  2. Inherited reputation (rumors system)
+  3. Observable traits (species, equipment, witnessed behavior)
+  4. Territorial instinct (per-species configuration)
 
 ## Stat System Summary (completed)
 - D&D-style modifiers: `(stat - 10) // 2` across all derived formulas
