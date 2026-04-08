@@ -876,6 +876,120 @@ opinion = listener.rumor_opinion(subject.uid, current_tick=100)
 check(f"Listener's rumor opinion of subject: {opinion:.2f} (negative)", opinion < 0)
 
 # ==========================================================================
+print("\n=== Trade ===")
+m29 = make_map()
+trader_a = make_creature(m29, x=0, y=0,
+                         stats={Stat.CHR: 14, Stat.INT: 12, Stat.PER: 12},
+                         name='TraderA')
+trader_b = make_creature(m29, x=1, y=0,
+                         stats={Stat.CHR: 10, Stat.INT: 10, Stat.PER: 10},
+                         name='TraderB')
+
+# Create trade items
+gold_bar = Item(name='Gold Bar', weight=1.0, value=10.0)
+silver_ring = Item(name='Silver Ring', weight=0.2, value=8.0)
+trader_a.inventory.items.append(gold_bar)
+trader_b.inventory.items.append(silver_ring)
+
+# Fair-ish trade: gold bar (10) for silver ring (8)
+r = trader_a.propose_trade(trader_b, offered=[gold_bar], requested=[silver_ring])
+check(f"Trade accepted: {r['accepted']}", r['accepted'])
+check("Gold bar now with trader B", gold_bar in trader_b.inventory.items)
+check("Silver ring now with trader A", silver_ring in trader_a.inventory.items)
+
+# Both should have positive sentiment
+rel_a = trader_a.get_relationship(trader_b)
+rel_b = trader_b.get_relationship(trader_a)
+# TraderA gave 10, got 8 — slightly worse deal, gets loser sentiment
+check(f"TraderA sentiment: {rel_a[0]:.1f}", rel_a is not None)
+check(f"TraderB sentiment: {rel_b[0]:.1f} (positive)", rel_b[0] > 0)
+
+# Bad deal: offer junk, request treasure
+junk = Item(name='Rock', weight=2.0, value=0.5)
+treasure = Item(name='Diamond', weight=0.1, value=50.0)
+trader_a.inventory.items.append(junk)
+trader_b.inventory.items.append(treasure)
+
+r = trader_a.propose_trade(trader_b, offered=[junk], requested=[treasure])
+check("Unfair trade rejected", not r['accepted'])
+check("Diamond still with trader B", treasure in trader_b.inventory.items)
+
+# Not adjacent
+far_trader = make_creature(m29, x=9, y=9, stats={Stat.CHR: 10}, name='FarTrader')
+r = trader_a.propose_trade(far_trader, offered=[], requested=[])
+check("Trade not adjacent → fail", r['reason'] == 'not_adjacent')
+
+# Item not in inventory
+phantom_item = Item(name='Phantom', value=5.0)
+r = trader_a.propose_trade(trader_b, offered=[phantom_item], requested=[])
+check("Trade with missing item fails", r['reason'] == 'missing_offered_item')
+
+# ==========================================================================
+print("\n=== Trade with Relationship ===")
+m30 = make_map()
+friend_t = make_creature(m30, x=0, y=0, stats={Stat.CHR: 10}, name='FriendTrader')
+ally_t = make_creature(m30, x=1, y=0, stats={Stat.CHR: 10}, name='AllyTrader')
+
+# Build very strong positive relationship
+for _ in range(20):
+    friend_t.record_interaction(ally_t, 10.0)
+    ally_t.record_interaction(friend_t, 10.0)
+
+# Slightly unfair trade that close friends should accept due to sentiment bonus
+# Sentiment: 200 / (200 + 10) ≈ 0.95, so net = (4-5) + 0.95 = -0.05... still tight
+# Use 4.5 vs 5.0 so net = (4.5-5.0) + 0.95 = +0.45
+ok_item = Item(name='Bread', weight=0.5, value=4.5)
+nice_item = Item(name='Cake', weight=0.5, value=5.0)
+friend_t.inventory.items.append(ok_item)
+ally_t.inventory.items.append(nice_item)
+
+r = friend_t.propose_trade(ally_t, offered=[ok_item], requested=[nice_item])
+check(f"Friends accept slightly unfair trade: {r['accepted']}", r['accepted'])
+
+# ==========================================================================
+print("\n=== Bribe ===")
+m31 = make_map()
+briber = make_creature(m31, x=0, y=0, stats={Stat.CHR: 14}, name='Briber')
+target_b = make_creature(m31, x=1, y=0, stats={Stat.CHR: 10}, name='BribeTarget')
+
+# Start with neutral relationship
+gold = Item(name='Gold Coins', weight=0.5, value=10.0)
+briber.inventory.items.append(gold)
+
+r = briber.bribe(target_b, [gold])
+check(f"Bribe accepted (value 10 >= threshold 5): {r['accepted']}", r['accepted'])
+check("Gold transferred to target", gold in target_b.inventory.items)
+
+# Target should have positive sentiment now
+rel = target_b.get_relationship(briber)
+check(f"Target sentiment after bribe: {rel[0]:.1f} (positive)", rel[0] > 0)
+
+# Insufficient bribe
+penny = Item(name='Penny', weight=0.1, value=0.1)
+briber.inventory.items.append(penny)
+r = briber.bribe(target_b, [penny])
+check("Tiny bribe rejected", not r['accepted'])
+check("Penny still with briber", penny in briber.inventory.items)
+
+# Not adjacent
+r = briber.bribe(far_trader, [penny])
+check("Bribe not adjacent → fail", r['reason'] == 'not_adjacent')
+
+# Bribe a hostile creature (needs bigger bribe)
+hostile = make_creature(m31, x=0, y=1, stats={Stat.CHR: 10}, name='Hostile')
+hostile.record_interaction(briber, -20.0)  # very negative
+
+small_bribe = Item(name='Small Gold', weight=0.3, value=3.0)
+briber.inventory.items.append(small_bribe)
+r = briber.bribe(hostile, [small_bribe])
+check("Small bribe rejected by hostile creature", not r['accepted'])
+
+big_bribe = Item(name='Big Gold', weight=1.0, value=30.0)
+briber.inventory.items.append(big_bribe)
+r = briber.bribe(hostile, [big_bribe])
+check(f"Big bribe accepted by hostile: {r['accepted']}", r['accepted'])
+
+# ==========================================================================
 print(f"\n{'='*50}")
 print(f"Results: {PASS} passed, {FAIL} failed out of {PASS+FAIL} tests")
 if FAIL:

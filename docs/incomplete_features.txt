@@ -70,7 +70,10 @@ SOCIAL
 - deceive() implemented: d20 DECEPTION vs DETECTION, trust damage on failure
 - steal() implemented: stealth/deception contest, item transfer, caught = trust damage
 - share_rumor() implemented: CHR-scaled probability, confidence from relationship
-- No trade/negotiate, bribe, or seduce yet
+- propose_trade() implemented: utility scoring, sentiment modifier, persuasion bonus,
+  fair/unfair detection, item swap on accept, walk-away penalty on reject
+- bribe() implemented: value threshold scales with negative sentiment (hostile = bigger bribe needed)
+- No seduce yet (needs species compatibility + pairing system)
 
 EQUIPMENT
 - equip/unequip implemented with stat mod passthrough and stat requirement checks
