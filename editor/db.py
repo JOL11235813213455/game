@@ -335,6 +335,10 @@ def migrate_db():
                 con.execute(stmt)
             except sqlite3.OperationalError:
                 pass
+
+        # Rename CON (constitution) → VIT (vitality) in species_stats
+        con.execute("UPDATE species_stats SET stat='vitality' WHERE stat='constitution'")
+
         con.commit()
     finally:
         con.close()

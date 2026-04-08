@@ -114,12 +114,12 @@ def draw_menu(surface, selected):
 
 
 def draw_hud(surface, player, font):
-    from classes.creature import Stat
+    from classes.stats import Stat
     from classes.levels import exp_for_level
-    lvl  = player.stats.get(Stat.LVL, 0)
-    chp  = player.stats.get(Stat.CHP, 0)
-    mhp  = player.stats.get(Stat.MHP, 0)
-    exp  = player.stats.get(Stat.EXP, 0)
+    lvl  = player.stats.active[Stat.LVL]()
+    chp  = player.stats.active[Stat.CHP]()
+    mhp  = player.stats.active[Stat.MHP]()
+    exp  = player.stats.active[Stat.EXP]()
     exp_next = exp_for_level(lvl + 1)
     hud = font.render(f"LVL {lvl}   HP {chp}/{mhp}   EXP {exp} / +{exp_next}", True, (220, 220, 220))
     surface.blit(hud, (10, SCREEN_HEIGHT - 30))
