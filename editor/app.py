@@ -4,6 +4,7 @@ from tkinter import ttk
 from editor.db import migrate_db
 from editor.items_tab import ItemsTab
 from editor.species_tab import SpeciesTab
+from editor.creatures_tab import CreaturesTab
 from editor.sprites_tab import SpritesTab
 from editor.tiles_tab import TilesTab
 from editor.animations_tab import AnimationsTab
@@ -54,10 +55,12 @@ class EditorApp(tk.Tk):
         maps_notebook.add(self.tiles_tab,     text='  Tile Templates  ')
 
         self.species_tab   = SpeciesTab(notebook)
+        self.creatures_tab = CreaturesTab(notebook)
         self.items_tab     = ItemsTab(notebook)
         self.sql_tab       = SqlTab(notebook)
 
         notebook.add(self.species_tab,   text='  Species  ')
+        notebook.add(self.creatures_tab, text='  Creatures  ')
         notebook.add(self.items_tab,     text='  Items  ')
         notebook.add(self.sql_tab,       text='  SQL  ')
 
@@ -72,10 +75,12 @@ class EditorApp(tk.Tk):
 
     def _on_tab_changed(self, event):
         tab = event.widget.tab(event.widget.select(), 'text').strip()
-        if tab in ('Items', 'Species', 'Tile Templates', 'Maps'):
+        if tab in ('Items', 'Species', 'Creatures', 'Tile Templates', 'Maps'):
             self.items_tab.refresh_sprite_dropdown()
             self.species_tab.refresh_sprite_dropdown()
             self.tiles_tab.refresh_sprite_dropdown()
+        if tab == 'Creatures':
+            self.creatures_tab.refresh_species_dropdown()
         if tab in ('Map Editor', 'Maps'):
             self.map_editor_tab.refresh_dropdowns()
         if tab in ('Simple', 'Animations'):

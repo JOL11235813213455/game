@@ -17,7 +17,6 @@ CREATE TABLE IF NOT EXISTS species (
     playable    INTEGER NOT NULL,
     sprite_name TEXT REFERENCES sprites(name),
     tile_scale  REAL NOT NULL DEFAULT 1.0,
-    sex         TEXT,
     prudishness REAL
 );
 CREATE TABLE IF NOT EXISTS species_stats (
@@ -62,6 +61,23 @@ CREATE TABLE IF NOT EXISTS item_slots (
     item_key TEXT NOT NULL REFERENCES items(key),
     slot     TEXT NOT NULL,
     PRIMARY KEY (item_key, slot)
+);
+CREATE TABLE IF NOT EXISTS creatures (
+    key          TEXT PRIMARY KEY,
+    name         TEXT NOT NULL DEFAULT '',
+    species      TEXT NOT NULL REFERENCES species(name),
+    level        INTEGER,
+    sex          TEXT,
+    age          INTEGER,
+    prudishness  REAL,
+    behavior     TEXT,
+    items        TEXT NOT NULL DEFAULT '[]'
+);
+CREATE TABLE IF NOT EXISTS creature_stats (
+    creature_key TEXT NOT NULL REFERENCES creatures(key),
+    stat         TEXT NOT NULL,
+    value        INTEGER NOT NULL,
+    PRIMARY KEY (creature_key, stat)
 );
 CREATE TABLE IF NOT EXISTS sprites (
     name           TEXT PRIMARY KEY,
