@@ -117,8 +117,8 @@ def draw_hud(surface, player, font):
     from classes.stats import Stat
     from classes.levels import exp_for_level
     lvl  = player.stats.active[Stat.LVL]()
-    chp  = player.stats.active[Stat.CHP]()
-    mhp  = player.stats.active[Stat.MHP]()
+    chp  = player.stats.active[Stat.HP_CURR]()
+    mhp  = player.stats.active[Stat.HP_MAX]()
     exp  = player.stats.active[Stat.EXP]()
     exp_next = exp_for_level(lvl + 1)
     hud = font.render(f"LVL {lvl}   HP {chp}/{mhp}   EXP {exp} / +{exp_next}", True, (220, 220, 220))

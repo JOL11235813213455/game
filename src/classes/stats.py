@@ -33,15 +33,15 @@ class Stat(Enum):
     # ---- Progression (stored in base) ----
     LVL  = 'level'
     EXP  = 'cumulative xp'
-    HD   = 'hit dice'
+    HIT_DICE = 'hit dice'
 
     # ---- Tracking (stored in base, not derived) ----
-    CHP  = 'health'
+    HP_CURR = 'health'
     CUR_STAMINA = 'stamina'
     CUR_MANA    = 'mana'
 
     # ---- Derived: Combat ----
-    MHP        = 'max health'
+    HP_MAX     = 'max health'
     MELEE_DMG  = 'melee damage'
     RANGED_DMG = 'ranged damage'
     MAGIC_DMG  = 'magic damage'
@@ -65,7 +65,7 @@ class Stat(Enum):
     MAX_STAMINA  = 'max stamina'
     MAX_MANA     = 'max mana'
     MANA_REGEN   = 'mana regen'
-    HP_REGEN     = 'hp regen'
+    HP_REGEN_DELAY = 'hp regen delay'
     STAM_REGEN   = 'stamina regen'
 
     # ---- Derived: Resistance ----
@@ -100,9 +100,9 @@ BASE_STATS = frozenset({
     Stat.STR, Stat.PER, Stat.VIT, Stat.INT, Stat.CHR, Stat.LCK, Stat.AGL,
 })
 
-PROGRESSION_STATS = frozenset({Stat.LVL, Stat.EXP, Stat.HD})
+PROGRESSION_STATS = frozenset({Stat.LVL, Stat.EXP, Stat.HIT_DICE})
 
-TRACKING_STATS = frozenset({Stat.CHP, Stat.CUR_STAMINA, Stat.CUR_MANA})
+TRACKING_STATS = frozenset({Stat.HP_CURR, Stat.CUR_STAMINA, Stat.CUR_MANA})
 
 # Everything stored directly in stats.base
 BASE_LAYER_STATS = BASE_STATS | PROGRESSION_STATS | TRACKING_STATS
@@ -123,8 +123,10 @@ def _dmod(val):
     """D&D-style modifier: (stat - 10) // 2."""
     return (val - 10) // 2
 
-def _mhp(g):
-    return 10 + _dmod(g(Stat.VIT)) * 2
+def _hp_max(g):
+    # HD rolls are stored as mods and added on top
+    lvl = g(Stat.LVL)
+    return (lvl + 1) * (_dmod(g(Stat.VIT)) + 1)
 
 def _melee_dmg(g):
     return _dmod(g(Stat.STR))
@@ -150,8 +152,8 @@ def _crit_dmg(g):
 def _dodge(g):
     return _dmod(g(Stat.AGL))
 
-def _armor(g):
-    return _dmod(g(Stat.VIT))
+def _armor(_g):
+    return 0  # derived entirely from items (and natural armor for some classes)
 
 def _block(g):
     return _dmod(g(Stat.STR))
@@ -185,17 +187,21 @@ def _mana_regen(g):
     return max(0, _dmod(g(Stat.INT)))
 
 def _hp_regen(g):
-    return max(0, _dmod(g(Stat.VIT)))
+    # Seconds after last hit before regen starts (min 1s)
+    # Regen follows fibonacci sequence once started: 1,1,2,3,5,8,13...
+    # Capped at 15% of HP_MAX per second
+    # This stat returns the regen delay in seconds
+    return max(1, 8 - _dmod(g(Stat.VIT)))
 
 def _stam_regen(g):
     total_mod = _dmod(g(Stat.AGL)) + _dmod(g(Stat.STR)) + _dmod(g(Stat.VIT))
     return max(1, total_mod * 3 + 1)  # per second
 
 def _poison_resist(g):
-    return _dmod(g(Stat.VIT))
+    return _dmod(g(Stat.VIT)) + _dmod(g(Stat.CHR)) + 10
 
 def _disease_resist(g):
-    return _dmod(g(Stat.VIT))
+    return _dmod(g(Stat.VIT)) + _dmod(g(Stat.INT)) + 10
 
 def _magic_resist(g):
     return _dmod(g(Stat.INT))
@@ -221,8 +227,8 @@ def _persuasion(g):
 def _intimidation(g):
     return _dmod(g(Stat.CHR)) + _dmod(g(Stat.STR)) // 2
 
-def _deception(_g):
-    return 0  # RESERVED: not yet implemented
+def _deception(g):
+    return _dmod(g(Stat.CHR)) + _dmod(g(Stat.AGL)) // 2
 
 def _loot_quality(g):
     return _dmod(g(Stat.LCK))
@@ -238,7 +244,7 @@ def _xp_mod(g):
 
 
 DERIVED_FORMULAS: dict[Stat, callable] = {
-    Stat.MHP:            _mhp,
+    Stat.HP_MAX:            _hp_max,
     Stat.MELEE_DMG:      _melee_dmg,
     Stat.RANGED_DMG:     _ranged_dmg,
     Stat.MAGIC_DMG:      _magic_dmg,
@@ -258,7 +264,7 @@ DERIVED_FORMULAS: dict[Stat, callable] = {
     Stat.MAX_STAMINA:    _max_stamina,
     Stat.MAX_MANA:       _max_mana,
     Stat.MANA_REGEN:     _mana_regen,
-    Stat.HP_REGEN:       _hp_regen,
+    Stat.HP_REGEN_DELAY:       _hp_regen,
     Stat.STAM_REGEN:     _stam_regen,
     Stat.POISON_RESIST:  _poison_resist,
     Stat.DISEASE_RESIST: _disease_resist,
@@ -310,17 +316,17 @@ class Stats:
     ``active`` is a dict whose values are callables — call them to get
     the final evaluated value for that stat:
 
-        hp = creature.stats.active[Stat.MHP]()
+        hp = creature.stats.active[Stat.HP_MAX]()
     """
 
     def __init__(self, base_stats: dict[Stat, int] | None = None,
                  hit_dice: int = 6):
         # ---- base layer ----
         self.base: dict[Stat, int] = {s: 0 for s in BASE_STATS}
-        self.base[Stat.HD]  = hit_dice
+        self.base[Stat.HIT_DICE]  = hit_dice
         self.base[Stat.EXP] = 0
         self.base[Stat.LVL] = 0
-        self.base[Stat.CHP] = 1
+        self.base[Stat.HP_CURR] = 1
         self.base[Stat.CUR_STAMINA] = 0
         self.base[Stat.CUR_MANA]    = 0
         self.base[Stat.LVL] = 0
@@ -344,7 +350,7 @@ class Stats:
         self._reconcile_exp_level()
 
         # initialize tracking stats from derived maxes
-        self.base[Stat.CHP] = self.active[Stat.MHP]()
+        self.base[Stat.HP_CURR] = self.active[Stat.HP_MAX]()
         self.base[Stat.CUR_STAMINA] = self.active[Stat.MAX_STAMINA]()
         self.base[Stat.CUR_MANA] = self.active[Stat.MAX_MANA]()
 
@@ -499,13 +505,13 @@ class Stats:
 
 def _level_up_heal(stats: Stats, old_level: int, new_level: int):
     """Roll HP on level-up and fully heal."""
-    hd = stats.base.get(Stat.HD, 6)
+    hd = stats.base.get(Stat.HIT_DICE, 6)
     vit = stats.active[Stat.VIT]()
     roll = random.randint(1, hd) + vit
     # Bump VIT contribution to MHP doesn't stack with the formula —
     # instead we add a permanent mod representing the HP roll.
-    stats.add_mod(f'level_{new_level}_hp', Stat.MHP, roll, stackable=True)
+    stats.add_mod(f'level_{new_level}_hp', Stat.HP_MAX, roll, stackable=True)
     # Full heal
-    stats.base[Stat.CHP] = stats.active[Stat.MHP]()
+    stats.base[Stat.HP_CURR] = stats.active[Stat.HP_MAX]()
     stats.base[Stat.CUR_STAMINA] = stats.active[Stat.MAX_STAMINA]()
     stats.base[Stat.CUR_MANA] = stats.active[Stat.MAX_MANA]()

@@ -11,7 +11,7 @@ STAT_LABELS  = {
     'perception':    'PER',
     'charisma':      'CHR',
     'luck':          'LCK',
-    'hit dice':      'HD',
+    'hit dice':      'HIT_DICE',
 }
 
 CLASS_FIELDS = {
