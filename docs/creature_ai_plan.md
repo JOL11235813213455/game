@@ -58,6 +58,19 @@ via reinforcement learning in headless multi-agent simulations.
   - Inherited opinions weighted by: source trust * confidence * time decay
   - Strangers get slight trust (0.1) for their rumors
   - Direct experience always outweighs rumors over time
+- **Interaction depth weights** (score passed to record_interaction):
+
+  | Interaction type            | Depth weight | Sentiment direction      |
+  |-----------------------------|-------------|--------------------------|
+  | Observed at distance        | +0.5        | neutral                  |
+  | Shared space (same area)    | +1          | neutral                  |
+  | Talked                      | +2          | variable (persuasion)    |
+  | Traded                      | +3          | + if fair, - if exploit  |
+  | Healed/helped               | +4          | positive                 |
+  | Fought alongside            | +5          | + if survived            |
+  | Fought against              | +5          | negative (attacker more) |
+  | Stole from                  | +3          | negative for victim      |
+  | Betrayed (attack after +)   | +10         | massive negative         |
 
 ## Future Model Input Variables (design notes)
 Per-creature observation for the RL model:
