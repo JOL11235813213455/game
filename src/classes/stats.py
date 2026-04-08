@@ -130,6 +130,9 @@ def _hp_max(g):
     return (lvl + 1) * (_dmod(g(Stat.VIT)) + 1)
 
 def _melee_dmg(g):
+    # STR component of melee. Full damage at combat layer:
+    # dmod(STR) + weapon_mod + weapon_dice + (lck+1)/(lck+2) chance of STR again
+    # + item/consumable mods
     return _dmod(g(Stat.STR))
 
 def _ranged_dmg(_g):
@@ -162,7 +165,7 @@ def _armor(_g):
     return 0  # derived entirely from items (and natural armor for some classes)
 
 def _block(g):
-    return _dmod(g(Stat.STR))
+    return _dmod(g(Stat.STR)) + 10 + _dmod(g(Stat.AGL))
 
 def _move_speed(g):
     return max(0, 4 + _dmod(g(Stat.AGL)))  # TPS
@@ -180,7 +183,7 @@ def _detection(g):
     return _dmod(g(Stat.PER))
 
 def _carry_weight(g):
-    return 50 + _dmod(g(Stat.STR)) * 10
+    return max(10, 50 + _dmod(g(Stat.STR)) * 20)
 
 def _max_stamina(g):
     total_mod = _dmod(g(Stat.VIT)) + _dmod(g(Stat.STR)) + _dmod(g(Stat.AGL))
