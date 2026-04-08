@@ -1698,6 +1698,76 @@ for _ in range(100):
 check(f"StatWeighted sim: 100 steps, {sw_sim.alive_count} alive", sw_sim.step_count == 100)
 
 # ==========================================================================
+print("\n=== Gym Single-Agent Environment ===")
+from simulation.env import CreatureEnv, MultiAgentCreatureEnv
+
+env = CreatureEnv(arena_kwargs={'cols': 10, 'rows': 10, 'num_creatures': 4,
+                                'obstacle_density': 0.05},
+                  max_steps=50)
+obs, info = env.reset(seed=42)
+check(f"Reset obs shape: {obs.shape}", obs.shape == (OBSERVATION_SIZE,))
+check("Reset obs dtype float32", obs.dtype == np.float32)
+check("Info has step=0", info['step'] == 0)
+
+# Run a few random steps
+total_reward = 0.0
+for _ in range(20):
+    action = np.random.randint(0, NUM_ACTIONS)
+    obs, reward, terminated, truncated, info = env.step(action)
+    total_reward += reward
+    check(f"Step obs shape ok", obs.shape == (OBSERVATION_SIZE,))
+    if terminated or truncated:
+        break
+
+check(f"Ran steps: info step={info['step']}", info['step'] > 0)
+check(f"Total reward: {total_reward:.2f} (is a number)", isinstance(total_reward, float))
+check("HP ratio in info", 'agent_hp_ratio' in info)
+
+# Run to completion
+env2 = CreatureEnv(arena_kwargs={'cols': 8, 'rows': 8, 'num_creatures': 3,
+                                 'obstacle_density': 0.05},
+                   max_steps=30)
+obs, _ = env2.reset(seed=123)
+done = False
+steps = 0
+while not done:
+    obs, reward, terminated, truncated, info = env2.step(Action.WAIT)
+    done = terminated or truncated
+    steps += 1
+check(f"Episode completed in {steps} steps (max 30)", steps <= 30)
+
+# ==========================================================================
+print("\n=== Gym Multi-Agent Environment ===")
+menv = MultiAgentCreatureEnv(
+    arena_kwargs={'cols': 10, 'rows': 10, 'num_creatures': 4,
+                  'obstacle_density': 0.05},
+    max_steps=50)
+observations = menv.reset(seed=42)
+check(f"Multi-agent reset: {len(observations)} creatures", len(observations) == 4)
+
+for uid, obs in observations.items():
+    check(f"Agent {uid} obs shape", obs.shape == (OBSERVATION_SIZE,))
+
+# Step with random actions
+agents = menv.agents
+actions = {uid: np.random.randint(0, NUM_ACTIONS) for uid in agents}
+results = menv.step(actions)
+check(f"Multi-agent step: {len(results)} results", len(results) == 4)
+
+for uid, res in results.items():
+    check(f"Agent {uid} result has obs", res['obs'].shape == (OBSERVATION_SIZE,))
+    check(f"Agent {uid} result has reward", isinstance(res['reward'], float))
+
+# Run 30 steps
+for _ in range(30):
+    agents = menv.agents
+    if not agents:
+        break
+    actions = {uid: np.random.randint(0, NUM_ACTIONS) for uid in agents}
+    menv.step(actions)
+check(f"Multi-agent survived 30+ steps", menv.sim.step_count >= 30)
+
+# ==========================================================================
 print(f"\n{'='*50}")
 print(f"Results: {PASS} passed, {FAIL} failed out of {PASS+FAIL} tests")
 if FAIL:

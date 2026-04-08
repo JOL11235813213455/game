@@ -356,7 +356,11 @@ Per-creature observation for the RL model:
     - `src/simulation/net.py`: 3-layer feedforward, Xavier init, softmax output
     - Single + batched forward pass, temperature-controlled sampling
     - Save/load via .npz files
-12. Implement RL training harness (PPO/DQN, Gym-compatible environment)
+12. ~~Implement Gym-compatible environment~~ — `src/simulation/env.py`
+    - CreatureEnv: single-agent, controls one creature, others use StatWeightedBehavior
+    - MultiAgentCreatureEnv: all creatures are agents, returns per-uid obs/reward
+    - Standard reset()/step() API, compatible with stable-baselines3 etc.
+    - RL training harness (PPO/DQN) is next — needs external library integration
 13. Train + evaluate — validate emergent behavior differences across stat profiles
 14. ~~Integrate trained model as NeuralBehavior.think() module~~
     - Builds observation, runs net, picks nearest visible target, dispatches action
