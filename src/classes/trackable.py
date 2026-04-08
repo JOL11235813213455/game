@@ -3,6 +3,7 @@ import weakref
 class Trackable:
     _instances = weakref.WeakSet()
     _subclasses: list = []
+    _next_uid: int = 1
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -10,8 +11,24 @@ class Trackable:
         Trackable._subclasses.append(cls)
 
     def __init__(self):
+        self.uid = Trackable._next_uid
+        Trackable._next_uid += 1
         self.__class__._instances.add(self)
         self._timed_events: dict[str, list] = {}
+
+    @classmethod
+    def reset_uid_counter(cls):
+        """Reset UID counter after loading saved objects.
+
+        Call after all deserialized objects are registered so new objects
+        get UIDs that don't collide with loaded ones.
+        """
+        max_uid = 0
+        for obj in cls.all_instances():
+            uid = getattr(obj, 'uid', 0)
+            if uid > max_uid:
+                max_uid = uid
+        cls._next_uid = max_uid + 1
 
     # -- timed event system ------------------------------------------------
 

@@ -65,6 +65,8 @@ def _deserialise(blob: bytes):
         # Re-register in per-map index (pickle restores _current_map directly)
         if isinstance(obj, WorldObject) and obj._current_map is not None:
             WorldObject._by_map[id(obj._current_map)].add(obj)
+    # Reset UID counter so new objects don't collide with loaded ones
+    Trackable.reset_uid_counter()
     return data['player']
 
 
