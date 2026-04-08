@@ -9,8 +9,7 @@ via reinforcement learning in headless multi-agent simulations.
 - **One net, many creatures** — no separate models per species/archetype
 - **Stats drive behavior** — high-STR creatures discover fighting is effective, high-CHR
   discover social strategies, because the game mechanics reward what their stats are good at
-- **Relationships tracked per creature** — `{uid: (score: float, count: int)}` — score is
-  cumulative sentiment, count is interaction depth
+- **Relationships tracked per creature** — `{uid: [sentiment, count, min_score, max_score]}`
 - **Rumors system** — creatures pass sentiments about third parties, probabilistic gossip,
   weighted array of inherited impressions. Reputation precedes you.
 - **Temporal inputs** — stat deltas over N ticks (HP change, distance to threat change) give
@@ -43,7 +42,7 @@ via reinforcement learning in headless multi-agent simulations.
   - **DC resist checks** (passive): armor, stagger, magic, poison, disease
 - Dodge/block require SIGHT_RANGE — can't defend what you can't see
 - Persuasion enhances interaction rewards, not an opposed check
-- Grapple: max(STR, AGL) vs max(STR, AGL-1) for defender
+- Grapple: max(STR, AGL) vs max(STR, AGL-1) for defender; stamina-out = lose
 - LOOT_GINI: Gini coefficient from LCK for loot generation
 - Additive stacking only, never multiplicative
 
@@ -72,6 +71,88 @@ via reinforcement learning in headless multi-agent simulations.
   | Stole from                  | +3          | negative for victim      |
   | Betrayed (attack after +)   | +10         | massive negative         |
 
+## Action Space
+
+### Movement
+| Action       | Target         | Stamina cost                    | Notes                              |
+|--------------|----------------|---------------------------------|------------------------------------|
+| Walk         | adjacent tile  | 0 (unless encumbered)           | Current move system                |
+| Run          | adjacent tile  | per-second cost, reduced by VIT | 150% speed                         |
+| Sneak        | adjacent tile  | small cost                      | STEALTH active, reduced speed      |
+
+- **Overencumbered**: speed halved for every 10% over CARRY_WEIGHT
+- Movement is real-time, interval derived from MOVE_SPEED (TPS)
+
+### Combat
+| Action        | Target              | Cost        | Notes                                    |
+|---------------|---------------------|-------------|------------------------------------------|
+| Melee attack  | adjacent creature   | stamina     | Weapon-defined timing, anim, hitbox=tile  |
+| Ranged attack | creature in range   | stamina     | accuracy_at_distance, reload timer        |
+| Cast spell    | varies by spell     | mana        | Can be dodged unless spell is undodgeable |
+| Block (stance)| self                | passive drain | Continuous; enables block contest       |
+| Dodge (stance)| self                | per-dodge   | Continuous; default active defense        |
+| Grapple       | adjacent creature   | high stamina | max(STR,AGL) vs max(STR,AGL-1); stamina-out loses |
+
+- **No cooldown** on melee or spells (gated by stamina/mana)
+- **Ranged reload**: weapon-specific timer (e.g. pistol: 13 shots then 3s reload)
+- **Dodge/block require SIGHT_RANGE** — must see attacker
+- **Block/dodge are continuous stances**, not per-attack reactions
+- Melee: one action type, weapon defines characteristics (timing, damage, animation)
+
+### Social
+| Action        | Target           | Cost | Notes                                       |
+|---------------|------------------|------|---------------------------------------------|
+| Talk          | nearby creature  | none | Opens social menu with context management   |
+| Intimidate    | nearby creature  | none | d20 contest vs FEAR_RESIST                  |
+| Deceive       | nearby creature  | none | d20 contest vs DETECTION                    |
+| Trade         | nearby creature  | none | Negotiation via utility scoring             |
+| Share rumor   | nearby creature  | none | CHR scales gossip probability               |
+| Steal         | nearby creature  | none | Deception during trade, or sneak + separate |
+
+- **Failed persuasion/intimidation** carries social cost (negative interaction recorded)
+- **Talk** opens sub-menu (SQL-driven context management)
+
+### Utility
+| Action        | Target           | Cost         | Notes                              |
+|---------------|------------------|--------------|------------------------------------|
+| Use item      | self/other       | varies       | Consumables, equipment             |
+| Pick up       | item on tile     | none         |                                    |
+| Drop          | item in inventory| none         |                                    |
+| Wait/observe  | none             | none         | Gather info, recover stamina       |
+| Enter/exit    | tile link        | none         | Already implemented                |
+| Guard         | tile/creature    | stamina drain| Territorial, defensive posture     |
+| Follow        | creature         | movement cost| Stay near target                   |
+| Flee          | away from threat | run cost     | Move away at max speed             |
+| Search tile   | current tile     | none         | Peek into tile inventory (ore, gold, items auto-spawn) |
+| Search world  | map              | movement     | Pathfinding A→B across maps        |
+| Hunt          | creature/area    | movement     | Track and pursue prey              |
+| Set trap      | tile             | stamina+item | Trap = tile property + item type; for hunting and guard |
+| Call backup   | allies in range  | none         | Allies with positive relationship respond; species/racial affinity |
+
+## Negotiation System (design)
+The model outputs **utility scores** per action, not deterministic decisions.
+Two creatures negotiate by comparing utility values:
+
+1. Each creature's model scores possible outcomes
+2. Sentiment modifier shifts willingness (friends accept worse deals)
+3. INT-scaled noise (high INT = rational, low INT = impulsive)
+4. Iterative counter-offers until both scores positive or walk-away
+5. Failed negotiation = negative social interaction recorded
+
+Example — trade:
+```
+A offers 5 gold for sword
+  A's utility: "sword worth 8 to me, losing 5 gold costs 5" → net +3
+  B's utility: "sword costs me 6, gaining 5 gold worth 5" → net -1
+  B counters: 7 gold
+  A's utility: net +1 (still positive) → accepts
+```
+
+This generalizes beyond trade:
+- **Pre-combat sizing up**: both score fight/flee/talk, interaction is emergent
+- **Alliance formation**: both score "cooperate" based on shared enemies, trust
+- **Territory disputes**: utility of holding ground vs conflict cost
+
 ## Future Model Input Variables (design notes)
 Per-creature observation for the RL model:
 - Own stats (7 base stats, key derived stats)
@@ -92,17 +173,16 @@ Per-creature observation for the RL model:
 1. ~~Review creature stats, derived stats, contests, and all existing mechanics~~
 2. ~~Add stable UID to Trackable (incrementing int, pickle-safe, reset on load)~~
 3. ~~Add relationships and rumors to Creature~~
-4. Add rumors system (inherited sentiments, probabilistic gossip)
-5. Define action space — all possible creature behaviors
-6. Define interaction mechanics — what happens per action (stat contests, outcomes)
-7. Define observation space — creature inputs (stats, HP%, nearby creatures, relationships,
+4. ~~Define action space~~
+5. Define interaction mechanics — what happens per action (stat contests, outcomes)
+6. Define observation space — creature inputs (stats, HP%, nearby creatures, relationships,
    terrain, deltas)
-8. Define reward function hierarchy (survival -> HP/gold/allies -> proxy rewards)
-9. Build headless simulation mode (game loop without rendering)
-10. Build random arena generator (varied maps, obstacles, creature compositions)
-11. Implement observation gathering + batched input vector assembly
-12. Implement neural net inference engine (NumPy matrix multiplies)
-13. Implement RL training harness (PPO/DQN, Gym-compatible environment)
-14. Train + evaluate — validate emergent behavior differences across stat profiles
-15. Integrate trained model as NeuralBehavior.think() module
-16. Implement stat-weighted decision tables as interim/fallback behavior
+7. Define reward function hierarchy (survival -> HP/gold/allies -> proxy rewards)
+8. Build headless simulation mode (game loop without rendering)
+9. Build random arena generator (varied maps, obstacles, creature compositions)
+10. Implement observation gathering + batched input vector assembly
+11. Implement neural net inference engine (NumPy matrix multiplies)
+12. Implement RL training harness (PPO/DQN, Gym-compatible environment)
+13. Train + evaluate — validate emergent behavior differences across stat profiles
+14. Integrate trained model as NeuralBehavior.think() module
+15. Implement stat-weighted decision tables as interim/fallback behavior
