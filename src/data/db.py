@@ -19,6 +19,9 @@ DIALOGUE:    dict[int, dict] = {}      # id → dialogue node dict
 DIALOGUE_ROOTS: dict[str, list] = {}   # conversation → [root node ids]
 SPELLS:      dict[str, dict] = {}      # key → spell definition dict
 SPELL_LISTS: dict[str, list] = {}      # creature_key or species_name → [spell_keys]
+QUESTS:      dict[str, dict] = {}      # quest_name → quest definition
+QUEST_STEPS: dict[str, list] = {}      # quest_name → [step dicts]
+GODS:        dict[str, dict] = {}      # god_name → god definition
 ITEMS:       dict[str, Item] = {}
 SPRITE_DATA: dict[str, dict] = {}
 TILE_TEMPLATES: dict[str, dict] = {}
@@ -112,6 +115,27 @@ def _migrate(con: sqlite3.Connection) -> None:
     species_name TEXT NOT NULL REFERENCES species(name),
     spell_key TEXT NOT NULL REFERENCES spells(key),
     PRIMARY KEY (species_name, spell_key))""",
+        """CREATE TABLE IF NOT EXISTS quests (
+    name TEXT PRIMARY KEY, giver TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '', quest_type TEXT NOT NULL DEFAULT 'quest',
+    conditions TEXT NOT NULL DEFAULT '{}', reward_action TEXT NOT NULL DEFAULT '',
+    fail_action TEXT NOT NULL DEFAULT '', time_limit INTEGER,
+    repeatable INTEGER NOT NULL DEFAULT 0, cooldown_days INTEGER)""",
+        """CREATE TABLE IF NOT EXISTS quest_steps (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    quest_name TEXT NOT NULL REFERENCES quests(name),
+    step_no INTEGER NOT NULL, step_sub TEXT NOT NULL DEFAULT 'a',
+    description TEXT NOT NULL DEFAULT '',
+    success_condition TEXT NOT NULL DEFAULT '', fail_condition TEXT NOT NULL DEFAULT '',
+    success_action TEXT NOT NULL DEFAULT '', fail_action TEXT NOT NULL DEFAULT '',
+    step_map TEXT, step_location_x INTEGER, step_location_y INTEGER,
+    step_npc TEXT, time_limit INTEGER,
+    UNIQUE(quest_name, step_no, step_sub))""",
+        """CREATE TABLE IF NOT EXISTS gods (
+    name TEXT PRIMARY KEY, domain TEXT NOT NULL DEFAULT '',
+    opposed_god TEXT, aligned_actions TEXT NOT NULL DEFAULT '[]',
+    opposed_actions TEXT NOT NULL DEFAULT '[]',
+    description TEXT NOT NULL DEFAULT '')""",
     ]:
         try:
             con.execute(stmt)
@@ -327,6 +351,8 @@ def load(db_path: Path = _DB_PATH) -> None:
         _load_creatures(con)
         _load_dialogue(con)
         _load_spells(con)
+        _load_quests(con)
+        _load_gods(con)
         _load_items(con)
         _load_sprites(con)
         _load_tile_templates(con)
@@ -461,6 +487,58 @@ def _load_spells(con: sqlite3.Connection) -> None:
     # Load species spell lists
     for r in con.execute('SELECT * FROM species_spells').fetchall():
         SPELL_LISTS.setdefault(r['species_name'], []).append(r['spell_key'])
+
+
+def _load_quests(con: sqlite3.Connection) -> None:
+    rows = con.execute('SELECT * FROM quests').fetchall()
+    for r in rows:
+        name = r['name']
+        QUESTS[name] = {
+            'name':          name,
+            'giver':         r['giver'],
+            'description':   r['description'],
+            'quest_type':    r['quest_type'],
+            'conditions':    r['conditions'],
+            'reward_action': r['reward_action'],
+            'fail_action':   r['fail_action'],
+            'time_limit':    r['time_limit'],
+            'repeatable':    bool(r['repeatable']),
+            'cooldown_days': r['cooldown_days'],
+        }
+
+    step_rows = con.execute(
+        'SELECT * FROM quest_steps ORDER BY quest_name, step_no, step_sub'
+    ).fetchall()
+    for r in step_rows:
+        step = {
+            'quest_name':        r['quest_name'],
+            'step_no':           r['step_no'],
+            'step_sub':          r['step_sub'],
+            'description':       r['description'],
+            'success_condition': r['success_condition'],
+            'fail_condition':    r['fail_condition'],
+            'success_action':    r['success_action'],
+            'fail_action':       r['fail_action'],
+            'step_map':          r['step_map'],
+            'step_location_x':   r['step_location_x'],
+            'step_location_y':   r['step_location_y'],
+            'step_npc':          r['step_npc'],
+            'time_limit':        r['time_limit'],
+        }
+        QUEST_STEPS.setdefault(r['quest_name'], []).append(step)
+
+
+def _load_gods(con: sqlite3.Connection) -> None:
+    rows = con.execute('SELECT * FROM gods').fetchall()
+    for r in rows:
+        GODS[r['name']] = {
+            'name':            r['name'],
+            'domain':          r['domain'],
+            'opposed_god':     r['opposed_god'],
+            'aligned_actions': json.loads(r['aligned_actions'] or '[]'),
+            'opposed_actions': json.loads(r['opposed_actions'] or '[]'),
+            'description':     r['description'],
+        }
 
 
 _STAT_BY_VALUE = {s.value: s for s in Stat}

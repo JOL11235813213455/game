@@ -69,6 +69,24 @@ MATING / PAIRING (partially implemented)
 - Tent spawn/despawn: spawn_tent() places tent_pairing WorldObject at z=4,
   despawn_tent() removes it. Caller manages timing.
 
+QUEST SYSTEM (classes/quest.py, data/db.py)
+- QuestLog per creature: accept, complete steps, fail, time limits, cooldowns
+- Quest states: available → active → completed/failed
+- Safe eval/exec for conditions and actions (blocked: __import__, exec, etc.)
+- Repeatable jobs with cooldown timers
+- Per-step time limits (only checked when step is reachable)
+- Quest + quest_steps DB tables, data loader
+- NOT YET: quest editor tab, quest behavior module, minimap/beacon integration
+
+GODS / PIETY SYSTEM (classes/gods.py)
+- WorldData singleton: 8 gods in 4 opposed pairs, global action counters
+- World balance per dichotomy (action counts)
+- Piety drift from witnessed opposing acts, scaled by nearby opposing piety
+- Lose god when piety hits 0, need +5 exposure before attaining new god
+- Action-to-god mapping for all combat/social/utility actions
+- World state flags (for quest conditions)
+- NOT YET: gods editor tab, proselytize action, piety influence on behavior weights
+
 DIALOGUE SYSTEM (classes/creature.py, data/db.py, editor/dialogue_tab.py)
 - dialogue table: conversation trees with parent-child nodes (parent_id=NULL for roots)
 - Filters: species, creature_key, char_conditions, world_conditions, quest_conditions

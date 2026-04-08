@@ -2505,6 +2505,189 @@ objects_after = WO.on_map(m65)
 check("Tent not in map objects after despawn", tent not in objects_after)
 
 # ==========================================================================
+print("\n=== Quest System ===")
+from classes.quest import QuestLog, QuestState, _safe_eval
+
+ql = QuestLog()
+
+# Define a test quest
+test_quest = {
+    'name': 'find_sword', 'giver': 'blacksmith',
+    'description': 'Find the lost sword', 'quest_type': 'quest',
+    'conditions': '', 'reward_action': '', 'fail_action': '',
+    'time_limit': 60, 'repeatable': False, 'cooldown_days': None,
+}
+test_steps = [
+    {'step_no': 1, 'step_sub': 'a', 'description': 'Talk to guard',
+     'success_condition': '', 'fail_condition': '',
+     'success_action': '', 'fail_action': '',
+     'step_map': None, 'step_location_x': None, 'step_location_y': None,
+     'step_npc': 'guard', 'time_limit': None},
+    {'step_no': 2, 'step_sub': 'a', 'description': 'Find the cave',
+     'success_condition': '', 'fail_condition': '',
+     'success_action': '', 'fail_action': '',
+     'step_map': 'cave', 'step_location_x': 5, 'step_location_y': 5,
+     'step_npc': None, 'time_limit': 30},
+    {'step_no': 2, 'step_sub': 'b', 'description': 'Defeat the troll',
+     'success_condition': '', 'fail_condition': '',
+     'success_action': '', 'fail_action': '',
+     'step_map': 'cave', 'step_location_x': None, 'step_location_y': None,
+     'step_npc': 'troll', 'time_limit': None},
+]
+
+# Accept quest
+check("Accept quest", ql.accept_quest('find_sword', test_quest, now=0))
+check("Quest is active", ql.get_quest_state('find_sword') == QuestState.ACTIVE)
+check("Can't accept twice", not ql.accept_quest('find_sword', test_quest, now=0))
+
+# Complete steps
+check("Complete step 1a", ql.complete_step('find_sword', 1, 'a'))
+check("Step 1a is done", ql.is_step_complete('find_sword', 1, 'a'))
+check("Step 2a not done yet", not ql.is_step_complete('find_sword', 2, 'a'))
+
+# Not all steps done → quest not complete
+check("Quest not complete yet", not ql.check_quest_complete('find_sword', test_steps))
+
+# Complete remaining steps
+ql.complete_step('find_sword', 2, 'a')
+ql.complete_step('find_sword', 2, 'b')
+check("All steps done", ql.check_quest_complete('find_sword', test_steps))
+
+# Complete quest
+check("Complete quest", ql.complete_quest('find_sword', now=5000, quest_def=test_quest))
+check("Quest state = completed", ql.get_quest_state('find_sword') == QuestState.COMPLETED)
+
+# Fail a quest
+ql2 = QuestLog()
+ql2.accept_quest('find_sword', test_quest, now=0)
+check("Fail quest", ql2.fail_quest('find_sword'))
+check("Failed state", ql2.get_quest_state('find_sword') == QuestState.FAILED)
+
+# Time limit
+ql3 = QuestLog()
+ql3.accept_quest('find_sword', test_quest, now=0)
+check("Not timed out at 50s", not ql3.check_time_limits('find_sword', test_quest, test_steps, now=50000))
+check("Timed out at 61s", ql3.check_time_limits('find_sword', test_quest, test_steps, now=61000))
+
+# Safe eval
+check("Safe eval: empty = True", _safe_eval('', {}))
+check("Safe eval: simple True", _safe_eval('1 + 1 == 2', {}))
+check("Safe eval: with namespace", _safe_eval('x > 5', {'x': 10}))
+check("Safe eval: False", not _safe_eval('x > 5', {'x': 3}))
+check("Safe eval: blocks __import__", not _safe_eval('__import__("os")', {}))
+
+# Active quests list
+check("Active quests list", 'find_sword' in ql3.get_active_quests())
+
+# Repeatable job
+job_quest = {
+    'name': 'gather_wood', 'giver': 'lumberjack',
+    'description': 'Gather wood', 'quest_type': 'job',
+    'conditions': '', 'reward_action': '', 'fail_action': '',
+    'time_limit': None, 'repeatable': True, 'cooldown_days': 1,
+}
+ql4 = QuestLog()
+ql4.accept_quest('gather_wood', job_quest, now=0)
+ql4.complete_quest('gather_wood', now=1000, quest_def=job_quest)
+check("Job completed", ql4.get_quest_state('gather_wood') == QuestState.COMPLETED)
+# Can't re-accept during cooldown
+check("Job on cooldown", not ql4.accept_quest('gather_wood', job_quest, now=2000))
+# Can re-accept after cooldown (1 day = 86400000ms)
+check("Job after cooldown", ql4.accept_quest('gather_wood', job_quest, now=86_500_000))
+
+# Quest log on creature
+m66 = make_map()
+quest_creature = make_creature(m66, x=0, y=0, name='Quester')
+check("Creature has quest_log", hasattr(quest_creature, 'quest_log'))
+check("Quest log is QuestLog", isinstance(quest_creature.quest_log, QuestLog))
+
+# ==========================================================================
+print("\n=== Gods / Piety System ===")
+from classes.gods import WorldData, God, compute_piety_drift, update_creature_piety
+
+world = WorldData()
+check(f"Gods loaded: {len(world.gods)}", len(world.gods) == 8)
+check(f"Dichotomies: {len(world.dichotomies)}", len(world.dichotomies) == 4)
+
+# Check opposition
+check("Solmara opposes Vaelkor", world.is_opposed('Solmara', 'Vaelkor'))
+check("Vaelkor opposes Solmara", world.is_opposed('Vaelkor', 'Solmara'))
+check("Solmara not opposed to Aelora", not world.is_opposed('Solmara', 'Aelora'))
+
+# Same axis check
+check("Solmara + Vaelkor on same axis", world.is_aligned_axis('Solmara', 'Vaelkor'))
+check("Solmara + Nyssara NOT same axis", not world.is_aligned_axis('Solmara', 'Nyssara'))
+
+# Record actions → god counter
+world.record_action('melee_attack')  # Vaelkor (wrath)
+world.record_action('melee_attack')
+world.record_action('talk')          # Solmara (compassion)
+check("Vaelkor count = 2", world.gods['Vaelkor'].action_count == 2)
+check("Solmara count = 1", world.gods['Solmara'].action_count == 1)
+
+# World balance
+balance = world.get_balance('Vaelkor')
+check(f"Vaelkor balance: {balance:.2f} (positive = wrath winning)", balance > 0)
+balance_s = world.get_balance('Solmara')
+check(f"Solmara balance: {balance_s:.2f} (negative = compassion losing)", balance_s < 0)
+
+# Get god for action
+check("melee_attack → Vaelkor", world.get_god_for_action('melee_attack') == 'Vaelkor')
+check("talk → Solmara", world.get_god_for_action('talk') == 'Solmara')
+check("wait → Aelora (order)", world.get_god_for_action('wait') == 'Aelora')
+check("steal → Xarith (chaos) or Nyssara (lies)",
+      world.get_god_for_action('steal') in ('Xarith', 'Nyssara'))
+
+# World flags
+world.set_flag('dragon_defeated', True)
+check("World flag set", world.get_flag('dragon_defeated') is True)
+check("Missing flag = None", world.get_flag('nonexistent') is None)
+
+# Piety drift calculation
+drift = compute_piety_drift(0.8, 1.5)  # me=0.8, opposing=1.5
+check(f"Piety drift: {drift:.4f}", drift > 0)
+drift_none = compute_piety_drift(0.0, 1.0)  # no piety = no drift
+check("No piety = no drift", drift_none == 0.0)
+
+# Creature piety
+m67 = make_map()
+devotee = make_creature(m67, x=0, y=0, name='Devotee', stats={Stat.PER: 14})
+devotee.deity = 'Solmara'
+devotee.piety = 0.5
+
+heretic = make_creature(m67, x=1, y=0, name='Heretic', stats={Stat.PER: 10})
+heretic.deity = 'Vaelkor'
+heretic.piety = 0.8
+
+# Witnessing aligned action → reinforce
+piety_before = devotee.piety
+update_creature_piety(devotee, 'talk', world, [devotee, heretic])
+check(f"Aligned action reinforces: {piety_before} → {devotee.piety}", devotee.piety > piety_before)
+
+# Witnessing opposing action → erode
+piety_before2 = devotee.piety
+update_creature_piety(devotee, 'melee_attack', world, [devotee, heretic])
+check(f"Opposing action erodes: {piety_before2} → {devotee.piety}", devotee.piety < piety_before2)
+
+# Unrelated action → no change
+piety_before3 = devotee.piety
+update_creature_piety(devotee, 'steal', world, [devotee, heretic])
+check(f"Unrelated axis: no change {piety_before3} → {devotee.piety}", devotee.piety == piety_before3)
+
+# Heavy erosion → lose god
+devotee.piety = 0.001
+update_creature_piety(devotee, 'melee_attack', world, [devotee, heretic])
+check(f"Heavy erosion: deity={devotee.deity}, piety={devotee.piety}",
+      devotee.deity is None and devotee.piety == 0.0)
+
+# Creature without deity: no effect
+neutral = make_creature(m67, x=2, y=0, name='Neutral')
+neutral.deity = None
+piety_n = neutral.piety
+update_creature_piety(neutral, 'melee_attack', world, [neutral, heretic])
+check("No deity = no piety change", neutral.piety == piety_n)
+
+# ==========================================================================
 print("\n=== Gym Single-Agent Environment ===")
 from simulation.env import CreatureEnv, MultiAgentCreatureEnv
 

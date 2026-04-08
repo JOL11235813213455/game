@@ -63,6 +63,14 @@ class Creature(WorldObject):
         self._pair_cooldown = 0  # timestamp when next pairing is allowed
         self.partner_uid: int | None = None  # UID of amorous partner (None = single)
 
+        # Religion
+        self.deity: str | None = None   # god name or None
+        self.piety: float = 0.0        # 0.0–1.0
+
+        # Quest log
+        from classes.quest import QuestLog
+        self.quest_log = QuestLog()
+
         # Build Stats from species defaults + overrides
         species_stats = {k: v for k, v in species_data.items() if isinstance(k, Stat)}
         merged = {**species_stats, **(stats or {})}

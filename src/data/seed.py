@@ -112,6 +112,43 @@ CREATE TABLE IF NOT EXISTS species_spells (
     spell_key    TEXT NOT NULL REFERENCES spells(key),
     PRIMARY KEY (species_name, spell_key)
 );
+CREATE TABLE IF NOT EXISTS quests (
+    name             TEXT PRIMARY KEY,
+    giver            TEXT NOT NULL REFERENCES creatures(key),
+    description      TEXT NOT NULL DEFAULT '',
+    quest_type       TEXT NOT NULL DEFAULT 'quest',
+    conditions       TEXT NOT NULL DEFAULT '{}',
+    reward_action    TEXT NOT NULL DEFAULT '',
+    fail_action      TEXT NOT NULL DEFAULT '',
+    time_limit       INTEGER,
+    repeatable       INTEGER NOT NULL DEFAULT 0,
+    cooldown_days    INTEGER
+);
+CREATE TABLE IF NOT EXISTS quest_steps (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    quest_name       TEXT NOT NULL REFERENCES quests(name),
+    step_no          INTEGER NOT NULL,
+    step_sub         TEXT NOT NULL DEFAULT 'a',
+    description      TEXT NOT NULL DEFAULT '',
+    success_condition TEXT NOT NULL DEFAULT '',
+    fail_condition   TEXT NOT NULL DEFAULT '',
+    success_action   TEXT NOT NULL DEFAULT '',
+    fail_action      TEXT NOT NULL DEFAULT '',
+    step_map         TEXT,
+    step_location_x  INTEGER,
+    step_location_y  INTEGER,
+    step_npc         TEXT,
+    time_limit       INTEGER,
+    UNIQUE(quest_name, step_no, step_sub)
+);
+CREATE TABLE IF NOT EXISTS gods (
+    name             TEXT PRIMARY KEY,
+    domain           TEXT NOT NULL DEFAULT '',
+    opposed_god      TEXT REFERENCES gods(name),
+    aligned_actions  TEXT NOT NULL DEFAULT '[]',
+    opposed_actions  TEXT NOT NULL DEFAULT '[]',
+    description      TEXT NOT NULL DEFAULT ''
+);
 CREATE TABLE IF NOT EXISTS dialogue (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
     conversation      TEXT NOT NULL,
