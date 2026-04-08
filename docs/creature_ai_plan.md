@@ -128,6 +128,16 @@ via reinforcement learning in headless multi-agent simulations.
 | Hunt          | creature/area    | movement     | Track and pursue prey              |
 | Set trap      | tile             | stamina+item | Trap = tile property + item type; for hunting and guard |
 | Call backup   | allies in range  | none         | Allies with positive relationship respond; species/racial affinity |
+| Sleep/rest    | safe location    | none         | Day/night cycle; debuffs stack without sleep (see below) |
+| Pair/bond     | creature         | none         | Mating/bonding action; species-centric behavior        |
+
+- **Sleep deprivation debuffs** (stacking):
+  1. Mild fatigue — minor stat reduction
+  2. Exhaustion — significant stat penalties, reduced stamina regen
+  3. Severe — hallucinations (reduced detection/accuracy), impaired judgment
+  4. Collapse — forced sleep, creature is vulnerable
+- **Day/night cycle** drives sleep as a survival pressure
+- **Pairing** — bonding/mating action, strengthens relationship, species-specific behavior
 
 ## Negotiation System (design)
 The model outputs **utility scores** per action, not deterministic decisions.
