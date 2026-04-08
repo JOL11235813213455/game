@@ -28,8 +28,23 @@ CREATURE METHODS (classes/creature.py)
 - transfer_item(): fully implemented but never called anywhere
 
 CREATURE TRAITS (classes/creature.py)
-- sex: per-species default with per-creature override, stored but no gameplay effect yet
+- sex: male/female per-creature (randomly assigned if not set), no gameplay effect yet
 - prudishness: 0.0–1.0 species default with per-creature override, no gameplay effect yet
+- age: days on the map (0 = newborn/hatched), age_class property (young/adult/old)
+- age thresholds currently hardcoded — will move to species config
+
+CREATURE TEMPLATES (data/db.py, editor/creatures_tab.py)
+- creatures + creature_stats tables for named NPC definitions
+- Species template + stat/trait overrides (level, sex, age, prudishness, behavior, items)
+- Loaded into CREATURES dict but no spawning system consumes them yet
+
+MATING / PAIRING (not yet implemented)
+- Pairings produce eggs (Item) placed on the ground
+- Eggs can be: scavenged by other creatures, hatch in place, or picked up
+- Cross-species pairing → "SpeciesAxSpeciesB" abomination offspring
+- Abominations shunned by most creatures (large negative disposition penalty)
+- Trait inheritance: offspring stats derived from parents via combination
+- Hatched creatures start at age 0
 
 NPC BEHAVIOR (classes/creature.py)
 - NPC subclass removed; all creatures use Creature with behavior modules

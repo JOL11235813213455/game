@@ -359,6 +359,8 @@ class SqlTab(ttk.Frame):
         ('tile_sets', 'nested_map', 'maps', 'name'),
         ('tile_sets', 'linked_map', 'maps', 'name'),
         ('items', 'nested_map', 'maps', 'name'),
+        ('creatures', 'species', 'species', 'name'),
+        ('creature_stats', 'creature_key', 'creatures', 'key'),
     ]
 
     # Clusters: groups of related tables laid out together
@@ -383,9 +385,9 @@ class SqlTab(ttk.Frame):
             'tables': ['tile_templates', 'tile_sets', 'maps'],
         },
         {
-            'label': 'Creatures',
+            'label': 'Species & Creatures',
             'color': '#2a1a2a',
-            'tables': ['species', 'species_stats'],
+            'tables': ['species', 'species_stats', 'creatures', 'creature_stats'],
         },
         {
             'label': 'Items',
@@ -724,10 +726,20 @@ class SqlTab(ttk.Frame):
             ('species', 'playable'): '1 = player-selectable species',
             ('species', 'tile_scale'): 'Visual size multiplier on the tile grid',
             ('species', 'composite_name'): 'Composite sprite for multi-layer rendering',
-            ('species', 'sex'): 'Default sex for this species (male/female/both/none)',
             ('species', 'prudishness'): 'Default prudishness (0.0=uninhibited, 1.0=highly prudish)',
             ('species_stats', 'stat'): 'Stat name (strength, agility, etc.)',
             ('species_stats', 'value'): 'Base stat value for this species',
+            # creatures
+            ('creatures', 'key'): 'Unique creature template identifier',
+            ('creatures', 'species'): 'Species template this creature inherits from',
+            ('creatures', 'level'): 'Creature level (NULL = default)',
+            ('creatures', 'sex'): 'male or female (NULL = random at spawn)',
+            ('creatures', 'age'): 'Age in days (NULL = 0)',
+            ('creatures', 'prudishness'): 'Override species prudishness (NULL = species default)',
+            ('creatures', 'behavior'): 'Behavior module class name (NULL = no AI)',
+            ('creatures', 'items'): 'JSON list of item keys for starting inventory',
+            ('creature_stats', 'stat'): 'Stat name to override from species default',
+            ('creature_stats', 'value'): 'Override value for this stat',
             # items
             ('items', 'class'): 'Item subclass: item, stackable, consumable, ammunition, equippable, weapon, wearable, structure',
             ('items', 'key'): 'Unique item identifier',

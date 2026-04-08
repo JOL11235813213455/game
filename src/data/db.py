@@ -14,6 +14,7 @@ _loaded  = False
 SPECIES:     dict[str, dict] = {}
 PLAYABLE:    dict[str, dict] = {}
 NONPLAYABLE: dict[str, dict] = {}
+CREATURES:   dict[str, dict] = {}
 ITEMS:       dict[str, Item] = {}
 SPRITE_DATA: dict[str, dict] = {}
 TILE_TEMPLATES: dict[str, dict] = {}
@@ -69,6 +70,15 @@ def _migrate(con: sqlite3.Connection) -> None:
         "ALTER TABLE items ADD COLUMN requirements TEXT NOT NULL DEFAULT '{}'",
         "ALTER TABLE species ADD COLUMN sex TEXT",
         "ALTER TABLE species ADD COLUMN prudishness REAL",
+        """CREATE TABLE IF NOT EXISTS creatures (
+    key TEXT PRIMARY KEY, name TEXT NOT NULL DEFAULT '',
+    species TEXT NOT NULL REFERENCES species(name),
+    level INTEGER, sex TEXT, age INTEGER, prudishness REAL,
+    behavior TEXT, items TEXT NOT NULL DEFAULT '[]')""",
+        """CREATE TABLE IF NOT EXISTS creature_stats (
+    creature_key TEXT NOT NULL REFERENCES creatures(key),
+    stat TEXT NOT NULL, value INTEGER NOT NULL,
+    PRIMARY KEY (creature_key, stat))""",
     ]:
         try:
             con.execute(stmt)
@@ -281,6 +291,7 @@ def load(db_path: Path = _DB_PATH) -> None:
     try:
         _migrate(con)
         _load_species(con)
+        _load_creatures(con)
         _load_items(con)
         _load_sprites(con)
         _load_tile_templates(con)
@@ -293,7 +304,7 @@ def load(db_path: Path = _DB_PATH) -> None:
 
 
 def _load_species(con: sqlite3.Connection) -> None:
-    rows      = con.execute('SELECT name, playable, sprite_name, tile_scale, composite_name, sex, prudishness FROM species').fetchall()
+    rows      = con.execute('SELECT name, playable, sprite_name, tile_scale, composite_name, prudishness FROM species').fetchall()
     stat_rows = con.execute('SELECT species_name, stat, value FROM species_stats').fetchall()
 
     stats_by_species: dict[str, dict] = {r['name']: {} for r in rows}
@@ -308,8 +319,6 @@ def _load_species(con: sqlite3.Connection) -> None:
         if r['composite_name'] is not None:
             block['composite_name'] = r['composite_name']
         block['tile_scale'] = r['tile_scale'] if r['tile_scale'] is not None else 1.0
-        if r['sex'] is not None:
-            block['sex'] = r['sex']
         if r['prudishness'] is not None:
             block['prudishness'] = r['prudishness']
         SPECIES[name] = block
@@ -317,6 +326,35 @@ def _load_species(con: sqlite3.Connection) -> None:
             PLAYABLE[name] = block
         else:
             NONPLAYABLE[name] = block
+
+
+def _load_creatures(con: sqlite3.Connection) -> None:
+    rows      = con.execute('SELECT * FROM creatures').fetchall()
+    stat_rows = con.execute('SELECT creature_key, stat, value FROM creature_stats').fetchall()
+
+    stats_by_key: dict[str, dict] = {r['key']: {} for r in rows}
+    for r in stat_rows:
+        stats_by_key[r['creature_key']][Stat(r['stat'])] = r['value']
+
+    for r in rows:
+        key = r['key']
+        block = {
+            'name':     r['name'],
+            'species':  r['species'],
+            'stats':    stats_by_key.get(key, {}),
+            'items':    json.loads(r['items'] or '[]'),
+        }
+        if r['level'] is not None:
+            block['level'] = r['level']
+        if r['sex'] is not None:
+            block['sex'] = r['sex']
+        if r['age'] is not None:
+            block['age'] = r['age']
+        if r['prudishness'] is not None:
+            block['prudishness'] = r['prudishness']
+        if r['behavior'] is not None:
+            block['behavior'] = r['behavior']
+        CREATURES[key] = block
 
 
 _STAT_BY_VALUE = {s.value: s for s in Stat}

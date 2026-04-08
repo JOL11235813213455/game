@@ -28,6 +28,7 @@ class Creature(WorldObject):
         move_interval: int = 1000,
         sex: str = None,
         prudishness: float = None,
+        age: int = 0,
     ):
         super().__init__(current_map=current_map, location=location)
         self.name = name
@@ -39,9 +40,12 @@ class Creature(WorldObject):
         self.sprite_name    = species_data.get('sprite_name',    self.__class__.sprite_name)
         self.composite_name = species_data.get('composite_name', self.__class__.composite_name)
 
-        # Sex and prudishness: species default, overridable per creature
-        self.sex = sex if sex is not None else species_data.get('sex')
+        # Sex: per-creature, randomly assigned if not specified
+        self.sex = sex if sex is not None else random.choice(('male', 'female'))
+        # Prudishness: species default with per-creature override
         self.prudishness = prudishness if prudishness is not None else species_data.get('prudishness', 0.5)
+        # Age in game ticks (0 = newborn)
+        self.age = age
 
         # Build Stats from species defaults + overrides
         species_stats = {k: v for k, v in species_data.items() if isinstance(k, Stat)}
@@ -84,6 +88,21 @@ class Creature(WorldObject):
 
         # Mana regen
         self.register_tick('mana_regen', 1000, self._do_mana_regen)
+
+    # -- Age ----------------------------------------------------------------
+
+    # Age thresholds in days — will move to species config later
+    YOUNG_MAX = 30    # 0–30 days = young
+    OLD_MIN   = 365   # 365+ days = old
+
+    @property
+    def age_class(self) -> str:
+        """Return 'young', 'adult', or 'old' based on age in days."""
+        if self.age <= self.YOUNG_MAX:
+            return 'young'
+        if self.age >= self.OLD_MIN:
+            return 'old'
+        return 'adult'
 
     # -- Relationships ------------------------------------------------------
 
