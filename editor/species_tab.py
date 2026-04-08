@@ -100,6 +100,22 @@ class SpeciesTab(ttk.Frame):
         add_tooltip(self.composite_cb, 'Optional composite sprite (layered) — overrides simple sprite if set')
         row += 1
 
+        ttk.Label(f, text='Sex').grid(row=row, column=0, sticky='w', padx=6, pady=4)
+        self.v_sex = tk.StringVar()
+        sex_cb = ttk.Combobox(f, textvariable=self.v_sex,
+                              values=['', 'male', 'female', 'both', 'none'],
+                              state='readonly', width=10)
+        sex_cb.grid(row=row, column=1, sticky='w', padx=6, pady=4)
+        add_tooltip(sex_cb, 'Default sex for this species (blank = unset, "both" = randomly assigned, "none" = asexual)')
+        row += 1
+
+        ttk.Label(f, text='Prudishness').grid(row=row, column=0, sticky='w', padx=6, pady=4)
+        self.v_prudishness = tk.StringVar()
+        e_prud = ttk.Entry(f, textvariable=self.v_prudishness, width=10)
+        e_prud.grid(row=row, column=1, sticky='w', padx=6, pady=4)
+        add_tooltip(e_prud, 'Species default prudishness (0.0 = uninhibited, 1.0 = highly prudish). Blank = 0.5')
+        row += 1
+
         ttk.Separator(f, orient=tk.HORIZONTAL).grid(
             row=row, column=0, columnspan=2, sticky='ew', padx=6, pady=6)
         row += 1
@@ -297,6 +313,8 @@ class SpeciesTab(ttk.Frame):
         self.v_composite.set('')
         self.sprite_preview.load(None)
         self.v_tile_scale.set('1.0')
+        self.v_sex.set('')
+        self.v_prudishness.set('')
         for var in self.stat_vars.values():
             var.set('')
         self._bindings = []
@@ -307,7 +325,7 @@ class SpeciesTab(ttk.Frame):
         con = get_con()
         try:
             row = con.execute(
-                'SELECT name, playable, sprite_name, tile_scale, composite_name FROM species WHERE name=?', (name,)
+                'SELECT name, playable, sprite_name, tile_scale, composite_name, sex, prudishness FROM species WHERE name=?', (name,)
             ).fetchone()
             if row is None:
                 return
@@ -324,6 +342,8 @@ class SpeciesTab(ttk.Frame):
         self.sprite_preview.load(sprite or None)
         self.v_tile_scale.set(str(row['tile_scale'] if row['tile_scale'] is not None else 1.0))
         self.v_composite.set(row['composite_name'] or '')
+        self.v_sex.set(row['sex'] or '')
+        self.v_prudishness.set(str(row['prudishness']) if row['prudishness'] is not None else '')
 
         stats = {r['stat']: r['value'] for r in stat_rows}
         for stat, var in self.stat_vars.items():
@@ -353,6 +373,11 @@ class SpeciesTab(ttk.Frame):
         sprite = self.v_sprite.get().strip() or None
         composite = self.v_composite.get().strip() or None
         playable = int(self.v_playable.get())
+        sex = self.v_sex.get().strip() or None
+        try:
+            prudishness = float(self.v_prudishness.get()) if self.v_prudishness.get().strip() else None
+        except ValueError:
+            prudishness = None
 
         stats = {}
         for stat, var in self.stat_vars.items():
@@ -371,15 +396,17 @@ class SpeciesTab(ttk.Frame):
             except ValueError:
                 tile_scale = 1.0
             con.execute(
-                '''INSERT INTO species (name, playable, sprite_name, tile_scale, composite_name)
-                   VALUES (?, ?, ?, ?, ?)
+                '''INSERT INTO species (name, playable, sprite_name, tile_scale, composite_name, sex, prudishness)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(name) DO UPDATE SET
                    playable=excluded.playable,
                    sprite_name=excluded.sprite_name,
                    tile_scale=excluded.tile_scale,
-                   composite_name=excluded.composite_name
+                   composite_name=excluded.composite_name,
+                   sex=excluded.sex,
+                   prudishness=excluded.prudishness
                 ''',
-                (name, playable, sprite, tile_scale, composite)
+                (name, playable, sprite, tile_scale, composite, sex, prudishness)
             )
             con.execute('DELETE FROM species_stats WHERE species_name=?', (name,))
             for stat, val in stats.items():

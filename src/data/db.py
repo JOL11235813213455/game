@@ -65,6 +65,10 @@ def _migrate(con: sqlite3.Connection) -> None:
         "ALTER TABLE items ADD COLUMN nested_map TEXT",
         "ALTER TABLE species ADD COLUMN composite_name TEXT",
         "ALTER TABLE sprites ADD COLUMN sprite_set TEXT",
+        "ALTER TABLE items ADD COLUMN action_word TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE items ADD COLUMN requirements TEXT NOT NULL DEFAULT '{}'",
+        "ALTER TABLE species ADD COLUMN sex TEXT",
+        "ALTER TABLE species ADD COLUMN prudishness REAL",
     ]:
         try:
             con.execute(stmt)
@@ -289,7 +293,7 @@ def load(db_path: Path = _DB_PATH) -> None:
 
 
 def _load_species(con: sqlite3.Connection) -> None:
-    rows      = con.execute('SELECT name, playable, sprite_name, tile_scale, composite_name FROM species').fetchall()
+    rows      = con.execute('SELECT name, playable, sprite_name, tile_scale, composite_name, sex, prudishness FROM species').fetchall()
     stat_rows = con.execute('SELECT species_name, stat, value FROM species_stats').fetchall()
 
     stats_by_species: dict[str, dict] = {r['name']: {} for r in rows}
@@ -304,6 +308,10 @@ def _load_species(con: sqlite3.Connection) -> None:
         if r['composite_name'] is not None:
             block['composite_name'] = r['composite_name']
         block['tile_scale'] = r['tile_scale'] if r['tile_scale'] is not None else 1.0
+        if r['sex'] is not None:
+            block['sex'] = r['sex']
+        if r['prudishness'] is not None:
+            block['prudishness'] = r['prudishness']
         SPECIES[name] = block
         if r['playable']:
             PLAYABLE[name] = block
@@ -344,6 +352,8 @@ def _load_items(con: sqlite3.Connection) -> None:
             ,value       = r['value']
             ,inventoriable = bool(r['inventoriable'])
             ,buffs       = _parse_buffs(r['buffs'])
+            ,action_word = r['action_word'] or ''
+            ,requirements = _parse_buffs(r['requirements'])
         )
         if r['sprite_name'] is not None:
             base['sprite_name'] = r['sprite_name']

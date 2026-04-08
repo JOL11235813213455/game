@@ -126,6 +126,10 @@ def migrate_db():
             "ALTER TABLE species ADD COLUMN tile_scale REAL NOT NULL DEFAULT 1.0",
             "ALTER TABLE species ADD COLUMN composite_name TEXT",
             "ALTER TABLE sprites ADD COLUMN sprite_set TEXT",
+            "ALTER TABLE items ADD COLUMN action_word TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE items ADD COLUMN requirements TEXT NOT NULL DEFAULT '{}'",
+            "ALTER TABLE species ADD COLUMN sex TEXT",
+            "ALTER TABLE species ADD COLUMN prudishness REAL",
             """CREATE TABLE IF NOT EXISTS tile_templates (
     key TEXT PRIMARY KEY, name TEXT NOT NULL DEFAULT '',
     walkable INTEGER NOT NULL DEFAULT 1, covered INTEGER NOT NULL DEFAULT 0,

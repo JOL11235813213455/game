@@ -16,7 +16,9 @@ CREATE TABLE IF NOT EXISTS species (
     name        TEXT PRIMARY KEY,
     playable    INTEGER NOT NULL,
     sprite_name TEXT REFERENCES sprites(name),
-    tile_scale  REAL NOT NULL DEFAULT 1.0
+    tile_scale  REAL NOT NULL DEFAULT 1.0,
+    sex         TEXT,
+    prudishness REAL
 );
 CREATE TABLE IF NOT EXISTS species_stats (
     species_name TEXT NOT NULL REFERENCES species(name),
@@ -49,6 +51,8 @@ CREATE TABLE IF NOT EXISTS items (
     directions                 TEXT,
     range                      INTEGER,
     ammunition_type            TEXT,
+    action_word                TEXT NOT NULL DEFAULT '',
+    requirements               TEXT NOT NULL DEFAULT '{}',
     footprint                  TEXT,
     collision_mask             TEXT,
     entry_points               TEXT,

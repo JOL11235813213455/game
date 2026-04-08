@@ -12,12 +12,12 @@ from editor.tooltip import add_tooltip
 class ItemsTab(ttk.Frame):
 
     _ALL_FIELDS = [
-        'key', 'name', 'description', 'weight', 'value', 'inventoriable',
-        'collision', 'tile_scale',
+        'key', 'name', 'description', 'action_word', 'weight', 'value',
+        'inventoriable', 'collision', 'tile_scale',
         'max_stack_size', 'quantity', 'duration', 'destroy_on_use_probability',
         'damage', 'slots', 'slot_count', 'durability_max', 'durability_current',
-        'render_on_creature', 'attack_time_ms', 'directions', 'range',
-        'ammunition_type',
+        'render_on_creature', 'requirements', 'attack_time_ms', 'directions',
+        'range', 'ammunition_type',
         'footprint', 'collision_mask', 'entry_points', 'nested_map',
         'sprite',
     ]
@@ -107,6 +107,11 @@ class ItemsTab(ttk.Frame):
                 'Display name shown to the player')
         add_row('description', 'Description', lambda p: ttk.Entry(p, textvariable=self.v_description, width=40).pack(anchor='w'),
                 'Flavour text or description shown in inventory')
+
+        self.v_action_word = tk.StringVar()
+        add_row('action_word', 'Action Word', lambda p: ttk.Entry(p, textvariable=self.v_action_word, width=20).pack(anchor='w'),
+                'Verb for this item (e.g. "slash", "drink", "wear") — used to build action descriptions')
+
         add_row('weight',      'Weight',      lambda p: ttk.Entry(p, textvariable=self.v_weight, width=10).pack(anchor='w'),
                 'Item weight for inventory/encumbrance')
         add_row('value',       'Value',       lambda p: ttk.Entry(p, textvariable=self.v_value, width=10).pack(anchor='w'),
@@ -156,6 +161,10 @@ class ItemsTab(ttk.Frame):
                 'Current durability (degrades with use)')
         add_row('render_on_creature','Render on Creature',lambda p: ttk.Checkbutton(p, variable=self.v_render_on_creature).pack(anchor='w'),
                 'Whether to visually display this item on the creature sprite')
+
+        self.v_requirements = tk.StringVar(value='{}')
+        add_row('requirements', 'Requirements', lambda p: ttk.Entry(p, textvariable=self.v_requirements, width=40).pack(anchor='w'),
+                'JSON stat requirements to equip, e.g. {"strength": 12, "agility": 10}')
 
         self.v_damage         = tk.StringVar(value='0')
         self.v_attack_time    = tk.StringVar(value='500')
@@ -258,6 +267,7 @@ class ItemsTab(ttk.Frame):
         self.v_key.set('')
         self.v_name.set('')
         self.v_description.set('')
+        self.v_action_word.set('')
         self.v_weight.set('0')
         self.v_value.set('0')
         self.v_inventoriable.set(True)
@@ -273,6 +283,7 @@ class ItemsTab(ttk.Frame):
         self.v_durability_max.set('100')
         self.v_durability_cur.set('100')
         self.v_render_on_creature.set(False)
+        self.v_requirements.set('{}')
         self.v_damage.set('0')
         self.v_attack_time.set('500')
         self.v_directions.set('["front"]')
@@ -300,6 +311,7 @@ class ItemsTab(ttk.Frame):
         self.v_key.set(row['key'])
         self.v_name.set(row['name'] or '')
         self.v_description.set(row['description'] or '')
+        self.v_action_word.set(row['action_word'] or '')
         self.v_weight.set(str(row['weight'] or 0))
         self.v_value.set(str(row['value'] or 0))
         self.v_inventoriable.set(bool(row['inventoriable']))
@@ -316,6 +328,7 @@ class ItemsTab(ttk.Frame):
         self.v_durability_max.set(str(row['durability_max'] or 100))
         self.v_durability_cur.set(str(row['durability_current'] or 100))
         self.v_render_on_creature.set(bool(row['render_on_creature'] or False))
+        self.v_requirements.set(row['requirements'] or '{}')
         self.v_damage.set(str(row['damage'] or 0))
         self.v_attack_time.set(str(row['attack_time_ms'] or 500))
         self.v_directions.set(row['directions'] or '["front"]')
@@ -355,17 +368,18 @@ class ItemsTab(ttk.Frame):
             con.execute(
                 '''INSERT INTO items
                    (class, key, name, description, weight, value, sprite_name, inventoriable,
-                    collision, tile_scale,
+                    collision, tile_scale, action_word, requirements,
                     max_stack_size, quantity, duration, destroy_on_use_probability,
                     slot_count, durability_max, durability_current, render_on_creature,
                     damage, attack_time_ms, directions, range, ammunition_type,
                     footprint, collision_mask, entry_points, nested_map)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                    ON CONFLICT(key) DO UPDATE SET
                    class=excluded.class, name=excluded.name, description=excluded.description,
                    weight=excluded.weight, value=excluded.value, sprite_name=excluded.sprite_name,
                    inventoriable=excluded.inventoriable, collision=excluded.collision,
                    tile_scale=excluded.tile_scale,
+                   action_word=excluded.action_word, requirements=excluded.requirements,
                    max_stack_size=excluded.max_stack_size, quantity=excluded.quantity,
                    duration=excluded.duration,
                    destroy_on_use_probability=excluded.destroy_on_use_probability,
@@ -388,6 +402,8 @@ class ItemsTab(ttk.Frame):
                     int(self.v_inventoriable.get()),
                     int(self.v_collision.get()),
                     self._float(self.v_tile_scale, 1.0),
+                    self.v_action_word.get().strip(),
+                    self.v_requirements.get().strip() if cls in ('Weapon','Wearable') else '{}',
                     self._int(self.v_max_stack, 99) if cls in ('Consumable','Ammunition') else None,
                     self._int(self.v_quantity, 1)   if cls in ('Consumable','Ammunition') else None,
                     self._float(self.v_duration)    if cls == 'Consumable' else None,

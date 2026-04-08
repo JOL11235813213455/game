@@ -724,6 +724,8 @@ class SqlTab(ttk.Frame):
             ('species', 'playable'): '1 = player-selectable species',
             ('species', 'tile_scale'): 'Visual size multiplier on the tile grid',
             ('species', 'composite_name'): 'Composite sprite for multi-layer rendering',
+            ('species', 'sex'): 'Default sex for this species (male/female/both/none)',
+            ('species', 'prudishness'): 'Default prudishness (0.0=uninhibited, 1.0=highly prudish)',
             ('species_stats', 'stat'): 'Stat name (strength, agility, etc.)',
             ('species_stats', 'value'): 'Base stat value for this species',
             # items
@@ -731,6 +733,8 @@ class SqlTab(ttk.Frame):
             ('items', 'key'): 'Unique item identifier',
             ('items', 'inventoriable'): '1 = can be picked up into inventory',
             ('items', 'buffs'): 'JSON: stat → modifier mapping',
+            ('items', 'action_word'): 'Verb for this item (e.g. slash, drink, wear)',
+            ('items', 'requirements'): 'JSON: stat → minimum value required to equip',
             ('items', 'max_stack_size'): 'Max items per inventory stack (stackable types)',
             ('items', 'quantity'): 'Current stack count',
             ('items', 'duration'): 'Effect duration in seconds (consumables)',
