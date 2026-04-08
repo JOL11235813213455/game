@@ -498,6 +498,38 @@ class Stats:
         margin = atk_val - def_val
         return margin > 0, margin
 
+    # -- resistance checks --------------------------------------------------
+
+    IMMUNE = float('inf')
+
+    def resist_check(self, dc: float, resist_stat: Stat) -> bool:
+        """Check if a resistance blocks an effect.
+
+        Args:
+            dc: difficulty class of the incoming effect
+            resist_stat: which resistance stat to check (e.g. Stat.POISON_RESIST)
+
+        Returns:
+            True if the effect is BLOCKED (creature resists).
+            False if the effect APPLIES.
+        """
+        resistance = self.active[resist_stat]()
+
+        if resistance == Stats.IMMUNE:
+            return True
+
+        if dc <= 0:
+            return True
+
+        ratio = resistance / dc
+
+        if ratio >= 1:
+            # Strong resistance: only a crit fail (5%) lets the effect through
+            return random.randint(1, 20) != 1
+        else:
+            # Partial resistance: probability of effect = 1 - ratio
+            return random.random() >= (1 - ratio)
+
     # -- snapshot -----------------------------------------------------------
 
     def snapshot(self) -> dict[Stat, int]:
