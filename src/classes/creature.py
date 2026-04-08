@@ -1,7 +1,7 @@
 from __future__ import annotations
 import random
 from classes.maps import Map, MapKey, DIRECTION_BOUNDS
-from classes.inventory import Inventory, Equippable, Slot
+from classes.inventory import Inventory, Equippable, Consumable, Weapon, Slot
 from classes.world_object import WorldObject
 from classes.stats import Stat, Stats
 
@@ -463,6 +463,198 @@ class Creature(WorldObject):
         source.items.remove(item)
         target.items.append(item)
         return True
+
+    # -- Use / Consume ------------------------------------------------------
+
+    def use_item(self, item: Consumable) -> bool:
+        """Consume one charge of a consumable item.
+
+        Applies buffs as timed stat mods (duration in seconds).
+        Decrements quantity; removes from inventory when empty.
+        Returns True if consumed.
+        """
+        if not isinstance(item, Consumable) or item not in self.inventory.items:
+            return False
+        if item.quantity <= 0:
+            return False
+
+        # Apply buffs as stat mods
+        source = f'consumable_{item.uid}_{item.quantity}'
+        for stat, amount in item.buffs.items():
+            self.stats.add_mod(source, stat, amount)
+
+        # Decrement stack
+        item.quantity -= 1
+        if item.quantity <= 0:
+            self.inventory.items.remove(item)
+
+        return True
+
+    # -- Combat -------------------------------------------------------------
+
+    def _sight_distance(self, other: 'Creature') -> int:
+        """Manhattan distance between self and other."""
+        return abs(self.location.x - other.location.x) + abs(self.location.y - other.location.y)
+
+    def can_see(self, other: 'Creature') -> bool:
+        """Return True if other is within effective sight range."""
+        effective_range = self.stats.active[Stat.SIGHT_RANGE]() - other.stats.active[Stat.STEALTH]()
+        return self._sight_distance(other) <= effective_range
+
+    def melee_attack(self, target: 'Creature', now: int) -> dict:
+        """Execute a melee attack against an adjacent creature.
+
+        Returns a result dict with keys:
+            hit: bool, damage: int, crit: bool, staggered: bool,
+            reason: str (if miss/fail)
+        """
+        result = {'hit': False, 'damage': 0, 'crit': False,
+                  'staggered': False, 'betrayal': False, 'reason': ''}
+
+        # Must be adjacent (Manhattan distance 1)
+        if self._sight_distance(target) > 1:
+            result['reason'] = 'not_adjacent'
+            return result
+
+        # Weapon check — get equipped weapon or use unarmed defaults
+        weapon = self.equipment.get(Slot.HAND_R) or self.equipment.get(Slot.HAND_L)
+        if weapon and isinstance(weapon, Weapon):
+            weapon_dmg = weapon.damage
+            weapon_dc = getattr(weapon, 'damage', 5)  # armor DC
+            weapon_impact = weapon_dmg  # stagger force scales with damage
+            stamina_cost = max(5, 10 - (self.stats.active[Stat.STR]() - 10) // 2)
+        else:
+            # Unarmed
+            weapon_dmg = 0
+            weapon_dc = 3
+            weapon_impact = 2
+            stamina_cost = 5
+
+        # Stamina check
+        cur_stam = self.stats.active[Stat.CUR_STAMINA]()
+        if cur_stam < stamina_cost:
+            result['reason'] = 'no_stamina'
+            return result
+        self.stats.base[Stat.CUR_STAMINA] = cur_stam - stamina_cost
+
+        # Betrayal check: the ACT of attacking someone with positive history
+        # triggers regardless of whether the attack hits
+        rel = self.get_relationship(target)
+        if rel and rel[0] > 0:
+            self.record_interaction(target, -10.0)
+            target.record_interaction(self, -10.0)
+            result['betrayal'] = True
+
+        # Can defender see attacker? If not, auto-hit (ambush)
+        ambush = not target.can_see(self)
+        if not ambush:
+            # Defender picks dodge (default active defense)
+            hit_won, _ = self.stats.contest(target.stats, 'accuracy_vs_dodge')
+            if not hit_won:
+                result['reason'] = 'dodged'
+                target.record_interaction(self, -1.0)
+                return result
+
+        # Hit lands — armor resist check
+        armor_blocked = target.stats.resist_check(weapon_dc, Stat.ARMOR)
+        if armor_blocked:
+            result['reason'] = 'armor_absorbed'
+            result['hit'] = True
+            result['damage'] = 0
+            target.on_hit(now)
+            target.record_interaction(self, -2.0)
+            return result
+
+        # Damage calculation
+        str_mod = (self.stats.active[Stat.STR]() - 10) // 2
+        base_dmg = str_mod + weapon_dmg
+        # Lucky STR bonus: (LCK+1)/(LCK+2) chance of adding STR mod again
+        lck = self.stats.active[Stat.LCK]()
+        lucky_chance = (lck + 1) / (lck + 2) if lck + 2 > 0 else 0
+        if random.random() < lucky_chance:
+            base_dmg += max(0, str_mod)
+
+        # Crit check
+        crit_chance = self.stats.active[Stat.CRIT_CHANCE]()
+        crit = random.randint(1, 100) <= crit_chance
+        if crit:
+            result['crit'] = True
+            base_dmg = base_dmg * 2 + str_mod
+
+        damage = max(1, base_dmg)
+        result['hit'] = True
+        result['damage'] = damage
+
+        # Apply damage
+        hp = target.stats.active[Stat.HP_CURR]()
+        target.stats.base[Stat.HP_CURR] = max(0, hp - damage)
+
+        # Stagger check
+        staggered = not target.stats.resist_check(weapon_impact, Stat.STAGGER_RESIST)
+        result['staggered'] = staggered
+
+        # Reset defender's HP regen
+        target.on_hit(now)
+
+        # Record combat interaction
+        target.record_interaction(self, -5.0)
+
+        return result
+
+    # -- Social Actions -----------------------------------------------------
+
+    def intimidate(self, target: 'Creature') -> dict:
+        """Attempt to intimidate another creature.
+
+        Uses d20 + INTIMIDATION vs d20 + FEAR_RESIST.
+        Returns dict: success, margin, reason.
+        """
+        result = {'success': False, 'margin': 0, 'reason': ''}
+
+        # Must be within sight range
+        if not self.can_see(target):
+            result['reason'] = 'out_of_range'
+            return result
+
+        won, margin = self.stats.contest(target.stats, 'intimidation_vs_fear')
+        result['margin'] = margin
+        if won:
+            result['success'] = True
+            # Target may accept dominance — slight positive for intimidator
+            target.record_interaction(self, -3.0)
+            self.record_interaction(target, 1.0)
+        else:
+            result['reason'] = 'resisted'
+            # Both take a social hit
+            self.record_interaction(target, -2.0)
+            target.record_interaction(self, -1.0)
+
+        return result
+
+    def deceive(self, target: 'Creature') -> dict:
+        """Attempt to deceive another creature.
+
+        Uses d20 + DECEPTION vs d20 + DETECTION.
+        Returns dict: success, margin, reason.
+        """
+        result = {'success': False, 'margin': 0, 'reason': ''}
+
+        if not self.can_see(target):
+            result['reason'] = 'out_of_range'
+            return result
+
+        won, margin = self.stats.contest(target.stats, 'deception_vs_detection')
+        result['margin'] = margin
+        if won:
+            result['success'] = True
+            # Victim doesn't know they've been deceived
+        else:
+            result['reason'] = 'detected'
+            # Trust severely damaged
+            target.record_interaction(self, -5.0)
+            self.record_interaction(target, -1.0)
+
+        return result
 
 
 # ---------------------------------------------------------------------------

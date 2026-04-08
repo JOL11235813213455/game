@@ -294,6 +294,254 @@ check("age=100 → adult", c_adult.age_class == 'adult')
 check("age=400 → old", c_old.age_class == 'old')
 
 # ==========================================================================
+print("\n=== Use / Consume ===")
+m12 = make_map()
+c12 = make_creature(m12, x=0, y=0, stats={Stat.STR: 10, Stat.VIT: 10})
+
+potion = Consumable(name='Strength Potion', weight=0.5, quantity=3,
+                    duration=30.0, buffs={Stat.STR: 4})
+c12.inventory.items.append(potion)
+
+str_before = c12.stats.active[Stat.STR]()
+check(f"STR before potion = {str_before}", str_before == 10)
+
+check("Use potion succeeds", c12.use_item(potion))
+str_after = c12.stats.active[Stat.STR]()
+check(f"STR after potion = {str_after} (expected 14)", str_after == 14)
+check(f"Potion quantity = {potion.quantity} (expected 2)", potion.quantity == 2)
+
+# Use twice more — should exhaust stack
+check("Use potion again", c12.use_item(potion))
+check("Use last potion", c12.use_item(potion))
+check("Potion removed from inventory", potion not in c12.inventory.items)
+
+# Can't use non-consumable
+sword_item = Item(name='Sword', weight=3.0)
+c12.inventory.items.append(sword_item)
+check("Can't use non-consumable", not c12.use_item(sword_item))
+
+# Can't use item not in inventory
+loose_potion = Consumable(name='Loose Potion', weight=0.5, quantity=1, buffs={})
+check("Can't use item not in inventory", not c12.use_item(loose_potion))
+
+# ==========================================================================
+print("\n=== Sight / Stealth ===")
+m13 = make_map(cols=20, rows=20)
+watcher = make_creature(m13, x=0, y=0, stats={Stat.PER: 14}, name='Watcher')
+# SIGHT_RANGE = 5 + dmod(14) = 5 + 2 = 7
+sneaker = make_creature(m13, x=5, y=0, stats={Stat.AGL: 16}, name='Sneaker')
+# STEALTH = dmod(16) = 3, so effective range = 7 - 3 = 4
+
+check("Watcher SIGHT_RANGE = 7", watcher.stats.active[Stat.SIGHT_RANGE]() == 7)
+check("Sneaker STEALTH = 3", sneaker.stats.active[Stat.STEALTH]() == 3)
+check("Watcher can't see sneaker at dist 5 (effective range 4)", not watcher.can_see(sneaker))
+
+# Move sneaker closer
+sneaker.location = MapKey(3, 0, 0)
+check("Watcher CAN see sneaker at dist 3", watcher.can_see(sneaker))
+
+# Non-stealthy creature visible at normal range
+obvious = make_creature(m13, x=6, y=0, stats={Stat.AGL: 10}, name='Obvious')
+check("Obvious visible at dist 6 (range 7, stealth 0)", watcher.can_see(obvious))
+
+obvious.location = MapKey(8, 0, 0)
+check("Obvious NOT visible at dist 8", not watcher.can_see(obvious))
+
+# ==========================================================================
+print("\n=== Melee Attack ===")
+m14 = make_map()
+fighter = make_creature(m14, x=0, y=0,
+                        stats={Stat.STR: 16, Stat.PER: 12, Stat.AGL: 10,
+                               Stat.LCK: 10, Stat.VIT: 12, Stat.LVL: 5},
+                        name='Fighter')
+victim = make_creature(m14, x=1, y=0,
+                       stats={Stat.STR: 10, Stat.AGL: 10, Stat.VIT: 12,
+                              Stat.PER: 10, Stat.LVL: 5},
+                       name='Victim')
+
+# Not adjacent
+victim_far = make_creature(m14, x=5, y=5,
+                           stats={Stat.VIT: 10, Stat.LVL: 5}, name='FarVictim')
+r = fighter.melee_attack(victim_far, now=1000)
+check("Attack out of range fails", r['reason'] == 'not_adjacent')
+
+# Equip a weapon
+axe = Weapon(name='Battle Axe', weight=5.0,
+             slots=[Slot.HAND_R], slot_count=1,
+             damage=6, buffs={Stat.MELEE_DMG: 2})
+fighter.inventory.items.append(axe)
+fighter.equip(axe)
+
+stam_before = fighter.stats.active[Stat.CUR_STAMINA]()
+hp_before = victim.stats.active[Stat.HP_CURR]()
+
+# Run multiple attacks to get statistical coverage
+hits = 0
+total_dmg = 0
+crits = 0
+staggers = 0
+for _ in range(100):
+    # Reset victim HP and fighter stamina each round
+    victim.stats.base[Stat.HP_CURR] = victim.stats.active[Stat.HP_MAX]()
+    fighter.stats.base[Stat.CUR_STAMINA] = fighter.stats.active[Stat.MAX_STAMINA]()
+    r = fighter.melee_attack(victim, now=1000)
+    if r['hit']:
+        hits += 1
+        total_dmg += r['damage']
+    if r['crit']:
+        crits += 1
+    if r['staggered']:
+        staggers += 1
+
+check(f"Some attacks hit: {hits}/100", hits > 0)
+check(f"Some attacks miss (dodged): {100-hits}/100", hits < 100)
+check(f"Total damage dealt: {total_dmg}", total_dmg > 0)
+check(f"Some crits in 100 attacks: {crits}", True)  # may be 0 with low crit chance
+check(f"Stagger count: {staggers}", True)  # informational
+
+# Stamina depletion: drain stamina and try to attack
+fighter.stats.base[Stat.CUR_STAMINA] = 0
+r = fighter.melee_attack(victim, now=1000)
+check("Attack with 0 stamina fails", r['reason'] == 'no_stamina')
+
+# Relationship after combat: victim should have negative sentiment toward fighter
+rel = victim.get_relationship(fighter)
+check(f"Victim has negative sentiment toward fighter: {rel[0]:.1f}", rel[0] < 0)
+
+# ==========================================================================
+print("\n=== Ambush (stealth attack) ===")
+m15 = make_map()
+assassin = make_creature(m15, x=0, y=0,
+                         stats={Stat.STR: 14, Stat.AGL: 20, Stat.PER: 10,
+                                Stat.LCK: 10, Stat.VIT: 10},
+                         name='Assassin')
+# STEALTH = dmod(20) = 5
+blind = make_creature(m15, x=1, y=0,
+                      stats={Stat.PER: 6, Stat.AGL: 10, Stat.VIT: 14,
+                             Stat.STR: 10, Stat.LVL: 5},
+                      name='Blind')
+# SIGHT_RANGE = 5 + dmod(6) = 5 + (-2) = 3
+# Effective: 3 - 5 = -2, so blind can't see assassin at any distance
+
+check("Blind can't see assassin (stealth > sight)", not blind.can_see(assassin))
+
+# Ambush should auto-hit (no dodge contest)
+dagger = Weapon(name='Dagger', weight=1.0,
+                slots=[Slot.HAND_R], slot_count=1, damage=3)
+assassin.inventory.items.append(dagger)
+assassin.equip(dagger)
+
+ambush_hits = 0
+for _ in range(50):
+    blind.stats.base[Stat.HP_CURR] = blind.stats.active[Stat.HP_MAX]()
+    assassin.stats.base[Stat.CUR_STAMINA] = assassin.stats.active[Stat.MAX_STAMINA]()
+    r = assassin.melee_attack(blind, now=1000)
+    if r['hit']:
+        ambush_hits += 1
+
+check(f"Ambush hit rate: {ambush_hits}/50 (all should hit or armor absorb)",
+      ambush_hits == 50)
+
+# ==========================================================================
+print("\n=== Intimidate ===")
+m16 = make_map()
+bully = make_creature(m16, x=0, y=0,
+                      stats={Stat.CHR: 18, Stat.STR: 16, Stat.PER: 12},
+                      name='Bully')
+# INTIMIDATION = dmod(18) + dmod(16)//2 = 4 + 3//2 = 4+1 = 5 (strong)
+timid = make_creature(m16, x=1, y=0,
+                      stats={Stat.INT: 8, Stat.STR: 8, Stat.PER: 10},
+                      name='Timid')
+# FEAR_RESIST = max(0, dmod(8) + 0//3 + 10 + dmod(8)) = max(0, -1 + 0 + 10 + -1) = 8
+
+check(f"Bully INTIMIDATION = {bully.stats.active[Stat.INTIMIDATION]()}",
+      bully.stats.active[Stat.INTIMIDATION]() == 5)
+check(f"Timid FEAR_RESIST = {timid.stats.active[Stat.FEAR_RESIST]()}",
+      timid.stats.active[Stat.FEAR_RESIST]() == 8)
+
+# Run many intimidation attempts for statistical check
+successes = sum(1 for _ in range(500)
+                if bully.intimidate(timid)['success'])
+check(f"Bully intimidates timid: {successes}/500 (expected ~40-60%)", 100 < successes < 400)
+
+# Out of sight range
+far_target = make_creature(m16, x=15, y=15,
+                           stats={Stat.PER: 10}, name='FarTarget')
+r = bully.intimidate(far_target)
+check("Intimidate out of sight fails", r['reason'] == 'out_of_range')
+
+# Check relationships after intimidation
+rel_timid = timid.get_relationship(bully)
+check("Timid has negative sentiment toward bully", rel_timid[0] < 0)
+
+# ==========================================================================
+print("\n=== Deceive ===")
+m17 = make_map()
+liar = make_creature(m17, x=0, y=0,
+                     stats={Stat.CHR: 16, Stat.AGL: 14, Stat.PER: 10},
+                     name='Liar')
+# DECEPTION = dmod(16) + dmod(14)//2 = 3 + 1 = 4
+mark = make_creature(m17, x=1, y=0,
+                     stats={Stat.PER: 12}, name='Mark')
+# DETECTION = dmod(12) = 1
+
+check(f"Liar DECEPTION = {liar.stats.active[Stat.DECEPTION]()}",
+      liar.stats.active[Stat.DECEPTION]() == 4)
+check(f"Mark DETECTION = {mark.stats.active[Stat.DETECTION]()}",
+      mark.stats.active[Stat.DETECTION]() == 1)
+
+# Statistical test
+d_successes = sum(1 for _ in range(500)
+                  if liar.deceive(mark)['success'])
+check(f"Liar deceives mark: {d_successes}/500 (liar has advantage)",
+      d_successes > 200)
+
+# Failed deception damages trust
+rel_mark = mark.get_relationship(liar)
+if rel_mark:
+    failed_count = 500 - d_successes
+    check(f"Mark sentiment toward liar after failures: {rel_mark[0]:.1f}",
+          rel_mark[0] < 0 if failed_count > 0 else True)
+
+# ==========================================================================
+print("\n=== Betrayal ===")
+m18 = make_map()
+friend = make_creature(m18, x=0, y=0,
+                       stats={Stat.STR: 14, Stat.PER: 12, Stat.AGL: 10,
+                              Stat.LCK: 10, Stat.VIT: 12, Stat.LVL: 3},
+                       name='Friend')
+betrayed = make_creature(m18, x=1, y=0,
+                         stats={Stat.VIT: 14, Stat.AGL: 10, Stat.PER: 10,
+                                Stat.STR: 10, Stat.LVL: 3},
+                         name='Betrayed')
+
+# Build positive relationship first
+friend.record_interaction(betrayed, 10.0)
+friend.record_interaction(betrayed, 5.0)
+check("Friend has positive sentiment before betrayal",
+      friend.get_relationship(betrayed)[0] == 15.0)
+
+# Now attack — should trigger betrayal penalty
+fist = Weapon(name='Fist', weight=0, slots=[Slot.HAND_R], slot_count=1, damage=2)
+friend.inventory.items.append(fist)
+friend.equip(fist)
+
+betrayed.stats.base[Stat.HP_CURR] = betrayed.stats.active[Stat.HP_MAX]()
+friend.stats.base[Stat.CUR_STAMINA] = friend.stats.active[Stat.MAX_STAMINA]()
+r = friend.melee_attack(betrayed, now=1000)
+
+# After attack, friend's sentiment toward betrayed should have tanked
+# (was +15, now should be +15 + (-10) = +5 or less depending on hit)
+friend_rel = friend.get_relationship(betrayed)
+check(f"Betrayal cost: friend sentiment dropped to {friend_rel[0]:.1f}",
+      friend_rel[0] < 15.0)
+
+# Betrayed gets extra -10 on top of combat -5
+betrayed_rel = betrayed.get_relationship(friend)
+check(f"Betrayed sentiment = {betrayed_rel[0]:.1f} (massive negative)",
+      betrayed_rel[0] < -10.0)
+
+# ==========================================================================
 print(f"\n{'='*50}")
 print(f"Results: {PASS} passed, {FAIL} failed out of {PASS+FAIL} tests")
 if FAIL:

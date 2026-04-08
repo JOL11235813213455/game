@@ -55,9 +55,16 @@ NPC BEHAVIOR (classes/creature.py)
 - dialogue attribute exists as placeholder (None) — no dialogue system yet
 
 COMBAT
-- No combat system exists
-- Attack behaviors (attack_north/south/east/west) are defined but no damage/hit logic
+- melee_attack() implemented: stamina cost, sight/ambush, dodge contest, armor resist,
+  damage (STR + weapon + lucky STR), crit, stagger, HP regen reset, betrayal detection
+- No ranged attack, spell casting, grapple, or block stance yet
+- Attack behaviors (animation bindings) not wired to melee_attack() yet
 - No death handling beyond the death animation binding
+
+SOCIAL
+- intimidate() implemented: d20 INTIMIDATION vs FEAR_RESIST, relationship recording
+- deceive() implemented: d20 DECEPTION vs DETECTION, trust damage on failure
+- No trade/negotiate, share rumor, steal, bribe, or seduce yet
 
 EQUIPMENT
 - equip/unequip implemented with stat mod passthrough and stat requirement checks
@@ -69,8 +76,14 @@ ECONOMY
 - No shop, trade, or currency system
 - Item value field unused
 
+SIGHT / STEALTH
+- can_see() implemented: SIGHT_RANGE - target's STEALTH vs Manhattan distance
+- Used by melee_attack (ambush detection) and social actions (range check)
+- Not yet used by rendering or AI observation space
+
 CONSUMABLES
-- Consumable class exists with duration, max_stack_size, quantity
+- use_item() implemented: applies buffs as stat mods, decrements quantity, removes at 0
+- Duration field exists but timed mod expiration not yet implemented
 - No use/consume action or effect system
 
 DURABILITY
