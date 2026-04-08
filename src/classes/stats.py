@@ -315,13 +315,16 @@ DERIVED_FORMULAS: dict[Stat, callable] = {
 
 OPPOSING_STATS: dict[str, tuple[Stat, Stat]] = {
     # -- Combat: active defenses (defender chooses dodge OR block, not both) --
+    # Dodge/block require defender to SEE the attacker (SIGHT_RANGE check first)
     'accuracy_vs_dodge':     (Stat.ACCURACY,      Stat.DODGE),
     'accuracy_vs_block':     (Stat.ACCURACY,      Stat.BLOCK),
-    'stealth_vs_detection':  (Stat.STEALTH,      Stat.DETECTION),
-    # -- Social: action vs resistance --
-    'persuasion_vs_fear':    (Stat.PERSUASION,    Stat.FEAR_RESIST),
+    # -- Combat: grapple (use max(STR, AGL) for attacker, max(STR, AGL)-1 for defender)
+    'grapple':               (Stat.STR,           Stat.STR),  # resolved with custom logic
+    'stealth_vs_detection':  (Stat.STEALTH,       Stat.DETECTION),
+    # -- Social --
     'intimidation_vs_fear':  (Stat.INTIMIDATION,  Stat.FEAR_RESIST),
     'deception_vs_detection':(Stat.DECEPTION,     Stat.DETECTION),
+    # Persuasion: not opposed — enhances interaction rewards (talk/nonviolent)
 }
 
 # ---------------------------------------------------------------------------
