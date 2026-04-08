@@ -323,7 +323,16 @@ Per-creature observation for the RL model:
 2. ~~Add stable UID to Trackable (incrementing int, pickle-safe, reset on load)~~
 3. ~~Add relationships and rumors to Creature~~
 4. ~~Define action space~~
-5. Define interaction mechanics — what happens per action (stat contests, outcomes)
+5. ~~Implement interaction mechanics~~ (192 headless tests)
+   - ~~Equipment: equip/unequip with stat mod passthrough, requirements~~
+   - ~~Inventory: pickup/drop with encumbrance, use/consume with timed expiry~~
+   - ~~Combat: melee (full chain), ranged (accuracy + recoverable ammo), grapple~~
+   - ~~Social: intimidate, deceive, trade/negotiate, bribe, steal, share rumor~~
+   - ~~Utility: search, guard, wait, follow, call backup, sleep/wake, set trap~~
+   - ~~Movement: run, sneak, flee~~
+   - ~~Stances: block~~
+   - Remaining: cast spell (needs spell system), seduce (needs pairing), talk (needs dialogue)
+   - Remaining: trap trigger, sleep deprivation debuffs, death handling
 6. Define observation space — creature inputs (stats, HP%, nearby creatures, relationships,
    terrain, deltas)
 7. Define reward function hierarchy (survival -> HP/gold/allies -> proxy rewards)
