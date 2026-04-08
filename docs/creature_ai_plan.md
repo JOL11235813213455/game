@@ -336,9 +336,18 @@ Per-creature observation for the RL model:
    - ~~Sleep deprivation: 4-tier stacking debuffs, sleep clears all~~
    - ~~Talk/dialogue: conversation engine with tree traversal, condition filtering, effects~~
    - Remaining: cast spell (needs spell system), seduce (needs pairing system)
-6. Define observation space — creature inputs (stats, HP%, nearby creatures, relationships,
-   terrain, deltas)
-7. Define reward function hierarchy (survival -> HP/gold/allies -> proxy rewards)
+6. ~~Define observation space~~ — 114-element vector in `src/classes/observation.py`
+   - Self: 7 base stats + 8 derived, HP%/stamina%/mana%, status flags
+   - Per-neighbor (up to 8): distance, direction, sentiment, confidence, curiosity,
+     rumor opinion, HP ratio, equipment, same-species flag
+   - Terrain: 9 adjacent tile walkability
+   - Temporal: HP delta, stamina delta, threat distance delta
+7. ~~Define reward function hierarchy~~ — in `src/classes/reward.py`
+   - Survival (death = -20, damage weighted 8x, healing 5x)
+   - Resources (stamina management, inventory value, ally count)
+   - Curiosity (INT-scaled: high INT = stronger exploration reward)
+   - Social (sentiment improvement, new creatures met)
+   - Penalties (fatigue increase, combat losses)
 8. Build headless simulation mode (game loop without rendering)
 9. Build random arena generator (varied maps, obstacles, creature compositions)
 10. Implement observation gathering + batched input vector assembly

@@ -1395,12 +1395,114 @@ DIALOGUE.clear()
 DIALOGUE_ROOTS.clear()
 
 # ==========================================================================
+print("\n=== Observation Vector ===")
+from classes.observation import build_observation, OBSERVATION_SIZE, make_snapshot
+
+m41 = make_map(cols=10, rows=10)
+obs_creature = make_creature(m41, x=5, y=5,
+                             stats={Stat.STR: 14, Stat.PER: 12, Stat.AGL: 12,
+                                    Stat.INT: 16, Stat.VIT: 12, Stat.CHR: 10,
+                                    Stat.LCK: 10, Stat.LVL: 3},
+                             name='Observer')
+
+# Add a nearby creature
+nearby = make_creature(m41, x=6, y=5,
+                       stats={Stat.STR: 10, Stat.PER: 10},
+                       name='Nearby')
+obs_creature.record_interaction(nearby, 3.0)
+
+obs = build_observation(obs_creature, 10, 10)
+check(f"Observation length = {len(obs)} (expected {OBSERVATION_SIZE})",
+      len(obs) == OBSERVATION_SIZE)
+check("All values are floats", all(isinstance(v, float) for v in obs))
+check("HP ratio in [0,1]", 0.0 <= obs[15] <= 1.0)  # resources section starts at 15
+check("No NaN or inf", all(v == v and abs(v) != float('inf') for v in obs))
+
+# With previous snapshot
+snap1 = make_snapshot(obs_creature)
+# Simulate damage
+obs_creature.stats.base[Stat.HP_CURR] -= 3
+snap2 = make_snapshot(obs_creature)
+obs2 = build_observation(obs_creature, 10, 10, prev_snapshot=snap1)
+check(f"Observation with deltas: length {len(obs2)}", len(obs2) == OBSERVATION_SIZE)
+# HP delta should be negative (temporal section at end)
+hp_delta_idx = OBSERVATION_SIZE - 3
+check(f"HP delta is negative: {obs2[hp_delta_idx]:.3f}", obs2[hp_delta_idx] < 0)
+
+# No neighbors → neighbor slots are all zeros
+m42 = make_map(cols=10, rows=10)
+alone = make_creature(m42, x=5, y=5, stats={Stat.PER: 12}, name='Alone')
+obs_alone = build_observation(alone, 10, 10)
+check("Alone observation valid", len(obs_alone) == OBSERVATION_SIZE)
+
+# ==========================================================================
+print("\n=== Reward Function ===")
+from classes.reward import compute_reward, make_reward_snapshot
+
+m43 = make_map()
+rl_creature = make_creature(m43, x=0, y=0,
+                            stats={Stat.STR: 14, Stat.INT: 16, Stat.VIT: 12,
+                                   Stat.PER: 12, Stat.LVL: 3},
+                            name='RLCreature')
+
+# Baseline snapshot
+snap_a = make_reward_snapshot(rl_creature)
+
+# Simulate taking damage
+rl_creature.stats.base[Stat.HP_CURR] -= 5
+snap_b = make_reward_snapshot(rl_creature)
+r = compute_reward(rl_creature, snap_a, snap_b)
+check(f"Damage penalty: {r:.2f} (negative)", r < 0)
+
+# Simulate healing
+rl_creature.stats.base[Stat.HP_CURR] += 5
+snap_c = make_reward_snapshot(rl_creature)
+r2 = compute_reward(rl_creature, snap_b, snap_c)
+check(f"Healing reward: {r2:.2f} (positive)", r2 > 0)
+
+# Simulate acquiring an item
+snap_d = make_reward_snapshot(rl_creature)
+gold = Item(name='Gold', weight=0.1, value=10.0)
+rl_creature.inventory.items.append(gold)
+snap_e = make_reward_snapshot(rl_creature)
+r3 = compute_reward(rl_creature, snap_d, snap_e)
+check(f"Item acquisition reward: {r3:.2f} (positive)", r3 > 0)
+
+# Simulate meeting a new creature (curiosity reward)
+snap_f = make_reward_snapshot(rl_creature)
+stranger_rl = make_creature(m43, x=1, y=0, name='StrangerRL')
+rl_creature.record_interaction(stranger_rl, 1.0)
+snap_g = make_reward_snapshot(rl_creature)
+r4 = compute_reward(rl_creature, snap_f, snap_g)
+check(f"Curiosity reward (INT 16): {r4:.2f} (positive)", r4 > 0)
+
+# Compare: low INT creature gets less curiosity reward
+low_int = make_creature(m43, x=0, y=1,
+                        stats={Stat.INT: 6, Stat.PER: 10}, name='LowINT')
+snap_h = make_reward_snapshot(low_int)
+low_int.record_interaction(stranger_rl, 1.0)
+snap_i = make_reward_snapshot(low_int)
+r5 = compute_reward(low_int, snap_h, snap_i)
+check(f"Low INT curiosity reward: {r5:.2f} < high INT {r4:.2f}", r5 < r4)
+
+# Simulate death
+snap_j = make_reward_snapshot(rl_creature)
+rl_creature.stats.base[Stat.HP_CURR] = 0
+snap_k = make_reward_snapshot(rl_creature)
+r6 = compute_reward(rl_creature, snap_j, snap_k)
+check(f"Death penalty: {r6:.2f} (massive negative)", r6 <= -20.0)
+
+# Fatigue penalty
+rl_creature.stats.base[Stat.HP_CURR] = rl_creature.stats.active[Stat.HP_MAX]()
+snap_l = make_reward_snapshot(rl_creature)
+rl_creature.add_sleep_debt(2)
+snap_m = make_reward_snapshot(rl_creature)
+r7 = compute_reward(rl_creature, snap_l, snap_m)
+check(f"Fatigue penalty: {r7:.2f} (negative)", r7 < 0)
+
+# ==========================================================================
 print(f"\n{'='*50}")
 print(f"Results: {PASS} passed, {FAIL} failed out of {PASS+FAIL} tests")
-if FAIL:
-    sys.exit(1)
-else:
-    print("All tests passed!")
 if FAIL:
     sys.exit(1)
 else:
