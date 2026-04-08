@@ -43,33 +43,34 @@ class Action(IntEnum):
     MELEE_ATTACK = 24
     RANGED_ATTACK = 25
     GRAPPLE = 26
+    CAST_SPELL = 27
 
     # Social
-    INTIMIDATE = 27
-    DECEIVE = 28
-    TRADE = 29
-    BRIBE = 30
-    STEAL = 31
-    SHARE_RUMOR = 32
-    TALK = 33
+    INTIMIDATE = 28
+    DECEIVE = 29
+    TRADE = 30
+    BRIBE = 31
+    STEAL = 32
+    SHARE_RUMOR = 33
+    TALK = 34
 
     # Utility
-    PICKUP = 34
-    DROP = 35
-    USE_ITEM = 36
-    WAIT = 37
-    GUARD = 38
-    SEARCH = 39
-    FLEE = 40
-    FOLLOW = 41
-    CALL_BACKUP = 42
-    SLEEP = 43
-    SET_TRAP = 44
+    PICKUP = 35
+    DROP = 36
+    USE_ITEM = 37
+    WAIT = 38
+    GUARD = 39
+    SEARCH = 40
+    FLEE = 41
+    FOLLOW = 42
+    CALL_BACKUP = 43
+    SLEEP = 44
+    SET_TRAP = 45
 
     # Stances
-    BLOCK_STANCE = 45
-    EXIT_BLOCK = 46
-    EXIT_GUARD = 47
+    BLOCK_STANCE = 46
+    EXIT_BLOCK = 47
+    EXIT_GUARD = 48
 
 
 NUM_ACTIONS = len(Action)
@@ -140,6 +141,20 @@ def dispatch(creature, action: int, context: dict) -> dict:
         if target is None:
             return {'success': False, 'reason': 'no_target'}
         return creature.grapple(target)
+
+    if action == Action.CAST_SPELL:
+        spell = context.get('spell')
+        if spell is None:
+            # Auto-select first known spell
+            from data.db import SPELLS
+            known = creature.get_known_spells()
+            for sk in known:
+                if sk in SPELLS:
+                    spell = SPELLS[sk]
+                    break
+            if spell is None:
+                return {'success': False, 'reason': 'no_spell'}
+        return creature.cast_spell(spell, target, now)
 
     # -- Social --
     if action == Action.INTIMIDATE:

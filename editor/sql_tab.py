@@ -364,6 +364,10 @@ class SqlTab(ttk.Frame):
         ('dialogue', 'species', 'species', 'name'),
         ('dialogue', 'creature_key', 'creatures', 'key'),
         ('dialogue', 'parent_id', 'dialogue', 'id'),
+        ('creature_spells', 'spell_key', 'spells', 'key'),
+        ('creature_spells', 'creature_key', 'creatures', 'key'),
+        ('species_spells', 'spell_key', 'spells', 'key'),
+        ('species_spells', 'species_name', 'species', 'name'),
     ]
 
     # Clusters: groups of related tables laid out together
@@ -396,6 +400,11 @@ class SqlTab(ttk.Frame):
             'label': 'Items',
             'color': '#1a2a2a',
             'tables': ['items', 'item_slots'],
+        },
+        {
+            'label': 'Spells',
+            'color': '#1a2a3a',
+            'tables': ['spells', 'creature_spells', 'species_spells'],
         },
         {
             'label': 'Dialogue',
@@ -760,6 +769,20 @@ class SqlTab(ttk.Frame):
             ('dialogue', 'behavior'): 'Interaction behavior triggered (e.g. trade, attack)',
             ('dialogue', 'effects'): 'JSON: quest/status/inventory changes when selected',
             ('dialogue', 'sort_order'): 'Display order among sibling nodes (lower = first)',
+            # spells
+            ('spells', 'key'): 'Unique spell identifier',
+            ('spells', 'spell_dc'): 'Difficulty class vs MAGIC_RESIST',
+            ('spells', 'dodgeable'): '1 = target can attempt dodge contest',
+            ('spells', 'target_type'): 'self / single / area',
+            ('spells', 'effect_type'): 'damage / heal / buff / debuff',
+            ('spells', 'buffs'): 'JSON stat modifiers for buff/debuff spells',
+            ('spells', 'secondary_resist'): 'Secondary resist stat name (e.g. poison resist)',
+            ('spells', 'secondary_dc'): 'DC for secondary resist check',
+            ('spells', 'requirements'): 'JSON stat requirements to cast',
+            ('creature_spells', 'creature_key'): 'NPC that knows this spell',
+            ('creature_spells', 'spell_key'): 'Spell the creature knows',
+            ('species_spells', 'species_name'): 'Species that can cast this spell',
+            ('species_spells', 'spell_key'): 'Spell available to this species',
             # items
             ('items', 'class'): 'Item subclass: item, stackable, consumable, ammunition, equippable, weapon, wearable, structure',
             ('items', 'key'): 'Unique item identifier',

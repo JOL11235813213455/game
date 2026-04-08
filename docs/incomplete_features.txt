@@ -71,7 +71,10 @@ COMBAT
   (arrows/rocks land on target tile on miss), non-recoverable (bullets consumed)
 - grapple() implemented: max(STR,AGL) vs max(STR,AGL-1), stamina cost, dominance
 - enter_block_stance/exit_block_stance: requires item in hand, +2 BLOCK while active
-- No spell casting yet
+- cast_spell() implemented: mana/stamina cost, requirements, dodge contest (if dodgeable),
+  magic resist (hostile only), 4 effect types (damage/heal/buff/debuff), timed buff expiry,
+  secondary resist (e.g. poison from spell), self-targeted spells
+- Spell definitions in spells table, creature_spells + species_spells for known spells
 - Attack behaviors (animation bindings) not wired to attack methods yet
 - die() implemented: drops inventory + equipment on tile, clears mods, plays death anim
 - is_alive property checks HP > 0

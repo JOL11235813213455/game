@@ -79,6 +79,39 @@ CREATE TABLE IF NOT EXISTS creature_stats (
     value        INTEGER NOT NULL,
     PRIMARY KEY (creature_key, stat)
 );
+CREATE TABLE IF NOT EXISTS spells (
+    key                TEXT PRIMARY KEY,
+    name               TEXT NOT NULL DEFAULT '',
+    description        TEXT NOT NULL DEFAULT '',
+    action_word        TEXT NOT NULL DEFAULT 'cast',
+    damage             REAL NOT NULL DEFAULT 0,
+    mana_cost          INTEGER NOT NULL DEFAULT 0,
+    stamina_cost       INTEGER NOT NULL DEFAULT 0,
+    range              INTEGER NOT NULL DEFAULT 5,
+    radius             INTEGER NOT NULL DEFAULT 0,
+    spell_dc           INTEGER NOT NULL DEFAULT 10,
+    dodgeable          INTEGER NOT NULL DEFAULT 1,
+    target_type        TEXT NOT NULL DEFAULT 'single',
+    effect_type        TEXT NOT NULL DEFAULT 'damage',
+    buffs              TEXT NOT NULL DEFAULT '{}',
+    duration           REAL NOT NULL DEFAULT 0,
+    secondary_resist   TEXT,
+    secondary_dc       INTEGER,
+    requirements       TEXT NOT NULL DEFAULT '{}',
+    sprite_name        TEXT REFERENCES sprites(name),
+    animation_name     TEXT REFERENCES animations(name),
+    composite_name     TEXT
+);
+CREATE TABLE IF NOT EXISTS creature_spells (
+    creature_key TEXT NOT NULL,
+    spell_key    TEXT NOT NULL REFERENCES spells(key),
+    PRIMARY KEY (creature_key, spell_key)
+);
+CREATE TABLE IF NOT EXISTS species_spells (
+    species_name TEXT NOT NULL REFERENCES species(name),
+    spell_key    TEXT NOT NULL REFERENCES spells(key),
+    PRIMARY KEY (species_name, spell_key)
+);
 CREATE TABLE IF NOT EXISTS dialogue (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
     conversation      TEXT NOT NULL,

@@ -17,6 +17,8 @@ NONPLAYABLE: dict[str, dict] = {}
 CREATURES:   dict[str, dict] = {}
 DIALOGUE:    dict[int, dict] = {}      # id → dialogue node dict
 DIALOGUE_ROOTS: dict[str, list] = {}   # conversation → [root node ids]
+SPELLS:      dict[str, dict] = {}      # key → spell definition dict
+SPELL_LISTS: dict[str, list] = {}      # creature_key or species_name → [spell_keys]
 ITEMS:       dict[str, Item] = {}
 SPRITE_DATA: dict[str, dict] = {}
 TILE_TEMPLATES: dict[str, dict] = {}
@@ -92,6 +94,24 @@ def _migrate(con: sqlite3.Connection) -> None:
     quest_conditions TEXT NOT NULL DEFAULT '{}',
     behavior TEXT, effects TEXT NOT NULL DEFAULT '{}',
     sort_order INTEGER NOT NULL DEFAULT 0)""",
+        """CREATE TABLE IF NOT EXISTS spells (
+    key TEXT PRIMARY KEY, name TEXT NOT NULL DEFAULT '',
+    description TEXT NOT NULL DEFAULT '', action_word TEXT NOT NULL DEFAULT 'cast',
+    damage REAL NOT NULL DEFAULT 0, mana_cost INTEGER NOT NULL DEFAULT 0,
+    stamina_cost INTEGER NOT NULL DEFAULT 0, range INTEGER NOT NULL DEFAULT 5,
+    radius INTEGER NOT NULL DEFAULT 0, spell_dc INTEGER NOT NULL DEFAULT 10,
+    dodgeable INTEGER NOT NULL DEFAULT 1, target_type TEXT NOT NULL DEFAULT 'single',
+    effect_type TEXT NOT NULL DEFAULT 'damage', buffs TEXT NOT NULL DEFAULT '{}',
+    duration REAL NOT NULL DEFAULT 0, secondary_resist TEXT, secondary_dc INTEGER,
+    requirements TEXT NOT NULL DEFAULT '{}', sprite_name TEXT, animation_name TEXT,
+    composite_name TEXT)""",
+        """CREATE TABLE IF NOT EXISTS creature_spells (
+    creature_key TEXT NOT NULL, spell_key TEXT NOT NULL REFERENCES spells(key),
+    PRIMARY KEY (creature_key, spell_key))""",
+        """CREATE TABLE IF NOT EXISTS species_spells (
+    species_name TEXT NOT NULL REFERENCES species(name),
+    spell_key TEXT NOT NULL REFERENCES spells(key),
+    PRIMARY KEY (species_name, spell_key))""",
     ]:
         try:
             con.execute(stmt)
@@ -306,6 +326,7 @@ def load(db_path: Path = _DB_PATH) -> None:
         _load_species(con)
         _load_creatures(con)
         _load_dialogue(con)
+        _load_spells(con)
         _load_items(con)
         _load_sprites(con)
         _load_tile_templates(con)
@@ -403,6 +424,43 @@ def _load_dialogue(con: sqlite3.Connection) -> None:
         pid = node['parent_id']
         if pid is not None and pid in DIALOGUE:
             DIALOGUE[pid]['children'].append(node['id'])
+
+
+def _load_spells(con: sqlite3.Connection) -> None:
+    rows = con.execute('SELECT * FROM spells').fetchall()
+    for r in rows:
+        key = r['key']
+        SPELLS[key] = {
+            'key':              key,
+            'name':             r['name'],
+            'description':      r['description'],
+            'action_word':      r['action_word'],
+            'damage':           r['damage'],
+            'mana_cost':        r['mana_cost'],
+            'stamina_cost':     r['stamina_cost'],
+            'range':            r['range'],
+            'radius':           r['radius'],
+            'spell_dc':         r['spell_dc'],
+            'dodgeable':        bool(r['dodgeable']),
+            'target_type':      r['target_type'],   # self / single / area
+            'effect_type':      r['effect_type'],   # damage / heal / buff / debuff
+            'buffs':            _parse_buffs(r['buffs']),
+            'duration':         r['duration'],
+            'secondary_resist': r['secondary_resist'],
+            'secondary_dc':     r['secondary_dc'],
+            'requirements':     _parse_buffs(r['requirements']),
+            'sprite_name':      r['sprite_name'],
+            'animation_name':   r['animation_name'],
+            'composite_name':   r['composite_name'],
+        }
+
+    # Load creature spell lists
+    for r in con.execute('SELECT * FROM creature_spells').fetchall():
+        SPELL_LISTS.setdefault(r['creature_key'], []).append(r['spell_key'])
+
+    # Load species spell lists
+    for r in con.execute('SELECT * FROM species_spells').fetchall():
+        SPELL_LISTS.setdefault(r['species_name'], []).append(r['spell_key'])
 
 
 _STAT_BY_VALUE = {s.value: s for s in Stat}

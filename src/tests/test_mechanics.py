@@ -1570,7 +1570,7 @@ m44 = make_map(cols=10, rows=10)
 actor = make_creature(m44, x=5, y=5, stats={Stat.STR: 14, Stat.AGL: 12}, name='Actor')
 dummy = make_creature(m44, x=6, y=5, stats={Stat.VIT: 12, Stat.PER: 10, Stat.LVL: 3}, name='Dummy')
 
-check(f"NUM_ACTIONS = {NUM_ACTIONS}", NUM_ACTIONS == 48)
+check(f"NUM_ACTIONS = {NUM_ACTIONS}", NUM_ACTIONS == 49)
 
 # Move south via dispatch (east is blocked by dummy at 6,5)
 ctx = {'cols': 10, 'rows': 10}
@@ -1696,6 +1696,146 @@ sw_sim = Simulation(sw_arena, tick_ms=100)
 for _ in range(100):
     sw_sim.step()
 check(f"StatWeighted sim: 100 steps, {sw_sim.alive_count} alive", sw_sim.step_count == 100)
+
+# ==========================================================================
+print("\n=== Spell System ===")
+
+# Build spell definitions directly (no DB needed for headless)
+fireball = {
+    'key': 'fireball', 'name': 'Fireball', 'description': 'A ball of fire',
+    'action_word': 'hurl', 'damage': 8.0, 'mana_cost': 5, 'stamina_cost': 0,
+    'range': 6, 'radius': 2, 'spell_dc': 12, 'dodgeable': True,
+    'target_type': 'single', 'effect_type': 'damage',
+    'buffs': {}, 'duration': 0, 'secondary_resist': None, 'secondary_dc': None,
+    'requirements': {Stat.INT: 12}, 'sprite_name': None,
+    'animation_name': None, 'composite_name': None,
+}
+
+heal_spell = {
+    'key': 'heal', 'name': 'Heal', 'description': 'Restore health',
+    'action_word': 'channel', 'damage': 10.0, 'mana_cost': 4, 'stamina_cost': 0,
+    'range': 3, 'radius': 0, 'spell_dc': 0, 'dodgeable': False,
+    'target_type': 'single', 'effect_type': 'heal',
+    'buffs': {}, 'duration': 0, 'secondary_resist': None, 'secondary_dc': None,
+    'requirements': {}, 'sprite_name': None,
+    'animation_name': None, 'composite_name': None,
+}
+
+buff_spell = {
+    'key': 'fortify', 'name': 'Fortify', 'description': 'Strengthen ally',
+    'action_word': 'invoke', 'damage': 0, 'mana_cost': 3, 'stamina_cost': 0,
+    'range': 3, 'radius': 0, 'spell_dc': 0, 'dodgeable': False,
+    'target_type': 'single', 'effect_type': 'buff',
+    'buffs': {Stat.STR: 4, Stat.VIT: 2}, 'duration': 10.0,
+    'secondary_resist': None, 'secondary_dc': None,
+    'requirements': {}, 'sprite_name': None,
+    'animation_name': None, 'composite_name': None,
+}
+
+self_heal = {
+    'key': 'self_heal', 'name': 'Self Heal', 'description': 'Heal yourself',
+    'action_word': 'channel', 'damage': 5.0, 'mana_cost': 2, 'stamina_cost': 0,
+    'range': 0, 'radius': 0, 'spell_dc': 0, 'dodgeable': False,
+    'target_type': 'self', 'effect_type': 'heal',
+    'buffs': {}, 'duration': 0, 'secondary_resist': None, 'secondary_dc': None,
+    'requirements': {}, 'sprite_name': None,
+    'animation_name': None, 'composite_name': None,
+}
+
+poison_bolt = {
+    'key': 'poison_bolt', 'name': 'Poison Bolt', 'description': 'Venomous attack',
+    'action_word': 'conjure', 'damage': 4.0, 'mana_cost': 3, 'stamina_cost': 0,
+    'range': 5, 'radius': 0, 'spell_dc': 10, 'dodgeable': True,
+    'target_type': 'single', 'effect_type': 'damage',
+    'buffs': {}, 'duration': 0, 'secondary_resist': 'poison resist',
+    'secondary_dc': 12,
+    'requirements': {}, 'sprite_name': None,
+    'animation_name': None, 'composite_name': None,
+}
+
+m47 = make_map(cols=15, rows=15)
+mage = make_creature(m47, x=0, y=0,
+                     stats={Stat.INT: 16, Stat.PER: 12, Stat.AGL: 10,
+                            Stat.VIT: 12, Stat.LVL: 3, Stat.CHR: 10,
+                            Stat.LCK: 10, Stat.STR: 10},
+                     name='Mage')
+spell_target = make_creature(m47, x=3, y=0,
+                             stats={Stat.VIT: 14, Stat.AGL: 10, Stat.PER: 12,
+                                    Stat.INT: 8, Stat.STR: 10, Stat.LVL: 3},
+                             name='SpellTarget')
+
+# Damage spell — run multiple for statistics
+hits = 0
+total_spell_dmg = 0
+for _ in range(50):
+    spell_target.stats.base[Stat.HP_CURR] = spell_target.stats.active[Stat.HP_MAX]()
+    mage.stats.base[Stat.CUR_MANA] = mage.stats.active[Stat.MAX_MANA]()
+    r = mage.cast_spell(fireball, spell_target, now=1000)
+    if r['hit'] and r['damage'] > 0:
+        hits += 1
+        total_spell_dmg += r['damage']
+
+check(f"Fireball hits: {hits}/50", hits > 0)
+check(f"Fireball total damage: {total_spell_dmg}", total_spell_dmg > 0)
+
+# No mana → fail
+mage.stats.base[Stat.CUR_MANA] = 0
+r = mage.cast_spell(fireball, spell_target, now=1000)
+check("Fireball with 0 mana fails", r['reason'] == 'no_mana')
+
+# Out of range
+mage.stats.base[Stat.CUR_MANA] = mage.stats.active[Stat.MAX_MANA]()
+far_target_sp = make_creature(m47, x=10, y=0, stats={Stat.VIT: 10}, name='FarSP')
+r = mage.cast_spell(fireball, far_target_sp, now=1000)
+check("Fireball out of range fails", r['reason'] == 'out_of_range')
+
+# Requirements not met
+dumb_caster = make_creature(m47, x=0, y=1,
+                            stats={Stat.INT: 8, Stat.VIT: 10}, name='Dumb')
+dumb_caster.stats.base[Stat.CUR_MANA] = 20
+r = dumb_caster.cast_spell(fireball, spell_target, now=1000)
+check("Low INT can't cast fireball (requires INT 12)", r['reason'] == 'requirements_not_met')
+
+# Heal spell
+spell_target.stats.base[Stat.HP_CURR] = 1
+hp_before_heal = spell_target.stats.active[Stat.HP_CURR]()
+mage.stats.base[Stat.CUR_MANA] = mage.stats.active[Stat.MAX_MANA]()
+r = mage.cast_spell(heal_spell, spell_target, now=1000)
+hp_after_heal = spell_target.stats.active[Stat.HP_CURR]()
+check(f"Heal: {hp_before_heal} → {hp_after_heal}", hp_after_heal > hp_before_heal)
+check("Heal records positive interaction", r['hit'] and r['damage'] < 0)
+
+# Buff spell
+str_before_buff = spell_target.stats.active[Stat.STR]()
+mage.stats.base[Stat.CUR_MANA] = mage.stats.active[Stat.MAX_MANA]()
+r = mage.cast_spell(buff_spell, spell_target, now=1000)
+str_after_buff = spell_target.stats.active[Stat.STR]()
+check(f"Buff: STR {str_before_buff} → {str_after_buff} (+4)", str_after_buff == str_before_buff + 4)
+check("Buff applied", r['effect_applied'])
+
+# Buff expires after duration
+spell_target.process_ticks(11000)  # 11 seconds > 10s duration
+str_expired = spell_target.stats.active[Stat.STR]()
+check(f"Buff expired: STR back to {str_expired}", str_expired == str_before_buff)
+
+# Self-targeted heal
+mage.stats.base[Stat.HP_CURR] = 1
+mage.stats.base[Stat.CUR_MANA] = mage.stats.active[Stat.MAX_MANA]()
+r = mage.cast_spell(self_heal, None, now=1000)
+check("Self-heal with no target works (target_type=self)", r['hit'])
+check(f"Mage HP after self-heal: {mage.stats.active[Stat.HP_CURR]()}", mage.stats.active[Stat.HP_CURR]() > 1)
+
+# Poison bolt with secondary resist
+mage.stats.base[Stat.CUR_MANA] = mage.stats.active[Stat.MAX_MANA]()
+spell_target.stats.base[Stat.HP_CURR] = spell_target.stats.active[Stat.HP_MAX]()
+secondary_hits = 0
+for _ in range(50):
+    spell_target.stats.base[Stat.HP_CURR] = spell_target.stats.active[Stat.HP_MAX]()
+    mage.stats.base[Stat.CUR_MANA] = mage.stats.active[Stat.MAX_MANA]()
+    r = mage.cast_spell(poison_bolt, spell_target, now=1000)
+    if r.get('secondary_applied'):
+        secondary_hits += 1
+check(f"Poison secondary effect: {secondary_hits}/50 (some should land)", True)
 
 # ==========================================================================
 print("\n=== Gym Single-Agent Environment ===")

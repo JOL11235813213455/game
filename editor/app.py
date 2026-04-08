@@ -6,6 +6,7 @@ from editor.items_tab import ItemsTab
 from editor.species_tab import SpeciesTab
 from editor.creatures_tab import CreaturesTab
 from editor.dialogue_tab import DialogueTab
+from editor.spells_tab import SpellsTab
 from editor.sprites_tab import SpritesTab
 from editor.tiles_tab import TilesTab
 from editor.animations_tab import AnimationsTab
@@ -58,12 +59,14 @@ class EditorApp(tk.Tk):
         self.species_tab   = SpeciesTab(notebook)
         self.creatures_tab = CreaturesTab(notebook)
         self.items_tab     = ItemsTab(notebook)
+        self.spells_tab    = SpellsTab(notebook)
         self.dialogue_tab  = DialogueTab(notebook)
         self.sql_tab       = SqlTab(notebook)
 
         notebook.add(self.species_tab,   text='  Species  ')
         notebook.add(self.creatures_tab, text='  Creatures  ')
         notebook.add(self.items_tab,     text='  Items  ')
+        notebook.add(self.spells_tab,    text='  Spells  ')
         notebook.add(self.dialogue_tab,  text='  Dialogue  ')
         notebook.add(self.sql_tab,       text='  SQL  ')
 
@@ -75,6 +78,7 @@ class EditorApp(tk.Tk):
         self.items_tab.refresh_sprite_dropdown()
         self.species_tab.refresh_sprite_dropdown()
         self.tiles_tab.refresh_sprite_dropdown()
+        self.spells_tab.refresh_sprite_dropdown()
 
     def _on_tab_changed(self, event):
         tab = event.widget.tab(event.widget.select(), 'text').strip()

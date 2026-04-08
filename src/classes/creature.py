@@ -806,6 +806,150 @@ class Creature(WorldObject):
 
         return result
 
+    def cast_spell(self, spell: dict, target: 'Creature | None', now: int) -> dict:
+        """Cast a spell.
+
+        Args:
+            spell: spell definition dict (from SPELLS)
+            target: target creature (None for self-targeted spells)
+            now: current timestamp
+
+        Returns result dict: hit, damage, effect_applied, reason.
+        """
+        result = {'hit': False, 'damage': 0, 'effect_applied': False,
+                  'secondary_applied': False, 'reason': ''}
+
+        # Self-targeted spells target self
+        if spell['target_type'] == 'self':
+            target = self
+        elif target is None:
+            result['reason'] = 'no_target'
+            return result
+
+        # Requirements check
+        for stat, min_val in spell['requirements'].items():
+            if self.stats.active[stat]() < min_val:
+                result['reason'] = 'requirements_not_met'
+                return result
+
+        # Mana check
+        cur_mana = self.stats.active[Stat.CUR_MANA]()
+        if cur_mana < spell['mana_cost']:
+            result['reason'] = 'no_mana'
+            return result
+
+        # Stamina check
+        cur_stam = self.stats.active[Stat.CUR_STAMINA]()
+        if cur_stam < spell['stamina_cost']:
+            result['reason'] = 'no_stamina'
+            return result
+
+        # Range check (not for self-targeted)
+        if target is not self:
+            dist = self._sight_distance(target)
+            if dist > spell['range']:
+                result['reason'] = 'out_of_range'
+                return result
+
+        # Consume resources
+        self.stats.base[Stat.CUR_MANA] = cur_mana - spell['mana_cost']
+        self.stats.base[Stat.CUR_STAMINA] = cur_stam - spell['stamina_cost']
+
+        # Dodge contest (if dodgeable and target can see caster)
+        if spell['dodgeable'] and target is not self:
+            if target.can_see(self):
+                hit_won, _ = self.stats.contest(target.stats, 'accuracy_vs_dodge')
+                if not hit_won:
+                    result['reason'] = 'dodged'
+                    target.record_interaction(self, -1.0)
+                    return result
+
+        # Magic resist check — only for hostile spells (damage/debuff)
+        if target is not self and spell['effect_type'] in ('damage', 'debuff'):
+            resisted = target.stats.resist_check(spell['spell_dc'], Stat.MAGIC_RESIST)
+            if resisted:
+                result['reason'] = 'resisted'
+                result['hit'] = True
+                target.record_interaction(self, -1.0)
+                return result
+
+        result['hit'] = True
+
+        # Apply effect based on type
+        effect = spell['effect_type']
+
+        if effect == 'damage':
+            magic_dmg = self.stats.active[Stat.MAGIC_DMG]()
+            damage = max(1, int(spell['damage'] + magic_dmg))
+            result['damage'] = damage
+            hp = target.stats.active[Stat.HP_CURR]()
+            target.stats.base[Stat.HP_CURR] = max(0, hp - damage)
+            target.on_hit(now)
+            result['effect_applied'] = True
+            if target is not self:
+                target.record_interaction(self, -5.0)
+
+        elif effect == 'heal':
+            heal = max(1, int(spell['damage'] + self.stats.active[Stat.MAGIC_DMG]()))
+            hp = target.stats.active[Stat.HP_CURR]()
+            hp_max = target.stats.active[Stat.HP_MAX]()
+            target.stats.base[Stat.HP_CURR] = min(hp_max, hp + heal)
+            result['damage'] = -heal  # negative = healing
+            result['effect_applied'] = True
+            if target is not self:
+                target.record_interaction(self, 4.0)
+
+        elif effect in ('buff', 'debuff'):
+            if spell['buffs']:
+                Creature._next_consumable_id += 1
+                source = f'spell_{Creature._next_consumable_id}'
+                for stat, amount in spell['buffs'].items():
+                    self.stats.add_mod(source, stat, amount) if target is self \
+                        else target.stats.add_mod(source, stat, amount)
+
+                # Schedule expiry if duration > 0
+                if spell['duration'] > 0:
+                    tick_name = f'expire_{source}'
+                    interval_ms = int(spell['duration'] * 1000)
+                    t = target
+                    def _expire(_now, s=source, tn=tick_name, tgt=t):
+                        tgt.stats.remove_mods_by_source(s)
+                        tgt.unregister_tick(tn)
+                    target.register_tick(tick_name, interval_ms, _expire)
+
+                result['effect_applied'] = True
+                if target is not self:
+                    sentiment = 3.0 if effect == 'buff' else -4.0
+                    target.record_interaction(self, sentiment)
+
+        # Secondary resist check (e.g. poison from a spell)
+        if spell['secondary_resist'] and spell['secondary_dc']:
+            from classes.stats import Stat as S
+            resist_stat_name = spell['secondary_resist']
+            # Look up the Stat enum by value string
+            resist_stat = None
+            for s in S:
+                if s.value == resist_stat_name:
+                    resist_stat = s
+                    break
+            if resist_stat and target is not self:
+                blocked = target.stats.resist_check(spell['secondary_dc'], resist_stat)
+                if not blocked:
+                    result['secondary_applied'] = True
+
+        return result
+
+    def get_known_spells(self) -> list[str]:
+        """Return spell keys this creature knows (from species + creature lists)."""
+        from data.db import SPELL_LISTS
+        spells = []
+        # Species spells
+        if self.species:
+            spells.extend(SPELL_LISTS.get(self.species, []))
+        # Creature-specific spells
+        spells.extend(SPELL_LISTS.get(self.name, []))
+        return list(dict.fromkeys(spells))  # dedupe preserving order
+
     def grapple(self, target: 'Creature') -> dict:
         """Initiate a grapple with an adjacent creature.
 
