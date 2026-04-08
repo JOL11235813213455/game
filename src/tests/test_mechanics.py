@@ -1501,6 +1501,67 @@ r7 = compute_reward(rl_creature, snap_l, snap_m)
 check(f"Fatigue penalty: {r7:.2f} (negative)", r7 < 0)
 
 # ==========================================================================
+print("\n=== Arena Generator ===")
+from simulation.arena import generate_arena, random_stats
+
+stats_b = random_stats('balanced')
+check("Balanced stats: all 7 base stats present", len(stats_b) == 7)
+check("Balanced stats in range [8,14]",
+      all(8 <= v <= 14 for v in stats_b.values()))
+
+stats_f = random_stats('fighter')
+check(f"Fighter STR={stats_f[Stat.STR]} (high)", stats_f[Stat.STR] >= 14)
+
+arena = generate_arena(cols=15, rows=15, num_creatures=4, obstacle_density=0.1)
+check("Arena has map", arena['map'] is not None)
+check(f"Arena has {len(arena['creatures'])} creatures", len(arena['creatures']) == 4)
+check("All creatures on map", all(c.current_map is arena['map'] for c in arena['creatures']))
+check("All creatures alive", all(c.is_alive for c in arena['creatures']))
+
+# Check walkable placement
+for c in arena['creatures']:
+    tile = arena['map'].tiles.get(c.location)
+    check(f"{c.name} on walkable tile", tile is not None and tile.walkable)
+
+# ==========================================================================
+print("\n=== Headless Simulation ===")
+from simulation.headless import Simulation
+from classes.observation import OBSERVATION_SIZE
+
+sim_arena = generate_arena(cols=10, rows=10, num_creatures=4, obstacle_density=0.05)
+sim = Simulation(sim_arena, tick_ms=100)
+
+check("Simulation starts at step 0", sim.step_count == 0)
+check(f"Alive count = {sim.alive_count}", sim.alive_count == 4)
+
+# Run 10 steps
+for _ in range(10):
+    results = sim.step()
+
+check(f"After 10 steps: step_count = {sim.step_count}", sim.step_count == 10)
+check(f"Results per step: {len(results)} creatures", len(results) == 4)
+
+# Verify result structure
+r0 = results[0]
+check("Result has creature", r0['creature'] is not None)
+check(f"Observation length = {len(r0['observation'])}", len(r0['observation']) == OBSERVATION_SIZE)
+check("Reward is a float", isinstance(r0['reward'], float))
+check("Alive is bool", isinstance(r0['alive'], bool))
+
+# Run more steps — creatures wander via RandomWanderBehavior
+for _ in range(50):
+    sim.step()
+
+summary = sim.summary()
+check(f"Summary after 60 steps: {summary['alive']} alive", summary['alive'] >= 0)
+check("Time advanced", summary['time_ms'] == 60 * 100)
+
+# Verify no crashes over many ticks
+for _ in range(200):
+    sim.step()
+check(f"Survived 260 steps without crash", sim.step_count == 260)
+
+# ==========================================================================
 print(f"\n{'='*50}")
 print(f"Results: {PASS} passed, {FAIL} failed out of {PASS+FAIL} tests")
 if FAIL:

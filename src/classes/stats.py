@@ -127,7 +127,7 @@ def _dmod(val):
 def _hp_max(g):
     # HD rolls are stored as mods and added on top
     lvl = g(Stat.LVL)
-    return (lvl + 1) * (_dmod(g(Stat.VIT)) + 1)
+    return max(1, (lvl + 1) * (_dmod(g(Stat.VIT)) + 1))
 
 def _melee_dmg(g):
     # STR component of melee. Full damage at combat layer:
