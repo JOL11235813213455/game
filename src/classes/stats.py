@@ -132,8 +132,8 @@ def _hp_max(g):
 def _melee_dmg(g):
     return _dmod(g(Stat.STR))
 
-def _ranged_dmg(g):
-    return _dmod(g(Stat.PER))
+def _ranged_dmg(_g):
+    return 0  # equipment-based: weapon + ammo + STR requirements
 
 def _magic_dmg(g):
     return _dmod(g(Stat.INT))
@@ -142,6 +142,8 @@ def _atk_speed(_g):
     return 0  # DEPRECATED: stamina system replaces attack speed
 
 def _accuracy(g):
+    # Base accuracy from PER. Actual hit chance is distance-dependent:
+    # hit_chance = ((accuracy + 1) / (accuracy + 2)) ^ tiles_distance
     return _dmod(g(Stat.PER))
 
 def _crit_chance(g):
@@ -150,7 +152,8 @@ def _crit_chance(g):
     return max(0, g(Stat.LVL) // 2 + _dmod(g(Stat.LCK)) + 1)
 
 def _crit_dmg(g):
-    return 150 + max(_dmod(g(Stat.STR)), _dmod(g(Stat.PER))) * 5  # percent
+    # Base crit multiplier. Item-specific multipliers/adders stack on top via mods
+    return _dmod(g(Stat.STR))
 
 def _dodge(g):
     return _dmod(g(Stat.AGL))
@@ -497,6 +500,19 @@ class Stats:
         def_val = other.active[def_stat]() + random.randint(1, 20)
         margin = atk_val - def_val
         return margin > 0, margin
+
+    # -- ranged accuracy ----------------------------------------------------
+
+    def accuracy_at_distance(self, tiles: int) -> float:
+        """Return hit probability (0.0–1.0) at a given tile distance.
+
+        Formula: ((acc + 1) / (acc + 2)) ^ tiles
+        """
+        acc = self.active[Stat.ACCURACY]()
+        if acc + 2 <= 0:
+            return 0.0
+        ratio = (acc + 1) / (acc + 2)
+        return max(0.0, min(1.0, ratio ** tiles))
 
     # -- resistance checks --------------------------------------------------
 
