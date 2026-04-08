@@ -87,7 +87,19 @@ def compute_reward(creature, prev: dict, curr: dict) -> float:
     kills = curr['kills'] - prev['kills']
     reward += kills * 3.0
 
-    # ---- 7. Penalties ----
+    # ---- 7. Piety ----
+    # Piety reinforcement: acting in alignment with your god feels right
+    piety_delta = curr['piety'] - prev['piety']
+    if piety_delta > 0:
+        reward += piety_delta * 5.0  # gaining piety = positive
+    elif piety_delta < 0:
+        reward += piety_delta * 3.0  # losing piety = mild negative
+
+    # World alignment bonus: if the world leans toward your god, feel outgoing
+    if curr['world_balance'] > 0:
+        reward += curr['world_balance'] * creature.piety * 0.5
+
+    # ---- 8. Penalties ----
     # Fatigue increase
     fatigue_delta = curr['fatigue'] - prev['fatigue']
     if fatigue_delta > 0:
@@ -120,6 +132,18 @@ def make_reward_snapshot(creature) -> dict:
     # Creatures met (unique relationship count)
     creatures_met = len(creature.relationships)
 
+    # Piety and world balance
+    piety = getattr(creature, 'piety', 0.0)
+    world_balance = 0.0
+    deity = getattr(creature, 'deity', None)
+    if deity:
+        from classes.gods import WorldData
+        from classes.trackable import Trackable
+        for obj in Trackable.all_instances():
+            if isinstance(obj, WorldData):
+                world_balance = obj.get_balance(deity)
+                break
+
     return {
         'alive': creature.is_alive,
         'hp_ratio': stats.active[Stat.HP_CURR]() / max(1, hp_max),
@@ -131,4 +155,6 @@ def make_reward_snapshot(creature) -> dict:
         'tiles_explored': getattr(creature, '_tiles_explored', 0),
         'kills': getattr(creature, '_kills', 0),
         'fatigue': getattr(creature, '_fatigue_level', 0),
+        'piety': piety,
+        'world_balance': world_balance,
     }

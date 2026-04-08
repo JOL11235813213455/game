@@ -7,6 +7,8 @@ from editor.species_tab import SpeciesTab
 from editor.creatures_tab import CreaturesTab
 from editor.dialogue_tab import DialogueTab
 from editor.spells_tab import SpellsTab
+from editor.quests_tab import QuestsTab
+from editor.gods_tab import GodsTab
 from editor.sprites_tab import SpritesTab
 from editor.tiles_tab import TilesTab
 from editor.animations_tab import AnimationsTab
@@ -60,6 +62,8 @@ class EditorApp(tk.Tk):
         self.creatures_tab = CreaturesTab(notebook)
         self.items_tab     = ItemsTab(notebook)
         self.spells_tab    = SpellsTab(notebook)
+        self.quests_tab    = QuestsTab(notebook)
+        self.gods_tab      = GodsTab(notebook)
         self.dialogue_tab  = DialogueTab(notebook)
         self.sql_tab       = SqlTab(notebook)
 
@@ -67,6 +71,8 @@ class EditorApp(tk.Tk):
         notebook.add(self.creatures_tab, text='  Creatures  ')
         notebook.add(self.items_tab,     text='  Items  ')
         notebook.add(self.spells_tab,    text='  Spells  ')
+        notebook.add(self.quests_tab,    text='  Quests  ')
+        notebook.add(self.gods_tab,      text='  Gods  ')
         notebook.add(self.dialogue_tab,  text='  Dialogue  ')
         notebook.add(self.sql_tab,       text='  SQL  ')
 

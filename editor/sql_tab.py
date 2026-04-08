@@ -368,6 +368,9 @@ class SqlTab(ttk.Frame):
         ('creature_spells', 'creature_key', 'creatures', 'key'),
         ('species_spells', 'spell_key', 'spells', 'key'),
         ('species_spells', 'species_name', 'species', 'name'),
+        ('quests', 'giver', 'creatures', 'key'),
+        ('quest_steps', 'quest_name', 'quests', 'name'),
+        ('gods', 'opposed_god', 'gods', 'name'),
     ]
 
     # Clusters: groups of related tables laid out together
@@ -405,6 +408,16 @@ class SqlTab(ttk.Frame):
             'label': 'Spells',
             'color': '#1a2a3a',
             'tables': ['spells', 'creature_spells', 'species_spells'],
+        },
+        {
+            'label': 'Quests',
+            'color': '#3a1a2a',
+            'tables': ['quests', 'quest_steps'],
+        },
+        {
+            'label': 'Gods',
+            'color': '#2a3a1a',
+            'tables': ['gods'],
         },
         {
             'label': 'Dialogue',
@@ -783,6 +796,32 @@ class SqlTab(ttk.Frame):
             ('creature_spells', 'spell_key'): 'Spell the creature knows',
             ('species_spells', 'species_name'): 'Species that can cast this spell',
             ('species_spells', 'spell_key'): 'Spell available to this species',
+            # items
+            # quests
+            ('quests', 'name'): 'Unique quest identifier',
+            ('quests', 'giver'): 'NPC creature key who offers this quest',
+            ('quests', 'quest_type'): 'quest = story, job = repeatable task',
+            ('quests', 'conditions'): 'Python expression: conditions for quest availability',
+            ('quests', 'reward_action'): 'Python code executed on quest completion',
+            ('quests', 'fail_action'): 'Python code executed on quest failure',
+            ('quests', 'time_limit'): 'Total quest time limit in seconds (NULL = no limit)',
+            ('quests', 'repeatable'): '1 = can be re-accepted after completion',
+            ('quests', 'cooldown_days'): 'Days before repeatable quest can be re-accepted',
+            ('quest_steps', 'step_no'): 'Step number (sequential ordering)',
+            ('quest_steps', 'step_sub'): 'Sub-step letter (a,b,c for parallel sub-tasks)',
+            ('quest_steps', 'success_condition'): 'Python expression: step success check',
+            ('quest_steps', 'fail_condition'): 'Python expression: step failure check',
+            ('quest_steps', 'success_action'): 'Python code on step success',
+            ('quest_steps', 'fail_action'): 'Python code on step failure',
+            ('quest_steps', 'step_map'): 'Map where this step takes place',
+            ('quest_steps', 'step_npc'): 'NPC involved in this step',
+            ('quest_steps', 'time_limit'): 'Per-step time limit in seconds',
+            # gods
+            ('gods', 'name'): 'Unique god name',
+            ('gods', 'domain'): 'Domain of influence (order, chaos, etc.)',
+            ('gods', 'opposed_god'): 'The directly opposed god',
+            ('gods', 'aligned_actions'): 'JSON list of actions that please this god',
+            ('gods', 'opposed_actions'): 'JSON list of actions that displease this god',
             # items
             ('items', 'class'): 'Item subclass: item, stackable, consumable, ammunition, equippable, weapon, wearable, structure',
             ('items', 'key'): 'Unique item identifier',

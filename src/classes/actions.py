@@ -75,6 +75,38 @@ class Action(IntEnum):
 
 NUM_ACTIONS = len(Action)
 
+# Action → god-tracking name
+ACTION_NAMES = {
+    Action.MELEE_ATTACK: 'melee_attack', Action.RANGED_ATTACK: 'ranged_attack',
+    Action.GRAPPLE: 'grapple', Action.CAST_SPELL: 'cast_spell',
+    Action.INTIMIDATE: 'intimidate', Action.DECEIVE: 'deceive',
+    Action.TRADE: 'trade', Action.BRIBE: 'bribe',
+    Action.STEAL: 'steal', Action.SHARE_RUMOR: 'share_rumor',
+    Action.TALK: 'talk', Action.PICKUP: 'pickup', Action.DROP: 'drop',
+    Action.USE_ITEM: 'use_item', Action.WAIT: 'wait',
+    Action.GUARD: 'guard', Action.SEARCH: 'search',
+    Action.FLEE: 'flee', Action.FOLLOW: 'follow',
+    Action.CALL_BACKUP: 'call_backup', Action.SLEEP: 'sleep',
+    Action.SET_TRAP: 'set_trap', Action.BLOCK_STANCE: 'block_stance',
+}
+
+
+def _record_god_action(action: int):
+    """Record an action in the WorldData god counters (if WorldData exists)."""
+    action_name = ACTION_NAMES.get(action)
+    if action_name is None:
+        return
+    try:
+        from classes.gods import WorldData
+        from classes.trackable import Trackable
+        for obj in Trackable.all_instances():
+            if isinstance(obj, WorldData):
+                obj.record_action(action_name)
+                break
+    except Exception:
+        pass
+
+
 # Direction vectors for movement actions
 _DIRS = {
     0: (0, -1),   # N
@@ -89,7 +121,16 @@ _DIRS = {
 
 
 def dispatch(creature, action: int, context: dict) -> dict:
-    """Execute an action for a creature.
+    """Execute an action for a creature. Records action in god counters."""
+    result = _dispatch_inner(creature, action, context)
+    # Record in god system
+    if result.get('success', result.get('hit', False)):
+        _record_god_action(action)
+    return result
+
+
+def _dispatch_inner(creature, action: int, context: dict) -> dict:
+    """Inner dispatch — actual action execution.
 
     Args:
         creature: the Creature performing the action

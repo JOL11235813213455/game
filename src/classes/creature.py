@@ -1139,9 +1139,27 @@ class Creature(WorldObject):
                 if self.species != val:
                     return False
 
-        # World/quest conditions are checked against a global state dict
-        # that doesn't exist yet — pass through for now
-        # (These will be wired when quest/world state systems are built)
+        # Quest conditions (checked against initiator's quest log)
+        for key, val in node['quest_conditions'].items():
+            state = self.quest_log.get_quest_state(key)
+            if state is None and val == 'active':
+                return False
+            if state is not None and state.value != val:
+                return False
+
+        # World conditions (checked against WorldData flags if available)
+        if node['world_conditions']:
+            from classes.gods import WorldData
+            from classes.trackable import Trackable
+            world = None
+            for obj in Trackable.all_instances():
+                if isinstance(obj, WorldData):
+                    world = obj
+                    break
+            if world:
+                for key, val in node['world_conditions'].items():
+                    if world.get_flag(key) != val:
+                        return False
 
         return True
 
@@ -1833,6 +1851,53 @@ class Creature(WorldObject):
         self.record_interaction(target, 0.5)
         target.record_interaction(self, 0.5)
         return True
+
+    # -- Religion -----------------------------------------------------------
+
+    def proselytize(self, target: 'Creature') -> dict:
+        """Attempt to convert another creature to your deity.
+
+        Uses CHR contest. Target must have no deity or low piety.
+        Returns dict: success, reason.
+        """
+        result = {'success': False, 'reason': ''}
+
+        if self.deity is None:
+            result['reason'] = 'no_deity'
+            return result
+
+        if not self.can_see(target):
+            result['reason'] = 'out_of_range'
+            return result
+
+        # Can't convert someone already on your god
+        if target.deity == self.deity:
+            result['reason'] = 'same_deity'
+            return result
+
+        # Target must have no god OR low piety to be susceptible
+        if target.deity is not None and target.piety > 0.2:
+            result['reason'] = 'target_devout'
+            return result
+
+        # CHR contest: persuasion-like
+        chr_mod = (self.stats.active[Stat.CHR]() - 10) // 2
+        target_resist = (target.stats.active[Stat.INT]() - 10) // 2
+        roll = random.randint(1, 20) + chr_mod
+        dc = 10 + target_resist
+
+        if roll >= dc:
+            result['success'] = True
+            target.deity = self.deity
+            target.piety = 0.1  # start with small piety
+            self.record_interaction(target, 3.0)
+            target.record_interaction(self, 2.0)
+        else:
+            result['reason'] = 'resisted'
+            self.record_interaction(target, -0.5)
+            target.record_interaction(self, -0.5)
+
+        return result
 
     # -- Witness / Reputation Events ----------------------------------------
 
@@ -2532,6 +2597,38 @@ class StatWeightedBehavior:
 
         # Guard stance if guarding makes sense (territorial)
         candidates.append((Action.GUARD, 1 + str_mod))
+
+        # Piety modifier: boost aligned actions, penalize opposed
+        if creature.deity and creature.piety > 0:
+            from classes.gods import WorldData as _WD
+            from classes.trackable import Trackable as _T
+            _world = None
+            for _obj in _T.all_instances():
+                if isinstance(_obj, _WD):
+                    _world = _obj
+                    break
+            if _world:
+                god = _world.gods.get(creature.deity)
+                if god:
+                    _action_names = {
+                        Action.MELEE_ATTACK: 'melee_attack', Action.RANGED_ATTACK: 'ranged_attack',
+                        Action.GRAPPLE: 'grapple', Action.INTIMIDATE: 'intimidate',
+                        Action.DECEIVE: 'deceive', Action.TRADE: 'trade',
+                        Action.TALK: 'talk', Action.STEAL: 'steal',
+                        Action.GUARD: 'guard', Action.FOLLOW: 'follow',
+                        Action.FLEE: 'flee', Action.SEARCH: 'search',
+                        Action.WAIT: 'wait',
+                    }
+                    piety_boost = int(creature.piety * 5)
+                    new_candidates = []
+                    for action, weight in candidates:
+                        aname = _action_names.get(action, '')
+                        if aname in god.aligned_actions:
+                            weight += piety_boost
+                        elif aname in god.opposed_actions:
+                            weight = max(1, weight - piety_boost)
+                        new_candidates.append((action, weight))
+                    candidates = new_candidates
 
         # Normalize weights and select
         weights = [max(1, w) for _, w in candidates]
