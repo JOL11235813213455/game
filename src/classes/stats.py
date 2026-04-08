@@ -212,16 +212,16 @@ def _stagger_resist(g):
     return _dmod(g(Stat.STR))
 
 def _fear_resist(g):
-    return _dmod(g(Stat.CHR))
+    return max(0, _dmod(g(Stat.INT)) + g(Stat.LVL) // 3 + 10 + _dmod(g(Stat.STR)))
 
-def _barter_mod(g):
-    return _dmod(g(Stat.CHR))
+def _barter_mod(_g):
+    return 0  # emergent from model behavior, not stat-derived
 
-def _npc_disposition(g):
-    return _dmod(g(Stat.CHR))
+def _npc_disposition(_g):
+    return 0  # emergent from model behavior, not stat-derived
 
 def _companion_limit(g):
-    return max(0, 1 + _dmod(g(Stat.CHR)))
+    return max(0, (g(Stat.CHR) - 10) // 3)
 
 def _persuasion(g):
     return _dmod(g(Stat.CHR)) + _dmod(g(Stat.INT)) // 2
