@@ -1,7 +1,7 @@
 from __future__ import annotations
 import random
 from classes.maps import Map, MapKey, DIRECTION_BOUNDS
-from classes.inventory import Inventory
+from classes.inventory import Inventory, Equippable, Slot
 from classes.world_object import WorldObject
 from classes.stats import Stat, Stats
 
@@ -44,6 +44,7 @@ class Creature(WorldObject):
         self.stats = Stats(base_stats=merged, hit_dice=hd)
 
         self.inventory = Inventory(items=items or [])
+        self.equipment: dict[Slot, Equippable] = {}
         self.map_stack: list[tuple[Map, MapKey]] = []
 
         # Dialogue tree placeholder — will hold dialogue data when fleshed out
@@ -315,6 +316,62 @@ class Creature(WorldObject):
                 self.current_map, self.location = self.map_stack.pop()
                 return True
         return False
+
+    # -- Equipment ----------------------------------------------------------
+
+    def equip(self, item: Equippable) -> bool:
+        """Equip an item from inventory into the first available slot(s).
+
+        Returns True if equipped, False if no valid slot is free or item
+        is not in inventory.
+        """
+        if not isinstance(item, Equippable) or item not in self.inventory.items:
+            return False
+        if not item.slots:
+            return False
+
+        # Find slot_count free slots from the item's allowed slots
+        free = [s for s in item.slots if s not in self.equipment]
+        if len(free) < item.slot_count:
+            return False
+        chosen = free[:item.slot_count]
+
+        # Move from inventory to equipment
+        self.inventory.items.remove(item)
+        for slot in chosen:
+            self.equipment[slot] = item
+
+        # Apply buffs as stat mods
+        source = f'equip_{item.uid}'
+        for stat, amount in item.buffs.items():
+            self.stats.add_mod(source, stat, amount)
+
+        return True
+
+    def unequip(self, slot: Slot) -> bool:
+        """Unequip the item in the given slot back to inventory.
+
+        Returns True if an item was removed, False if slot was empty.
+        """
+        item = self.equipment.get(slot)
+        if item is None:
+            return False
+
+        # Remove from all slots this item occupies
+        slots_to_clear = [s for s, i in self.equipment.items() if i is item]
+        for s in slots_to_clear:
+            del self.equipment[s]
+
+        # Remove stat mods
+        self.stats.remove_mods_by_source(f'equip_{item.uid}')
+
+        # Return to inventory
+        self.inventory.items.append(item)
+        return True
+
+    def equipped_in(self, slot: Slot) -> Equippable | None:
+        """Return the item equipped in the given slot, or None."""
+        return self.equipment.get(slot)
 
     # -- Inventory ----------------------------------------------------------
 
