@@ -108,9 +108,12 @@ via reinforcement learning in headless multi-agent simulations.
 | Trade         | nearby creature  | none | Negotiation via utility scoring             |
 | Share rumor   | nearby creature  | none | CHR scales gossip probability               |
 | Steal         | nearby creature  | none | Deception during trade, or sneak + separate |
+| Bribe         | nearby creature  | items/gold | Offer valuables to shift behavior; pairs with intimidation |
+| Seduce        | nearby creature  | none       | CHR contest; affects pairing, loyalty, manipulation       |
 
 - **Failed persuasion/intimidation** carries social cost (negative interaction recorded)
 - **Talk** opens sub-menu (SQL-driven context management)
+- **Bribe** — available standalone or as response to intimidation; value function determines if bundle is enough
 
 ### Utility
 | Action        | Target           | Cost         | Notes                              |
@@ -127,7 +130,7 @@ via reinforcement learning in headless multi-agent simulations.
 | Search world  | map              | movement     | Pathfinding A→B across maps        |
 | Hunt          | creature/area    | movement     | Track and pursue prey              |
 | Set trap      | tile             | stamina+item | Trap = tile property + item type; for hunting and guard |
-| Call backup   | allies in range  | none         | Allies with positive relationship respond; species/racial affinity |
+| Call backup   | allies in hearing range | none  | Responders within HEARING_RANGE of caller; filter by relationship + species |
 | Sleep/rest    | safe location    | none         | Day/night cycle; debuffs stack without sleep (see below) |
 | Pair/bond     | creature         | none         | Mating/bonding action; species-centric behavior        |
 
@@ -162,6 +165,138 @@ This generalizes beyond trade:
 - **Pre-combat sizing up**: both score fight/flee/talk, interaction is emergent
 - **Alliance formation**: both score "cooperate" based on shared enemies, trust
 - **Territory disputes**: utility of holding ground vs conflict cost
+
+## Interaction Mechanics
+
+### Melee Attack
+1. Stamina check: `cost = max(5, weapon_base_cost - dmod(STR))` → fail if insufficient
+2. Can defender see attacker? (SIGHT_RANGE - attacker's STEALTH)
+   - **Yes**: defender chooses dodge, block, or flee
+   - **No**: auto-hit (ambush)
+3. If dodge: `d20 + MELEE_DMG vs d20 + DODGE` (MELEE_DMG is attack stat for melee, not ACCURACY)
+   If block: `d20 + MELEE_DMG vs d20 + BLOCK` (requires shield)
+   If flee: defender attempts to move away; if attacker faster, hit lands
+4. Hit lands → `resist_check(weapon_dc vs ARMOR)` — weapon_dc is weapon property
+5. Damage = `dmod(STR) + weapon_mod + weapon_dice + (LCK+1)/(LCK+2) chance of STR again`
+6. Crit check: roll under CRIT_CHANCE% → max damage + dmod(STR) + lucky STR
+7. Stagger check: `resist_check(weapon_impact vs STAGGER_RESIST)` — weapon_impact is a weapon property (warhammer > dagger)
+8. Defender calls `on_hit(now)` → resets HP regen timer
+9. **Interactions**: defender records negative. Attacker: no auto-sentiment, but attacking
+   someone with positive history = betrayal (massive negative both sides).
+   Witnesses update impressions of both creatures.
+
+### Ranged Attack
+1. Stamina check + ammo check → reload timer if magazine empty (weapon-specific)
+2. `accuracy_at_distance(tiles)` → probability roll for hit
+3. If defender can see attacker: dodge contest (block unlikely vs projectile)
+4. Hit → same armor/damage/crit/stagger chain as melee
+5. Damage = weapon_mod + ammo_mod + weapon_dice (STR only if weapon requires it, e.g. bow)
+6. **Interactions**: if defender can see attacker, record negative interaction for defender.
+   Attacker: no auto-sentiment. Witnesses update impressions.
+7. **Equipment**: requires weapon in appropriate slot + ammunition type match
+
+### Cast Spell
+1. Mana check: `cost = spell_mana_cost`
+2. If dodgeable spell: accuracy vs dodge contest
+   If undodgeable: auto-lands, straight to resist
+3. `resist_check(spell_dc vs MAGIC_RESIST)`
+4. If lands: apply effect (damage, debuff, heal, etc.)
+5. Spell-specific secondary resists (poison_dc vs POISON_RESIST, etc.)
+6. **Interactions**: offensive spells record negative for target (if aware).
+   Healing spells record positive. Witnesses update impressions.
+
+### Grapple
+1. High stamina cost to initiate
+2. Contest: `d20 + max(STR, AGL) vs d20 + max(STR, AGL-1)` (defender slight disadvantage on agility escape)
+3. If grapple succeeds: both locked, stamina drains each tick
+4. First to run out of stamina loses
+5. Loser: prone, vulnerable, skip next action
+6. **Interactions**: negative for both, but **loser takes extra social hit** — losing a grapple
+   is a dominance display. Witnesses (especially same species, opposite sex) update
+   impressions: winner gains status, loser loses status.
+
+### Intimidate
+1. `d20 + INTIMIDATION vs d20 + FEAR_RESIST`
+2. **Success**: target's behavior shifts (flee, submit, concede).
+   Probabilistic: target may believe bully was right → chance of **positive** registration
+   for intimidator (dominance accepted). Negative for target.
+3. **Failure**: negative interaction for BOTH (intimidator looks weak, target is annoyed)
+4. **Bribe response**: target can counter with bribe offer using value function
+
+### Deceive
+1. `d20 + DECEPTION vs d20 + DETECTION`
+2. **Success**: target believes false info
+   - In trade: unfair exchange accepted
+   - In rumor: fake rumor planted
+   - In pickpocket: theft unnoticed
+3. **Failure**: negative interaction, trust severely damaged.
+   If during trade: trade cancelled + relationship hit.
+
+### Trade (Negotiation)
+1. Both creatures' models score the proposed exchange (utility vectors)
+2. Sentiment modifier: friends shift willingness up
+3. Persuasion bonus for initiator enhances perceived value
+4. Counter-offer loop until agreement or walk-away
+5. **Fair trade**: +3 sentiment both sides
+6. **Exploitative**: +3 exploiter, -3 victim (if realized later via INT check)
+7. **Walk-away**: -1 sentiment both sides
+
+### Search Tile
+1. Reveals tile inventory (auto-spawned: ore, gold, items)
+2. Hidden items: `d20 + DETECTION vs hidden_dc`
+3. LOOT_GINI affects quality/rarity of spawned items
+
+### Hunt
+1. Track: DETECTION + PER to locate prey
+2. Approach: `stealth_vs_detection` contest
+3. Engage: combat or trap trigger
+4. Success: food/materials/XP
+
+### Set Trap
+1. Requires trap item in inventory
+2. Placed as tile property
+3. Trap stealth = CRAFT_QUALITY + trap item quality
+4. Trigger: creature enters tile → `trap_dc vs appropriate resist`
+5. Types: hunting (food/capture) or guard (defense/alarm)
+
+### Sleep/Rest
+1. Creature judges location safety (model decision)
+2. Sleep state: vulnerable, no dodge/block, reduced DETECTION
+3. Stamina + mana fully restored over sleep duration
+4. Sleep debt cleared based on duration
+5. Interrupted: partial recovery + groggy debuff
+
+### Call Backup
+1. Broadcast within caller's shout radius
+2. Potential responders check: is caller within MY HEARING_RANGE?
+3. Filter: relationship sentiment > threshold, species/racial affinity, own safety
+4. Responders move toward caller
+5. **Interactions**: responding to a call = large positive for caller toward responder.
+   Fighting alongside = +5 sentiment (fought alongside weight).
+   **Killing an enemy for someone** = massive positive.
+   **Dying in battle for someone** = permanent positive legacy (recorded even after death,
+   carried as rumor by survivors — "they died fighting for X").
+
+### Bribe
+1. Offer items/gold to target
+2. Target's model evaluates: value of bribe vs current intent
+3. Especially relevant as response to intimidation
+4. Accepted: positive interaction, behavior shift
+5. Rejected: minor negative, items returned
+
+### Seduce
+1. `d20 + PERSUASION vs d20 + FEAR_RESIST` (or a new WILLPOWER-like check?)
+2. Modified by: species compatibility, existing relationship, sex match for species
+3. **Success**: large positive sentiment, potential pairing, loyalty shift
+   Target may switch allegiances, share secrets, grant access
+4. **Failure**: negative interaction (awkward), possible intimidation/hostility trigger
+5. Can be used manipulatively — seduce then betray is ultimate betrayal weight
+
+## Species Configuration (design)
+- **Sex**: creature attribute, affects pairing, display behavior, territorial competition
+- **Species preferences**: preferred/hated species (dropdown in editor)
+- **General proclivities**: aggression baseline, sociability, territoriality, curiosity modifier
+- These are species-level defaults that individual creatures can deviate from via experience
 
 ## Future Model Input Variables (design notes)
 Per-creature observation for the RL model:
