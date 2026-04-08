@@ -122,14 +122,21 @@ Every new feature must touch ALL of these layers. Do not skip any.
 
 ### 7.5 Review for loose ends again - incomplete features, features implied but not existing
 
-### 8. Verification
+### 8. Headless Tests
+- [ ] Add or extend tests in `src/tests/test_mechanics.py` for the new feature
+- [ ] Each new mechanic needs at least: happy path, rejection/failure case, edge case
+- [ ] Run: `cd src && python -m tests.test_mechanics` — ALL tests must pass
+- [ ] Tests must be pure Python (no pygame) — use Map, Tile, Creature, Item directly
+
+### 9. Verification
 - [ ] `py_compile` all modified files
+- [ ] Run `src/tests/test_mechanics.py` — 0 failures
 - [ ] Smoke test: editor constructs without error
 - [ ] Smoke test: game launches without error (if runtime changes)
 - [ ] Verify DB migration works on existing database
 - [ ] Verify DB creates correctly from scratch (fresh file)
 
-### 9. Commit
+### 10. Commit
 - [ ] commit code changes to current branch with a summary/comment of changes
 
 ## File Quick Reference
