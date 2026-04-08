@@ -361,6 +361,9 @@ class SqlTab(ttk.Frame):
         ('items', 'nested_map', 'maps', 'name'),
         ('creatures', 'species', 'species', 'name'),
         ('creature_stats', 'creature_key', 'creatures', 'key'),
+        ('dialogue', 'species', 'species', 'name'),
+        ('dialogue', 'creature_key', 'creatures', 'key'),
+        ('dialogue', 'parent_id', 'dialogue', 'id'),
     ]
 
     # Clusters: groups of related tables laid out together
@@ -393,6 +396,11 @@ class SqlTab(ttk.Frame):
             'label': 'Items',
             'color': '#1a2a2a',
             'tables': ['items', 'item_slots'],
+        },
+        {
+            'label': 'Dialogue',
+            'color': '#2a2a1a',
+            'tables': ['dialogue'],
         },
     ]
 
@@ -740,6 +748,18 @@ class SqlTab(ttk.Frame):
             ('creatures', 'items'): 'JSON list of item keys for starting inventory',
             ('creature_stats', 'stat'): 'Stat name to override from species default',
             ('creature_stats', 'value'): 'Override value for this stat',
+            # dialogue
+            ('dialogue', 'conversation'): 'Conversation tree name — groups related nodes',
+            ('dialogue', 'species'): 'Species filter (NULL = any species)',
+            ('dialogue', 'creature_key'): 'Specific NPC filter (NULL = generic for species)',
+            ('dialogue', 'parent_id'): 'Parent node ID (NULL = root of conversation tree)',
+            ('dialogue', 'speaker'): 'Who speaks: npc or player',
+            ('dialogue', 'char_conditions'): 'JSON: character conditions to show this node',
+            ('dialogue', 'world_conditions'): 'JSON: world state conditions',
+            ('dialogue', 'quest_conditions'): 'JSON: quest state conditions',
+            ('dialogue', 'behavior'): 'Interaction behavior triggered (e.g. trade, attack)',
+            ('dialogue', 'effects'): 'JSON: quest/status/inventory changes when selected',
+            ('dialogue', 'sort_order'): 'Display order among sibling nodes (lower = first)',
             # items
             ('items', 'class'): 'Item subclass: item, stackable, consumable, ammunition, equippable, weapon, wearable, structure',
             ('items', 'key'): 'Unique item identifier',

@@ -5,6 +5,7 @@ from editor.db import migrate_db
 from editor.items_tab import ItemsTab
 from editor.species_tab import SpeciesTab
 from editor.creatures_tab import CreaturesTab
+from editor.dialogue_tab import DialogueTab
 from editor.sprites_tab import SpritesTab
 from editor.tiles_tab import TilesTab
 from editor.animations_tab import AnimationsTab
@@ -57,11 +58,13 @@ class EditorApp(tk.Tk):
         self.species_tab   = SpeciesTab(notebook)
         self.creatures_tab = CreaturesTab(notebook)
         self.items_tab     = ItemsTab(notebook)
+        self.dialogue_tab  = DialogueTab(notebook)
         self.sql_tab       = SqlTab(notebook)
 
         notebook.add(self.species_tab,   text='  Species  ')
         notebook.add(self.creatures_tab, text='  Creatures  ')
         notebook.add(self.items_tab,     text='  Items  ')
+        notebook.add(self.dialogue_tab,  text='  Dialogue  ')
         notebook.add(self.sql_tab,       text='  SQL  ')
 
         gfx_notebook.bind('<<NotebookTabChanged>>', self._on_tab_changed)
@@ -81,6 +84,8 @@ class EditorApp(tk.Tk):
             self.tiles_tab.refresh_sprite_dropdown()
         if tab == 'Creatures':
             self.creatures_tab.refresh_species_dropdown()
+        if tab == 'Dialogue':
+            self.dialogue_tab.refresh_dropdowns()
         if tab in ('Map Editor', 'Maps'):
             self.map_editor_tab.refresh_dropdowns()
         if tab in ('Simple', 'Animations'):

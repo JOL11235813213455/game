@@ -49,6 +49,16 @@ MATING / PAIRING (not yet implemented)
 - Trait inheritance: offspring stats derived from parents via combination
 - Hatched creatures start at age 0
 
+DIALOGUE SYSTEM (classes/creature.py, data/db.py, editor/dialogue_tab.py)
+- dialogue table: conversation trees with parent-child nodes (parent_id=NULL for roots)
+- Filters: species, creature_key, char_conditions, world_conditions, quest_conditions
+- start_conversation(): finds matching roots, enters conversation state
+- advance_dialogue(): selects node, applies effects, returns filtered children
+- Effects: give_item, take_item, sentiment shift, behavior trigger
+- Editor tab: tree view + node edit form with all fields
+- World/quest condition checking not yet wired (needs quest/world state system)
+- NPC-to-NPC conversations supported (no limits yet)
+
 NPC BEHAVIOR (classes/creature.py)
 - NPC subclass removed; all creatures use Creature with behavior modules
 - Only RandomWanderBehavior exists — no pathfinding, aggro, patrol, or scheduling

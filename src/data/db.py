@@ -15,6 +15,8 @@ SPECIES:     dict[str, dict] = {}
 PLAYABLE:    dict[str, dict] = {}
 NONPLAYABLE: dict[str, dict] = {}
 CREATURES:   dict[str, dict] = {}
+DIALOGUE:    dict[int, dict] = {}      # id → dialogue node dict
+DIALOGUE_ROOTS: dict[str, list] = {}   # conversation → [root node ids]
 ITEMS:       dict[str, Item] = {}
 SPRITE_DATA: dict[str, dict] = {}
 TILE_TEMPLATES: dict[str, dict] = {}
@@ -79,6 +81,17 @@ def _migrate(con: sqlite3.Connection) -> None:
     creature_key TEXT NOT NULL REFERENCES creatures(key),
     stat TEXT NOT NULL, value INTEGER NOT NULL,
     PRIMARY KEY (creature_key, stat))""",
+        """CREATE TABLE IF NOT EXISTS dialogue (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conversation TEXT NOT NULL, species TEXT, creature_key TEXT,
+    parent_id INTEGER REFERENCES dialogue(id),
+    speaker TEXT NOT NULL DEFAULT 'npc',
+    text TEXT NOT NULL DEFAULT '',
+    char_conditions TEXT NOT NULL DEFAULT '{}',
+    world_conditions TEXT NOT NULL DEFAULT '{}',
+    quest_conditions TEXT NOT NULL DEFAULT '{}',
+    behavior TEXT, effects TEXT NOT NULL DEFAULT '{}',
+    sort_order INTEGER NOT NULL DEFAULT 0)""",
     ]:
         try:
             con.execute(stmt)
@@ -292,6 +305,7 @@ def load(db_path: Path = _DB_PATH) -> None:
         _migrate(con)
         _load_species(con)
         _load_creatures(con)
+        _load_dialogue(con)
         _load_items(con)
         _load_sprites(con)
         _load_tile_templates(con)
@@ -355,6 +369,40 @@ def _load_creatures(con: sqlite3.Connection) -> None:
         if r['behavior'] is not None:
             block['behavior'] = r['behavior']
         CREATURES[key] = block
+
+
+def _load_dialogue(con: sqlite3.Connection) -> None:
+    rows = con.execute(
+        'SELECT * FROM dialogue ORDER BY conversation, parent_id, sort_order'
+    ).fetchall()
+
+    for r in rows:
+        node = {
+            'id':               r['id'],
+            'conversation':     r['conversation'],
+            'species':          r['species'],
+            'creature_key':     r['creature_key'],
+            'parent_id':        r['parent_id'],
+            'speaker':          r['speaker'],
+            'text':             r['text'],
+            'char_conditions':  json.loads(r['char_conditions'] or '{}'),
+            'world_conditions': json.loads(r['world_conditions'] or '{}'),
+            'quest_conditions': json.loads(r['quest_conditions'] or '{}'),
+            'behavior':         r['behavior'],
+            'effects':          json.loads(r['effects'] or '{}'),
+            'sort_order':       r['sort_order'],
+            'children':         [],  # populated below
+        }
+        DIALOGUE[node['id']] = node
+
+        if node['parent_id'] is None:
+            DIALOGUE_ROOTS.setdefault(node['conversation'], []).append(node['id'])
+
+    # Build children lists
+    for node in DIALOGUE.values():
+        pid = node['parent_id']
+        if pid is not None and pid in DIALOGUE:
+            DIALOGUE[pid]['children'].append(node['id'])
 
 
 _STAT_BY_VALUE = {s.value: s for s in Stat}

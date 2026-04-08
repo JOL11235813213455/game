@@ -59,8 +59,8 @@ class Creature(WorldObject):
         self.equipment: dict[Slot, Equippable] = {}
         self.map_stack: list[tuple[Map, MapKey]] = []
 
-        # Dialogue tree placeholder — will hold dialogue data when fleshed out
-        self.dialogue = None
+        # Active conversation state: {target_uid, conversation, current_node_id}
+        self.dialogue = None  # None = not in conversation
 
         # Relationships: {uid: [sentiment, count, min_score, max_score]}
         # sentiment = raw cumulative score, count = number of interactions,
@@ -852,6 +852,154 @@ class Creature(WorldObject):
             target.record_interaction(self, -2.0)
 
         return result
+
+    # -- Conversation -------------------------------------------------------
+
+    def start_conversation(self, target: 'Creature', conversation: str = None) -> list:
+        """Start a conversation with another creature.
+
+        Finds matching root dialogue nodes filtered by species/creature/conditions.
+        Returns list of available root node dicts, or empty if none match.
+        """
+        from data.db import DIALOGUE, DIALOGUE_ROOTS
+
+        if not self.can_see(target):
+            return []
+
+        # Determine which conversation trees to search
+        if conversation:
+            candidates = DIALOGUE_ROOTS.get(conversation, [])
+        else:
+            # Search all conversation trees for matching roots
+            candidates = []
+            for conv_roots in DIALOGUE_ROOTS.values():
+                candidates.extend(conv_roots)
+
+        available = []
+        for node_id in candidates:
+            node = DIALOGUE.get(node_id)
+            if node is None:
+                continue
+            if not self._dialogue_matches(node, target):
+                continue
+            available.append(node)
+
+        if available:
+            self.dialogue = {
+                'target_uid': target.uid,
+                'conversation': conversation or available[0]['conversation'],
+                'current_node_id': None,
+            }
+            # Record social interaction for starting a conversation
+            self.record_interaction(target, 1.0)
+            target.record_interaction(self, 1.0)
+
+        return available
+
+    def advance_dialogue(self, node_id: int, target: 'Creature') -> list:
+        """Select a dialogue node and get its children (next options).
+
+        Applies any effects/behavior from the selected node.
+        Returns list of available child node dicts.
+        """
+        from data.db import DIALOGUE
+
+        node = DIALOGUE.get(node_id)
+        if node is None:
+            return []
+
+        # Update conversation state
+        if self.dialogue:
+            self.dialogue['current_node_id'] = node_id
+
+        # Apply effects
+        self._apply_dialogue_effects(node, target)
+
+        # Get filtered children
+        children = []
+        for child_id in node['children']:
+            child = DIALOGUE.get(child_id)
+            if child and self._dialogue_matches(child, target):
+                children.append(child)
+
+        # No children = end of conversation
+        if not children:
+            self.end_conversation()
+
+        return children
+
+    def end_conversation(self):
+        """End the current conversation."""
+        self.dialogue = None
+
+    def _dialogue_matches(self, node: dict, target: 'Creature') -> bool:
+        """Check if a dialogue node matches the current context.
+
+        Filters on species, creature_key, and JSON conditions.
+        """
+        # Species filter
+        if node['species'] and node['species'] != (target.species or ''):
+            return False
+
+        # Creature key filter (specific NPC)
+        if node['creature_key'] and node['creature_key'] != target.name:
+            return False
+
+        # Character conditions (checked against the initiator/player)
+        for key, val in node['char_conditions'].items():
+            if key == 'level_min':
+                if self.stats.base.get(Stat.LVL, 0) < val:
+                    return False
+            elif key == 'sex':
+                if self.sex != val:
+                    return False
+            elif key == 'species':
+                if self.species != val:
+                    return False
+
+        # World/quest conditions are checked against a global state dict
+        # that doesn't exist yet — pass through for now
+        # (These will be wired when quest/world state systems are built)
+
+        return True
+
+    def _apply_dialogue_effects(self, node: dict, target: 'Creature'):
+        """Apply effects from a selected dialogue node."""
+        effects = node.get('effects', {})
+        if not effects:
+            return
+
+        # Give item to player
+        if 'give_item' in effects:
+            from data.db import ITEMS
+            item_template = ITEMS.get(effects['give_item'])
+            if item_template:
+                # Clone the item (simple approach: same type, same args)
+                import copy
+                new_item = copy.copy(item_template)
+                self.inventory.items.append(new_item)
+
+        # Take item from player
+        if 'take_item' in effects:
+            item_name = effects['take_item']
+            for item in list(self.inventory.items):
+                if item.name == item_name:
+                    self.inventory.items.remove(item)
+                    break
+
+        # Sentiment shift
+        if 'sentiment' in effects:
+            self.record_interaction(target, effects['sentiment'])
+            target.record_interaction(self, effects['sentiment'])
+
+        # Behavior trigger
+        behavior = node.get('behavior')
+        if behavior == 'trade':
+            pass  # Caller handles opening trade UI
+        elif behavior == 'attack':
+            pass  # Caller handles initiating combat
+        elif behavior == 'flee':
+            pass  # Caller handles flee logic
 
     # -- Social Actions -----------------------------------------------------
 

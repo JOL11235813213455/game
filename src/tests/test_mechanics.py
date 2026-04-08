@@ -1257,13 +1257,150 @@ check(f"STR restored after sleep = {tired.stats.active[Stat.STR]()}",
 tired.wake()
 
 # ==========================================================================
+print("\n=== Dialogue System ===")
+# Populate DIALOGUE and DIALOGUE_ROOTS directly for headless testing
+from data.db import DIALOGUE, DIALOGUE_ROOTS
+DIALOGUE.clear()
+DIALOGUE_ROOTS.clear()
+
+# Build a simple conversation tree:
+# Root (NPC greets)
+#   ├── Player response A (leads to NPC follow-up)
+#   │     └── NPC follow-up
+#   └── Player response B (ends conversation, gives sentiment)
+DIALOGUE[1] = {
+    'id': 1, 'conversation': 'greeting', 'species': None,
+    'creature_key': None, 'parent_id': None, 'speaker': 'npc',
+    'text': 'Hello traveler!', 'char_conditions': {},
+    'world_conditions': {}, 'quest_conditions': {},
+    'behavior': None, 'effects': {}, 'sort_order': 0,
+    'children': [2, 3],
+}
+DIALOGUE[2] = {
+    'id': 2, 'conversation': 'greeting', 'species': None,
+    'creature_key': None, 'parent_id': 1, 'speaker': 'player',
+    'text': 'Hello! What news?', 'char_conditions': {},
+    'world_conditions': {}, 'quest_conditions': {},
+    'behavior': None, 'effects': {}, 'sort_order': 0,
+    'children': [4],
+}
+DIALOGUE[3] = {
+    'id': 3, 'conversation': 'greeting', 'species': None,
+    'creature_key': None, 'parent_id': 1, 'speaker': 'player',
+    'text': 'Leave me alone.', 'char_conditions': {},
+    'world_conditions': {}, 'quest_conditions': {},
+    'behavior': None, 'effects': {'sentiment': -2.0}, 'sort_order': 1,
+    'children': [],
+}
+DIALOGUE[4] = {
+    'id': 4, 'conversation': 'greeting', 'species': None,
+    'creature_key': None, 'parent_id': 2, 'speaker': 'npc',
+    'text': 'Dark times ahead...', 'char_conditions': {},
+    'world_conditions': {}, 'quest_conditions': {},
+    'behavior': None, 'effects': {}, 'sort_order': 0,
+    'children': [],
+}
+
+# Species-filtered node: only for species 'elf'
+DIALOGUE[5] = {
+    'id': 5, 'conversation': 'greeting', 'species': 'elf',
+    'creature_key': None, 'parent_id': None, 'speaker': 'npc',
+    'text': 'Greetings, kin!', 'char_conditions': {},
+    'world_conditions': {}, 'quest_conditions': {},
+    'behavior': None, 'effects': {}, 'sort_order': 0,
+    'children': [],
+}
+
+# Level-gated node
+DIALOGUE[6] = {
+    'id': 6, 'conversation': 'quest', 'species': None,
+    'creature_key': None, 'parent_id': None, 'speaker': 'npc',
+    'text': 'You look experienced enough...', 'char_conditions': {'level_min': 5},
+    'world_conditions': {}, 'quest_conditions': {},
+    'behavior': None, 'effects': {}, 'sort_order': 0,
+    'children': [],
+}
+
+DIALOGUE_ROOTS['greeting'] = [1, 5]
+DIALOGUE_ROOTS['quest'] = [6]
+
+m40 = make_map()
+player_d = make_creature(m40, x=0, y=0,
+                         stats={Stat.PER: 12, Stat.LVL: 3},
+                         name='Player')
+npc_d = make_creature(m40, x=1, y=0,
+                      stats={Stat.PER: 12}, name='Shopkeeper')
+
+# Start conversation
+roots = player_d.start_conversation(npc_d, 'greeting')
+check(f"Found {len(roots)} root nodes", len(roots) >= 1)
+check("Root is 'Hello traveler!'", any(n['text'] == 'Hello traveler!' for n in roots))
+check("Elf-only root NOT shown (player isn't elf)",
+      not any(n['text'] == 'Greetings, kin!' for n in roots))
+
+# Player is in conversation
+check("Player in conversation state", player_d.dialogue is not None)
+
+# Advance to root node, get children (player responses)
+children = player_d.advance_dialogue(1, npc_d)
+check(f"Root has {len(children)} player responses", len(children) == 2)
+check("Response A: 'What news?'", children[0]['text'] == 'Hello! What news?')
+check("Response B: 'Leave me alone.'", children[1]['text'] == 'Leave me alone.')
+
+# Pick response A → get NPC follow-up
+grandchildren = player_d.advance_dialogue(2, npc_d)
+check(f"Follow-up from A: {len(grandchildren)} node(s)", len(grandchildren) == 1)
+check("NPC says 'Dark times ahead...'", grandchildren[0]['text'] == 'Dark times ahead...')
+
+# Advance past leaf → conversation ends
+final = player_d.advance_dialogue(4, npc_d)
+check("Leaf node ends conversation", len(final) == 0)
+check("Player no longer in conversation", player_d.dialogue is None)
+
+# Test negative sentiment effect from response B
+player_d2 = make_creature(m40, x=0, y=1, stats={Stat.PER: 12}, name='Player2')
+npc_d2 = make_creature(m40, x=1, y=1, stats={Stat.PER: 12}, name='NPC2')
+player_d2.start_conversation(npc_d2, 'greeting')
+player_d2.advance_dialogue(1, npc_d2)
+player_d2.advance_dialogue(3, npc_d2)  # "Leave me alone" → sentiment -2
+rel_d = player_d2.get_relationship(npc_d2)
+check(f"Sentiment effect applied: {rel_d[0]:.1f}",
+      rel_d[0] < 1.0)  # started at +1 from conversation, -2 from effect
+
+# Level-gated dialogue
+low_lvl = make_creature(m40, x=2, y=0, stats={Stat.PER: 12, Stat.LVL: 2}, name='LowLevel')
+high_lvl = make_creature(m40, x=2, y=1, stats={Stat.PER: 12, Stat.LVL: 6}, name='HighLevel')
+quest_npc = make_creature(m40, x=3, y=0, stats={Stat.PER: 12}, name='QuestNPC')
+quest_npc2 = make_creature(m40, x=3, y=1, stats={Stat.PER: 12}, name='QuestNPC2')
+
+low_roots = low_lvl.start_conversation(quest_npc, 'quest')
+check("Level 2 can't access level 5 quest dialogue", len(low_roots) == 0)
+
+high_roots = high_lvl.start_conversation(quest_npc2, 'quest')
+check("Level 6 CAN access level 5 quest dialogue", len(high_roots) == 1)
+
+# Out of sight
+far_npc = make_creature(m40, x=15, y=15, stats={Stat.PER: 12}, name='FarNPC')
+far_roots = player_d.start_conversation(far_npc, 'greeting')
+check("Can't start conversation out of sight", len(far_roots) == 0)
+
+# NPC-to-NPC conversation
+npc_a = make_creature(m40, x=4, y=0, stats={Stat.PER: 12}, name='NPCA')
+npc_b = make_creature(m40, x=5, y=0, stats={Stat.PER: 12}, name='NPCB')
+npc_roots = npc_a.start_conversation(npc_b, 'greeting')
+check("NPC-to-NPC conversation works", len(npc_roots) >= 1)
+
+# Clean up test dialogue data
+DIALOGUE.clear()
+DIALOGUE_ROOTS.clear()
+
+# ==========================================================================
 print(f"\n{'='*50}")
 print(f"Results: {PASS} passed, {FAIL} failed out of {PASS+FAIL} tests")
 if FAIL:
     sys.exit(1)
 else:
     print("All tests passed!")
-print(f"Results: {PASS} passed, {FAIL} failed out of {PASS+FAIL} tests")
 if FAIL:
     sys.exit(1)
 else:

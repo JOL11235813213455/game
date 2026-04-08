@@ -139,6 +139,17 @@ def migrate_db():
     creature_key TEXT NOT NULL REFERENCES creatures(key),
     stat TEXT NOT NULL, value INTEGER NOT NULL,
     PRIMARY KEY (creature_key, stat))""",
+            """CREATE TABLE IF NOT EXISTS dialogue (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conversation TEXT NOT NULL, species TEXT, creature_key TEXT,
+    parent_id INTEGER REFERENCES dialogue(id),
+    speaker TEXT NOT NULL DEFAULT 'npc',
+    text TEXT NOT NULL DEFAULT '',
+    char_conditions TEXT NOT NULL DEFAULT '{}',
+    world_conditions TEXT NOT NULL DEFAULT '{}',
+    quest_conditions TEXT NOT NULL DEFAULT '{}',
+    behavior TEXT, effects TEXT NOT NULL DEFAULT '{}',
+    sort_order INTEGER NOT NULL DEFAULT 0)""",
             """CREATE TABLE IF NOT EXISTS tile_templates (
     key TEXT PRIMARY KEY, name TEXT NOT NULL DEFAULT '',
     walkable INTEGER NOT NULL DEFAULT 1, covered INTEGER NOT NULL DEFAULT 0,
@@ -378,5 +389,21 @@ def fetch_species_names() -> list[str]:
     con = get_con()
     try:
         return [r['name'] for r in con.execute('SELECT name FROM species ORDER BY name').fetchall()]
+    finally:
+        con.close()
+
+
+def fetch_creature_keys() -> list[str]:
+    con = get_con()
+    try:
+        return [r['key'] for r in con.execute('SELECT key FROM creatures ORDER BY key').fetchall()]
+    finally:
+        con.close()
+
+
+def fetch_conversation_names() -> list[str]:
+    con = get_con()
+    try:
+        return [r[0] for r in con.execute('SELECT DISTINCT conversation FROM dialogue ORDER BY conversation').fetchall()]
     finally:
         con.close()

@@ -79,6 +79,21 @@ CREATE TABLE IF NOT EXISTS creature_stats (
     value        INTEGER NOT NULL,
     PRIMARY KEY (creature_key, stat)
 );
+CREATE TABLE IF NOT EXISTS dialogue (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    conversation      TEXT NOT NULL,
+    species           TEXT REFERENCES species(name),
+    creature_key      TEXT REFERENCES creatures(key),
+    parent_id         INTEGER REFERENCES dialogue(id),
+    speaker           TEXT NOT NULL DEFAULT 'npc',
+    text              TEXT NOT NULL DEFAULT '',
+    char_conditions   TEXT NOT NULL DEFAULT '{}',
+    world_conditions  TEXT NOT NULL DEFAULT '{}',
+    quest_conditions  TEXT NOT NULL DEFAULT '{}',
+    behavior          TEXT,
+    effects           TEXT NOT NULL DEFAULT '{}',
+    sort_order        INTEGER NOT NULL DEFAULT 0
+);
 CREATE TABLE IF NOT EXISTS sprites (
     name           TEXT PRIMARY KEY,
     palette        TEXT NOT NULL,
