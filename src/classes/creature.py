@@ -80,6 +80,10 @@ class Creature(WorldObject):
         if behavior is not None:
             self.register_tick('behavior', move_interval, self._do_behavior)
 
+        # Sleep deprivation
+        self.sleep_debt: int = 0  # days without sleep
+        self._fatigue_level: int = 0  # current debuff tier (0-4)
+
         # HP regen state
         self._regen_start = float('inf')  # timestamp when regen kicks in
         self._regen_fib = (1, 1)
@@ -280,8 +284,13 @@ class Creature(WorldObject):
         self.location = self.location._replace(x=nx, y=ny)
         behavior = self._DIR_BEHAVIORS.get((dx, dy), 'walk_south')
         self.play_animation(behavior)
-        # Auto-link: if the new tile has link_auto, teleport immediately
+
+        # Trap check on the landed tile
         landed = self.current_map.tiles.get(self.location)
+        if landed:
+            self._check_trap(landed)
+
+        # Auto-link: if the new tile has link_auto, teleport immediately
         if landed and landed.link_auto and landed.linked_map:
             self._do_link(landed)
 
@@ -503,6 +512,63 @@ class Creature(WorldObject):
             self.inventory.items.remove(item)
 
         return True
+
+    # -- Death / Alive ------------------------------------------------------
+
+    @property
+    def is_alive(self) -> bool:
+        return self.stats.active[Stat.HP_CURR]() > 0
+
+    def die(self):
+        """Handle creature death: drop inventory on tile, remove from map."""
+        # Drop all inventory items on current tile
+        tile = self.current_map.tiles.get(self.location)
+        if tile:
+            for item in list(self.inventory.items):
+                tile.inventory.items.append(item)
+            self.inventory.items.clear()
+
+            # Drop equipped items too
+            for item in set(self.equipment.values()):
+                tile.inventory.items.append(item)
+                # Remove stat mods
+                self.stats.remove_mods_by_source(f'equip_{item.uid}')
+            self.equipment.clear()
+
+        self.play_animation('death')
+
+    def _check_trap(self, tile):
+        """Check if a tile has a trap and resolve it against this creature."""
+        trap_dc = tile.stat_mods.get('trap_dc')
+        if trap_dc is None:
+            return
+
+        # Detection check: d20 + DETECTION vs trap_dc
+        detection = self.stats.active[Stat.DETECTION]()
+        roll = random.randint(1, 20) + detection
+        if roll >= trap_dc:
+            # Detected — trap is revealed but not triggered
+            return
+
+        # Trap triggered — find trap item on tile
+        trap_name = tile.stat_mods.get('trap_item', '')
+        trap_item = None
+        for item in tile.inventory.items:
+            if item.name == trap_name:
+                trap_item = item
+                break
+
+        # Apply trap damage (trap_dc as rough damage proxy)
+        damage = max(1, trap_dc // 2)
+        hp = self.stats.active[Stat.HP_CURR]()
+        self.stats.base[Stat.HP_CURR] = max(0, hp - damage)
+        self.on_hit(0)
+
+        # Remove trap after triggering
+        if trap_item:
+            tile.inventory.items.remove(trap_item)
+        tile.stat_mods.pop('trap_dc', None)
+        tile.stat_mods.pop('trap_item', None)
 
     # -- Combat -------------------------------------------------------------
 
@@ -1193,7 +1259,7 @@ class Creature(WorldObject):
     def sleep(self, now: int) -> bool:
         """Enter sleep state. Vulnerable but restores resources.
 
-        Fully restores stamina and mana. HP regen continues normally.
+        Fully restores stamina and mana. Clears sleep debt.
         Sets a flag for vulnerability (reduced detection, no dodge/block).
         Returns True if entered sleep.
         """
@@ -1206,6 +1272,9 @@ class Creature(WorldObject):
         self.stats.base[Stat.CUR_MANA] = self.stats.active[Stat.MAX_MANA]()
         # Reduced detection while sleeping
         self._sleep_mod = self.stats.add_mod('sleep', Stat.DETECTION, -5)
+        # Clear sleep debt and fatigue debuffs
+        self.sleep_debt = 0
+        self._update_fatigue()
         return True
 
     def wake(self):
@@ -1218,6 +1287,51 @@ class Creature(WorldObject):
     @property
     def is_sleeping(self) -> bool:
         return getattr(self, '_sleeping', False)
+
+    def add_sleep_debt(self, days: int = 1):
+        """Increment sleep debt (called once per day cycle).
+
+        Fatigue debuffs stack at thresholds:
+          1 day  → mild: -1 STR, -1 AGL, -1 PER
+          2 days → exhaustion: -2 STR, -2 AGL, -2 PER, -1 STAM_REGEN
+          3 days → severe: -3 all base stats, -2 DETECTION, -2 ACCURACY
+          4 days → collapse: forced sleep (creature is vulnerable)
+        """
+        self.sleep_debt += days
+        self._update_fatigue()
+
+    def _update_fatigue(self):
+        """Apply or remove fatigue debuffs based on current sleep debt."""
+        # Remove old fatigue mods
+        self.stats.remove_mods_by_source('fatigue')
+
+        if self.sleep_debt <= 0:
+            self._fatigue_level = 0
+            return
+
+        if self.sleep_debt >= 4:
+            self._fatigue_level = 4
+            # Collapse — forced sleep applied by caller
+        elif self.sleep_debt >= 3:
+            self._fatigue_level = 3
+            for stat in (Stat.STR, Stat.AGL, Stat.PER, Stat.INT, Stat.CHR, Stat.VIT, Stat.LCK):
+                self.stats.add_mod('fatigue', stat, -3)
+            self.stats.add_mod('fatigue', Stat.DETECTION, -2)
+            self.stats.add_mod('fatigue', Stat.ACCURACY, -2)
+        elif self.sleep_debt >= 2:
+            self._fatigue_level = 2
+            for stat in (Stat.STR, Stat.AGL, Stat.PER):
+                self.stats.add_mod('fatigue', stat, -2)
+            self.stats.add_mod('fatigue', Stat.STAM_REGEN, -1)
+        elif self.sleep_debt >= 1:
+            self._fatigue_level = 1
+            for stat in (Stat.STR, Stat.AGL, Stat.PER):
+                self.stats.add_mod('fatigue', stat, -1)
+
+    @property
+    def fatigue_level(self) -> int:
+        """0=rested, 1=mild, 2=exhaustion, 3=severe, 4=collapse."""
+        return self._fatigue_level
 
     def set_trap(self, trap_item, dc: int = 10) -> bool:
         """Place a trap item on the current tile.

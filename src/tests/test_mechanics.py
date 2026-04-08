@@ -1114,7 +1114,155 @@ fake_trap = Item(name='Fake', weight=1.0)
 check("Can't set trap without item in inventory", not trapper.set_trap(fake_trap))
 
 # ==========================================================================
+print("\n=== Trap Trigger ===")
+m37 = make_map(cols=5, rows=5)
+trap_setter = make_creature(m37, x=2, y=2,
+                            stats={Stat.INT: 14, Stat.PER: 12}, name='TrapSetter')
+trap2 = Item(name='Spike Trap', weight=2.0, value=3.0)
+trap_setter.inventory.items.append(trap2)
+trap_setter.set_trap(trap2, dc=15)
+# Move setter away
+trap_setter.location = MapKey(0, 0, 0)
+
+# Low detection victim walks into trap
+victim_trap = make_creature(m37, x=2, y=1,
+                            stats={Stat.PER: 6, Stat.VIT: 14, Stat.STR: 10, Stat.LVL: 5},
+                            name='TrapVictim')
+# DETECTION = dmod(6) = -2
+hp_before_trap = victim_trap.stats.active[Stat.HP_CURR]()
+
+# Walk into trapped tile
+victim_trap.move(0, 1, 5, 5)
+check("Victim moved to trapped tile", victim_trap.location.y == 2)
+
+# Run multiple times: some should trigger (low detection vs DC 15+craft)
+# With d20 + (-2) vs ~17, most will trigger
+triggered_count = 0
+for _ in range(50):
+    test_map = make_map(cols=5, rows=5)
+    ts = make_creature(test_map, x=2, y=2, stats={Stat.INT: 14, Stat.PER: 12}, name='TS')
+    t = Item(name='Trap', weight=1.0)
+    ts.inventory.items.append(t)
+    ts.set_trap(t, dc=15)
+    ts.location = MapKey(0, 0, 0)
+
+    v = make_creature(test_map, x=2, y=1, stats={Stat.PER: 6, Stat.VIT: 14, Stat.LVL: 5}, name='V')
+    hp_b = v.stats.active[Stat.HP_CURR]()
+    v.move(0, 1, 5, 5)
+    hp_a = v.stats.active[Stat.HP_CURR]()
+    if hp_a < hp_b:
+        triggered_count += 1
+
+check(f"Traps triggered: {triggered_count}/50 (low detection = most trigger)",
+      triggered_count > 20)
+
+# High detection avoids traps
+avoided = 0
+for _ in range(50):
+    test_map = make_map(cols=5, rows=5)
+    ts = make_creature(test_map, x=2, y=2, stats={Stat.INT: 14, Stat.PER: 12}, name='TS')
+    t = Item(name='Trap', weight=1.0)
+    ts.inventory.items.append(t)
+    ts.set_trap(t, dc=10)  # lower DC
+    ts.location = MapKey(0, 0, 0)
+
+    scout = make_creature(test_map, x=2, y=1, stats={Stat.PER: 20, Stat.VIT: 14, Stat.LVL: 5}, name='Scout')
+    # DETECTION = dmod(20) = 5, d20 + 5 vs ~12 → most succeed
+    hp_b = scout.stats.active[Stat.HP_CURR]()
+    scout.move(0, 1, 5, 5)
+    hp_a = scout.stats.active[Stat.HP_CURR]()
+    if hp_a == hp_b:
+        avoided += 1
+
+check(f"High detection avoids traps: {avoided}/50", avoided > 20)
+
+# ==========================================================================
+print("\n=== Death ===")
+m38 = make_map()
+doomed = make_creature(m38, x=0, y=0,
+                       stats={Stat.STR: 12, Stat.VIT: 10, Stat.LVL: 3},
+                       name='Doomed')
+
+# Equip and add inventory
+death_sword = Weapon(name='DeathSword', weight=3.0,
+                     slots=[Slot.HAND_R], slot_count=1, damage=5,
+                     buffs={Stat.MELEE_DMG: 2})
+doomed.inventory.items.append(death_sword)
+doomed.equip(death_sword)
+pouch = Item(name='Gold Pouch', weight=0.5, value=10.0)
+doomed.inventory.items.append(pouch)
+
+check("Doomed is alive", doomed.is_alive)
+check("Has equipment", len(doomed.equipment) > 0)
+check("Has inventory", len(doomed.inventory.items) > 0)
+
+# Kill
+doomed.stats.base[Stat.HP_CURR] = 0
+check("Doomed is not alive", not doomed.is_alive)
+
+doomed.die()
+tile38 = m38.tiles[MapKey(0, 0, 0)]
+items_on_tile = [i.name for i in tile38.inventory.items]
+check("Sword dropped on tile", 'DeathSword' in items_on_tile)
+check("Pouch dropped on tile", 'Gold Pouch' in items_on_tile)
+check("Inventory cleared", len(doomed.inventory.items) == 0)
+check("Equipment cleared", len(doomed.equipment) == 0)
+
+# Stat mods from equipment removed
+melee_after = doomed.stats.active[Stat.MELEE_DMG]()
+base_melee = (doomed.stats.active[Stat.STR]() - 10) // 2
+check(f"Equipment mods removed: MELEE_DMG = {melee_after} (base {base_melee})",
+      melee_after == base_melee)
+
+# ==========================================================================
+print("\n=== Sleep Deprivation ===")
+m39 = make_map()
+tired = make_creature(m39, x=0, y=0,
+                      stats={Stat.STR: 14, Stat.AGL: 12, Stat.PER: 14,
+                             Stat.VIT: 12, Stat.INT: 10})
+
+str_base = tired.stats.active[Stat.STR]()
+check(f"STR rested = {str_base}", str_base == 14)
+check("Fatigue level 0", tired.fatigue_level == 0)
+
+# 1 day without sleep: mild fatigue
+tired.add_sleep_debt(1)
+check("Fatigue level 1 (mild)", tired.fatigue_level == 1)
+check(f"STR with mild fatigue = {tired.stats.active[Stat.STR]()} (14-1=13)",
+      tired.stats.active[Stat.STR]() == 13)
+
+# 2 days: exhaustion
+tired.add_sleep_debt(1)
+check("Fatigue level 2 (exhaustion)", tired.fatigue_level == 2)
+check(f"STR with exhaustion = {tired.stats.active[Stat.STR]()} (14-2=12)",
+      tired.stats.active[Stat.STR]() == 12)
+
+# 3 days: severe
+tired.add_sleep_debt(1)
+check("Fatigue level 3 (severe)", tired.fatigue_level == 3)
+check(f"STR with severe fatigue = {tired.stats.active[Stat.STR]()} (14-3=11)",
+      tired.stats.active[Stat.STR]() == 11)
+check(f"Detection penalty: {tired.stats.active[Stat.DETECTION]()}",
+      tired.stats.active[Stat.DETECTION]() < (tired.stats.active[Stat.PER]() - 10) // 2)
+
+# 4 days: collapse
+tired.add_sleep_debt(1)
+check("Fatigue level 4 (collapse)", tired.fatigue_level == 4)
+
+# Sleep clears debt
+tired.sleep(now=1000)
+check("Sleep clears fatigue", tired.fatigue_level == 0)
+check(f"STR restored after sleep = {tired.stats.active[Stat.STR]()}",
+      tired.stats.active[Stat.STR]() == 14)
+tired.wake()
+
+# ==========================================================================
 print(f"\n{'='*50}")
+print(f"Results: {PASS} passed, {FAIL} failed out of {PASS+FAIL} tests")
+if FAIL:
+    sys.exit(1)
+else:
+    print("All tests passed!")
 print(f"Results: {PASS} passed, {FAIL} failed out of {PASS+FAIL} tests")
 if FAIL:
     sys.exit(1)

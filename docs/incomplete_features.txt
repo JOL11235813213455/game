@@ -63,7 +63,9 @@ COMBAT
 - enter_block_stance/exit_block_stance: requires item in hand, +2 BLOCK while active
 - No spell casting yet
 - Attack behaviors (animation bindings) not wired to attack methods yet
-- No death handling beyond the death animation binding
+- die() implemented: drops inventory + equipment on tile, clears mods, plays death anim
+- is_alive property checks HP > 0
+- Trap trigger on tile entry: detection vs trap_dc, damage on fail, trap consumed
 
 SOCIAL
 - intimidate() implemented: d20 INTIMIDATION vs FEAR_RESIST, relationship recording
@@ -109,8 +111,9 @@ UTILITY
 - call_backup() implemented: broadcast within HEARING_RANGE, filters by positive sentiment
 - sleep()/wake() implemented: full stamina+mana restore, -5 DETECTION while asleep
 - set_trap() implemented: place trap item on tile, DC = base + CRAFT_QUALITY
-- Sleep deprivation debuffs not yet implemented (stacking fatigue system)
-- Trap trigger on creature entering tile not yet implemented
+- Sleep deprivation implemented: 4-tier stacking debuffs (mild/exhaustion/severe/collapse)
+  sleep_debt tracks days, add_sleep_debt() applies/updates fatigue mods, sleep clears all
+- Trap trigger implemented in move(): detection vs trap_dc on tile entry
 - No use/consume action or effect system
 
 DURABILITY
