@@ -1,7 +1,9 @@
 from __future__ import annotations
 import random
 from classes.maps import Map, MapKey, DIRECTION_BOUNDS
-from classes.inventory import Inventory, Equippable, Consumable, Weapon, Slot
+from classes.inventory import (
+    Inventory, Equippable, Consumable, Weapon, Ammunition, Slot,
+)
 from classes.world_object import WorldObject
 from classes.stats import Stat, Stats
 
@@ -466,6 +468,8 @@ class Creature(WorldObject):
 
     # -- Use / Consume ------------------------------------------------------
 
+    _next_consumable_id = 0
+
     def use_item(self, item: Consumable) -> bool:
         """Consume one charge of a consumable item.
 
@@ -478,10 +482,20 @@ class Creature(WorldObject):
         if item.quantity <= 0:
             return False
 
-        # Apply buffs as stat mods
-        source = f'consumable_{item.uid}_{item.quantity}'
+        # Apply buffs as stat mods with unique source key
+        Creature._next_consumable_id += 1
+        source = f'consumable_{Creature._next_consumable_id}'
         for stat, amount in item.buffs.items():
             self.stats.add_mod(source, stat, amount)
+
+        # Schedule expiry if duration > 0
+        if item.duration > 0:
+            tick_name = f'expire_{source}'
+            interval_ms = int(item.duration * 1000)
+            def _expire(_now, s=source, tn=tick_name):
+                self.stats.remove_mods_by_source(s)
+                self.unregister_tick(tn)
+            self.register_tick(tick_name, interval_ms, _expire)
 
         # Decrement stack
         item.quantity -= 1
@@ -601,6 +615,178 @@ class Creature(WorldObject):
 
         return result
 
+    def ranged_attack(self, target: 'Creature', now: int) -> dict:
+        """Execute a ranged attack against a creature within weapon range.
+
+        Requires a ranged weapon equipped and matching ammunition in inventory.
+        Returns result dict: hit, damage, crit, reason.
+        """
+        result = {'hit': False, 'damage': 0, 'crit': False, 'reason': ''}
+
+        # Weapon check — need a ranged weapon (range > 1)
+        weapon = self.equipment.get(Slot.HAND_R) or self.equipment.get(Slot.HAND_L)
+        if not weapon or not isinstance(weapon, Weapon) or weapon.range <= 1:
+            result['reason'] = 'no_ranged_weapon'
+            return result
+
+        # Range check
+        dist = self._sight_distance(target)
+        if dist > weapon.range:
+            result['reason'] = 'out_of_range'
+            return result
+        if dist < 1:
+            result['reason'] = 'too_close'
+            return result
+
+        # Ammo check
+        ammo = None
+        if weapon.ammunition_type:
+            for item in self.inventory.items:
+                if isinstance(item, Ammunition) and item.name == weapon.ammunition_type and item.quantity > 0:
+                    ammo = item
+                    break
+            if ammo is None:
+                result['reason'] = 'no_ammo'
+                return result
+
+        # Stamina cost
+        stamina_cost = max(3, 8 - (self.stats.active[Stat.STR]() - 10) // 2)
+        cur_stam = self.stats.active[Stat.CUR_STAMINA]()
+        if cur_stam < stamina_cost:
+            result['reason'] = 'no_stamina'
+            return result
+        self.stats.base[Stat.CUR_STAMINA] = cur_stam - stamina_cost
+
+        # Betrayal check
+        rel = self.get_relationship(target)
+        if rel and rel[0] > 0:
+            self.record_interaction(target, -10.0)
+            target.record_interaction(self, -10.0)
+            result['betrayal'] = True
+
+        # Consume one ammo unit up front
+        ammo_dmg = 0
+        if ammo:
+            ammo_dmg = ammo.damage
+            ammo.quantity -= 1
+            if ammo.quantity <= 0:
+                self.inventory.items.remove(ammo)
+
+        def _drop_ammo_on_tile():
+            """Recoverable ammo lands on the target's tile on miss."""
+            if ammo and ammo.recoverable:
+                tile = target.current_map.tiles.get(target.location)
+                if tile is not None:
+                    # Create a single recovered projectile on the tile
+                    recovered = Ammunition(
+                        name=ammo.name, weight=ammo.weight, quantity=1,
+                        damage=ammo.damage,
+                        destroy_on_use_probability=ammo.destroy_on_use_probability,
+                        recoverable=ammo.recoverable,
+                    )
+                    tile.inventory.items.append(recovered)
+
+        # Accuracy at distance
+        hit_prob = self.stats.accuracy_at_distance(dist)
+        if random.random() > hit_prob:
+            result['reason'] = 'missed'
+            _drop_ammo_on_tile()
+            if target.can_see(self):
+                target.record_interaction(self, -1.0)
+            return result
+
+        # Dodge contest if defender can see attacker
+        if target.can_see(self):
+            hit_won, _ = self.stats.contest(target.stats, 'accuracy_vs_dodge')
+            if not hit_won:
+                result['reason'] = 'dodged'
+                _drop_ammo_on_tile()
+                target.record_interaction(self, -1.0)
+                return result
+
+        # Armor resist
+        weapon_dc = weapon.damage
+        armor_blocked = target.stats.resist_check(weapon_dc, Stat.ARMOR)
+        if armor_blocked:
+            result['hit'] = True
+            result['damage'] = 0
+            result['reason'] = 'armor_absorbed'
+            target.on_hit(now)
+            target.record_interaction(self, -2.0)
+            return result
+
+        # Damage: weapon + ammo + STR if weapon requires it (bows)
+        base_dmg = weapon.damage + ammo_dmg
+
+        # Crit check
+        crit_chance = self.stats.active[Stat.CRIT_CHANCE]()
+        crit = random.randint(1, 100) <= crit_chance
+        if crit:
+            result['crit'] = True
+            base_dmg *= 2
+
+        damage = max(1, base_dmg)
+        result['hit'] = True
+        result['damage'] = damage
+
+        # Apply damage
+        hp = target.stats.active[Stat.HP_CURR]()
+        target.stats.base[Stat.HP_CURR] = max(0, hp - damage)
+        target.on_hit(now)
+
+        # Record interaction
+        if target.can_see(self):
+            target.record_interaction(self, -5.0)
+
+        return result
+
+    def grapple(self, target: 'Creature') -> dict:
+        """Initiate a grapple with an adjacent creature.
+
+        Contest: d20 + max(STR, AGL) vs d20 + max(STR, AGL-1).
+        High stamina cost. Loser takes social/dominance hit.
+        Returns dict: success, margin, reason.
+        """
+        result = {'success': False, 'margin': 0, 'reason': ''}
+
+        if self._sight_distance(target) > 1:
+            result['reason'] = 'not_adjacent'
+            return result
+
+        # High stamina cost
+        stamina_cost = 15
+        cur_stam = self.stats.active[Stat.CUR_STAMINA]()
+        if cur_stam < stamina_cost:
+            result['reason'] = 'no_stamina'
+            return result
+        self.stats.base[Stat.CUR_STAMINA] = cur_stam - stamina_cost
+
+        # Attacker: max(STR, AGL)
+        atk_str = self.stats.active[Stat.STR]()
+        atk_agl = self.stats.active[Stat.AGL]()
+        atk_val = max(atk_str, atk_agl) + random.randint(1, 20)
+
+        # Defender: max(STR, AGL-1) — slight agility disadvantage
+        def_str = target.stats.active[Stat.STR]()
+        def_agl = target.stats.active[Stat.AGL]() - 1
+        def_val = max(def_str, def_agl) + random.randint(1, 20)
+
+        margin = atk_val - def_val
+        result['margin'] = margin
+
+        if margin > 0:
+            result['success'] = True
+            # Winner dominance: positive for self, negative for loser
+            self.record_interaction(target, 2.0)
+            target.record_interaction(self, -5.0)
+        else:
+            result['reason'] = 'escaped'
+            # Loser takes social hit, both negative
+            self.record_interaction(target, -3.0)
+            target.record_interaction(self, -2.0)
+
+        return result
+
     # -- Social Actions -----------------------------------------------------
 
     def intimidate(self, target: 'Creature') -> dict:
@@ -655,6 +841,221 @@ class Creature(WorldObject):
             self.record_interaction(target, -1.0)
 
         return result
+
+    def steal(self, target: 'Creature', item) -> dict:
+        """Attempt to steal an item from another creature's inventory.
+
+        Uses stealth vs detection if unseen, deception vs detection if seen.
+        Returns dict: success, reason.
+        """
+        result = {'success': False, 'reason': ''}
+
+        if self._sight_distance(target) > 1:
+            result['reason'] = 'not_adjacent'
+            return result
+
+        if item not in target.inventory.items:
+            result['reason'] = 'item_not_found'
+            return result
+
+        if not self.can_carry(item):
+            result['reason'] = 'too_heavy'
+            return result
+
+        # If target can see us, use deception; otherwise stealth
+        if target.can_see(self):
+            won, _ = self.stats.contest(target.stats, 'deception_vs_detection')
+        else:
+            won, _ = self.stats.contest(target.stats, 'stealth_vs_detection')
+
+        if won:
+            result['success'] = True
+            target.inventory.items.remove(item)
+            self.inventory.items.append(item)
+            # Victim doesn't know (unless detected later)
+        else:
+            result['reason'] = 'caught'
+            # Caught stealing — severe trust damage
+            target.record_interaction(self, -8.0)
+            self.record_interaction(target, -2.0)
+
+        return result
+
+    def share_rumor(self, target: 'Creature', subject_uid: int,
+                    sentiment: float, tick: int) -> bool:
+        """Share a rumor about a third party with another creature.
+
+        CHR scales gossip success. Returns True if rumor was shared.
+        """
+        if not self.can_see(target):
+            return False
+
+        # CHR check: higher CHR = more convincing gossip
+        chr_mod = (self.stats.active[Stat.CHR]() - 10) // 2
+        # Base 60% chance + 5% per CHR mod
+        chance = min(0.95, max(0.1, 0.6 + chr_mod * 0.05))
+        if random.random() > chance:
+            return False
+
+        confidence = self.relationship_confidence(
+            type('_', (), {'uid': subject_uid})()  # dummy for lookup
+        ) if subject_uid in self.relationships else 0.1
+
+        target.receive_rumor(self, subject_uid, sentiment, confidence, tick)
+
+        # Sharing is a social interaction
+        self.record_interaction(target, 1.0)
+        target.record_interaction(self, 1.0)
+        return True
+
+    # -- Utility Actions ----------------------------------------------------
+
+    def flee(self, threat: 'Creature', cols: int, rows: int) -> bool:
+        """Move one tile away from the threat creature.
+
+        Picks the direction that maximizes distance. Costs stamina (run cost).
+        Returns True if moved.
+        """
+        # Stamina cost for fleeing (running)
+        stam_cost = 3
+        cur_stam = self.stats.active[Stat.CUR_STAMINA]()
+        if cur_stam < stam_cost:
+            return False
+        self.stats.base[Stat.CUR_STAMINA] = cur_stam - stam_cost
+
+        # Pick direction away from threat
+        dx = self.location.x - threat.location.x
+        dy = self.location.y - threat.location.y
+        # Normalize to -1/0/1
+        mdx = (1 if dx > 0 else (-1 if dx < 0 else 0))
+        mdy = (1 if dy > 0 else (-1 if dy < 0 else 0))
+
+        if mdx == 0 and mdy == 0:
+            # On same tile — pick random direction
+            mdx, mdy = random.choice([(1,0),(-1,0),(0,1),(0,-1)])
+
+        old_loc = self.location
+        self.move(mdx, mdy, cols, rows)
+        return self.location != old_loc
+
+    def search_tile(self) -> dict:
+        """Search the current tile for items.
+
+        Reveals tile inventory. Hidden items require DETECTION check.
+        Returns dict: items_found (list), hidden_found (list).
+        """
+        result = {'items_found': [], 'hidden_found': []}
+
+        tile = self.current_map.tiles.get(self.location)
+        if tile is None:
+            return result
+
+        # Visible items are always found
+        result['items_found'] = list(tile.inventory.items)
+
+        # Hidden items: check tile stat_mods for 'hidden_dc'
+        hidden_dc = tile.stat_mods.get('hidden_dc', 0)
+        if hidden_dc > 0:
+            detection = self.stats.active[Stat.DETECTION]()
+            roll = random.randint(1, 20) + detection
+            if roll >= hidden_dc:
+                result['hidden_found'] = True
+            else:
+                result['hidden_found'] = False
+
+        return result
+
+    def guard(self, cols: int, rows: int) -> bool:
+        """Enter guard stance on current tile.
+
+        Drains stamina over time. While guarding, creature doesn't move
+        and gets a bonus to detection.
+        Returns True if guard stance entered (has enough stamina).
+        """
+        stam_cost = 2
+        cur_stam = self.stats.active[Stat.CUR_STAMINA]()
+        if cur_stam < stam_cost:
+            return False
+        self.stats.base[Stat.CUR_STAMINA] = cur_stam - stam_cost
+
+        # Add guard detection bonus if not already guarding
+        if not hasattr(self, '_guarding') or not self._guarding:
+            self._guarding = True
+            self._guard_mod = self.stats.add_mod('guard_stance', Stat.DETECTION, 3)
+        return True
+
+    def stop_guard(self):
+        """Exit guard stance, remove detection bonus."""
+        if getattr(self, '_guarding', False):
+            self._guarding = False
+            if hasattr(self, '_guard_mod'):
+                self.stats.remove_mod(self._guard_mod)
+
+    # -- Movement Variants --------------------------------------------------
+
+    def run(self, dx: int, dy: int, cols: int, rows: int) -> bool:
+        """Move at 150% speed (immediate) with stamina cost.
+
+        Returns True if moved.
+        """
+        stam_cost = 3
+        cur_stam = self.stats.active[Stat.CUR_STAMINA]()
+        if cur_stam < stam_cost:
+            return False
+        self.stats.base[Stat.CUR_STAMINA] = cur_stam - stam_cost
+
+        old_loc = self.location
+        self.move(dx, dy, cols, rows)
+        return self.location != old_loc
+
+    def sneak(self, dx: int, dy: int, cols: int, rows: int) -> bool:
+        """Move stealthily with a small stamina cost.
+
+        Activates stealth bonus while sneaking.
+        Returns True if moved.
+        """
+        stam_cost = 1
+        cur_stam = self.stats.active[Stat.CUR_STAMINA]()
+        if cur_stam < stam_cost:
+            return False
+        self.stats.base[Stat.CUR_STAMINA] = cur_stam - stam_cost
+
+        old_loc = self.location
+        self.move(dx, dy, cols, rows)
+        return self.location != old_loc
+
+    # -- Stances ------------------------------------------------------------
+
+    def enter_block_stance(self) -> bool:
+        """Enter block stance. Enables block contest instead of dodge.
+
+        Requires something in HAND_L or HAND_R (shield or weapon).
+        Returns True if stance entered.
+        """
+        has_shield = (self.equipment.get(Slot.HAND_L) is not None or
+                      self.equipment.get(Slot.HAND_R) is not None)
+        if not has_shield:
+            return False
+
+        if not getattr(self, '_blocking', False):
+            self._blocking = True
+            self._block_mod = self.stats.add_mod('block_stance', Stat.BLOCK, 2)
+        return True
+
+    def exit_block_stance(self):
+        """Exit block stance."""
+        if getattr(self, '_blocking', False):
+            self._blocking = False
+            if hasattr(self, '_block_mod'):
+                self.stats.remove_mod(self._block_mod)
+
+    @property
+    def is_blocking(self) -> bool:
+        return getattr(self, '_blocking', False)
+
+    @property
+    def is_guarding(self) -> bool:
+        return getattr(self, '_guarding', False)
 
 
 # ---------------------------------------------------------------------------

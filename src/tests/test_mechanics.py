@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from classes.maps import Map, MapKey, Tile
 from classes.creature import Creature
 from classes.inventory import (
-    Item, Weapon, Wearable, Consumable, Stackable, Slot, Inventory
+    Item, Weapon, Wearable, Consumable, Ammunition, Stackable, Slot, Inventory
 )
 from classes.stats import Stat
 
@@ -540,6 +540,340 @@ check(f"Betrayal cost: friend sentiment dropped to {friend_rel[0]:.1f}",
 betrayed_rel = betrayed.get_relationship(friend)
 check(f"Betrayed sentiment = {betrayed_rel[0]:.1f} (massive negative)",
       betrayed_rel[0] < -10.0)
+
+# ==========================================================================
+print("\n=== Consumable Duration Expiry ===")
+m19 = make_map()
+c19 = make_creature(m19, x=0, y=0, stats={Stat.STR: 10})
+
+timed_potion = Consumable(name='Timed Buff', weight=0.5, quantity=2,
+                          duration=5.0, buffs={Stat.STR: 6})
+c19.inventory.items.append(timed_potion)
+
+str_base = c19.stats.active[Stat.STR]()
+check(f"STR before timed potion = {str_base}", str_base == 10)
+
+c19.use_item(timed_potion)
+check(f"STR after timed potion = {c19.stats.active[Stat.STR]()}", c19.stats.active[Stat.STR]() == 16)
+
+# Process ticks BEFORE expiry (at 4 seconds)
+c19.process_ticks(4000)
+check("STR still buffed at 4s", c19.stats.active[Stat.STR]() == 16)
+
+# Process ticks AT expiry (at 5 seconds)
+c19.process_ticks(5000)
+check(f"STR back to normal after 5s = {c19.stats.active[Stat.STR]()}", c19.stats.active[Stat.STR]() == 10)
+
+# Permanent potion (duration=0) should NOT expire
+perm_potion = Consumable(name='Perm Buff', weight=0.5, quantity=1,
+                         duration=0.0, buffs={Stat.VIT: 3})
+c19.inventory.items.append(perm_potion)
+c19.use_item(perm_potion)
+vit_after = c19.stats.active[Stat.VIT]()
+c19.process_ticks(999999)
+check(f"Permanent buff stays: VIT still {c19.stats.active[Stat.VIT]()}", c19.stats.active[Stat.VIT]() == vit_after)
+
+# ==========================================================================
+print("\n=== Ranged Attack ===")
+m20 = make_map(cols=20, rows=20)
+archer = make_creature(m20, x=0, y=0,
+                       stats={Stat.STR: 12, Stat.PER: 16, Stat.AGL: 12,
+                              Stat.LCK: 10, Stat.VIT: 12, Stat.LVL: 3},
+                       name='Archer')
+# ACCURACY = dmod(16) = 3
+
+far_target = make_creature(m20, x=8, y=0,
+                           stats={Stat.VIT: 14, Stat.AGL: 10, Stat.PER: 10,
+                                  Stat.STR: 10, Stat.LVL: 3},
+                           name='FarTarget')
+
+# No weapon equipped → fail
+r = archer.ranged_attack(far_target, now=1000)
+check("No ranged weapon → fail", r['reason'] == 'no_ranged_weapon')
+
+# Equip bow (range 10)
+bow = Weapon(name='Longbow', weight=3.0,
+             slots=[Slot.HAND_L, Slot.HAND_R], slot_count=2,
+             damage=5, range=10, ammunition_type='Arrow')
+archer.inventory.items.append(bow)
+archer.equip(bow)
+
+# No ammo → fail
+r = archer.ranged_attack(far_target, now=1000)
+check("No ammo → fail", r['reason'] == 'no_ammo')
+
+# Add arrows (recoverable — land on tile on miss)
+arrows = Ammunition(name='Arrow', weight=0.1, quantity=20, damage=2,
+                    destroy_on_use_probability=0.8, recoverable=True)
+archer.inventory.items.append(arrows)
+
+# Out of range
+very_far = make_creature(m20, x=15, y=0,
+                         stats={Stat.VIT: 10, Stat.LVL: 3}, name='VeryFar')
+r = archer.ranged_attack(very_far, now=1000)
+check("Out of range → fail", r['reason'] == 'out_of_range')
+
+# Valid attack: run multiple for statistics
+hits = 0
+total_dmg = 0
+arrows_start = arrows.quantity
+for _ in range(50):
+    far_target.stats.base[Stat.HP_CURR] = far_target.stats.active[Stat.HP_MAX]()
+    archer.stats.base[Stat.CUR_STAMINA] = archer.stats.active[Stat.MAX_STAMINA]()
+    r = archer.ranged_attack(far_target, now=1000)
+    if r['hit']:
+        hits += 1
+        total_dmg += r['damage']
+
+check(f"Ranged hits: {hits}/50", hits > 0)
+check(f"Ranged total damage: {total_dmg}", total_dmg > 0)
+check(f"Arrows consumed: {arrows_start} → {arrows.quantity}",
+      arrows.quantity < arrows_start)
+
+# No stamina — ensure we have ammo first
+if arrows not in archer.inventory.items or arrows.quantity <= 0:
+    arrows = Ammunition(name='Arrow', weight=0.1, quantity=5, damage=2,
+                        destroy_on_use_probability=0.8, recoverable=True)
+    archer.inventory.items.append(arrows)
+archer.stats.base[Stat.CUR_STAMINA] = 0
+r = archer.ranged_attack(far_target, now=1000)
+check("Ranged with 0 stamina fails", r['reason'] == 'no_stamina')
+
+# Check arrows landed on target's tile from misses
+target_tile = m20.tiles.get(far_target.location)
+recovered = [i for i in target_tile.inventory.items if i.name == 'Arrow']
+check(f"Recoverable arrows on target tile: {len(recovered)}",
+      len(recovered) > 0)
+
+# Non-recoverable ammo (bullets) should NOT land on tile
+m20b = make_map(cols=20, rows=20)
+gunner = make_creature(m20b, x=0, y=0,
+                       stats={Stat.STR: 12, Stat.PER: 16, Stat.AGL: 12,
+                              Stat.LCK: 10, Stat.VIT: 12},
+                       name='Gunner')
+bullet_target = make_creature(m20b, x=5, y=0,
+                              stats={Stat.VIT: 14, Stat.AGL: 10, Stat.PER: 10,
+                                     Stat.STR: 10, Stat.LVL: 3},
+                              name='BulletTarget')
+gun = Weapon(name='Pistol', weight=2.0,
+             slots=[Slot.HAND_R], slot_count=1,
+             damage=8, range=8, ammunition_type='Bullet')
+gunner.inventory.items.append(gun)
+gunner.equip(gun)
+bullets = Ammunition(name='Bullet', weight=0.05, quantity=20, damage=4,
+                     destroy_on_use_probability=1.0, recoverable=False)
+gunner.inventory.items.append(bullets)
+
+for _ in range(20):
+    bullet_target.stats.base[Stat.HP_CURR] = bullet_target.stats.active[Stat.HP_MAX]()
+    gunner.stats.base[Stat.CUR_STAMINA] = gunner.stats.active[Stat.MAX_STAMINA]()
+    gunner.ranged_attack(bullet_target, now=1000)
+
+bt_tile = m20b.tiles.get(bullet_target.location)
+bullet_on_tile = [i for i in bt_tile.inventory.items if i.name == 'Bullet']
+check(f"Non-recoverable bullets NOT on tile: {len(bullet_on_tile)}", len(bullet_on_tile) == 0)
+
+# ==========================================================================
+print("\n=== Grapple ===")
+m21 = make_map()
+wrestler = make_creature(m21, x=0, y=0,
+                         stats={Stat.STR: 18, Stat.AGL: 12, Stat.VIT: 14},
+                         name='Wrestler')
+slippery = make_creature(m21, x=1, y=0,
+                         stats={Stat.STR: 10, Stat.AGL: 18, Stat.VIT: 10},
+                         name='Slippery')
+
+# Not adjacent
+far_grapple = make_creature(m21, x=5, y=5, stats={Stat.STR: 10}, name='Far')
+r = wrestler.grapple(far_grapple)
+check("Grapple not adjacent → fail", r['reason'] == 'not_adjacent')
+
+# Statistical test: wrestler STR 18 vs slippery AGL 18-1=17
+wins = 0
+for _ in range(200):
+    wrestler.stats.base[Stat.CUR_STAMINA] = wrestler.stats.active[Stat.MAX_STAMINA]()
+    r = wrestler.grapple(slippery)
+    if r['success']:
+        wins += 1
+
+check(f"Wrestler wins grapple: {wins}/200 (STR 18 vs AGL 17)", 30 < wins < 170)
+
+# No stamina
+wrestler.stats.base[Stat.CUR_STAMINA] = 5
+r = wrestler.grapple(slippery)
+check("Grapple with low stamina fails", r['reason'] == 'no_stamina')
+
+# ==========================================================================
+print("\n=== Steal ===")
+m22 = make_map()
+thief = make_creature(m22, x=0, y=0,
+                      stats={Stat.AGL: 18, Stat.CHR: 14, Stat.PER: 12},
+                      name='Thief')
+mark2 = make_creature(m22, x=1, y=0,
+                      stats={Stat.PER: 10, Stat.STR: 10}, name='Mark2')
+
+gem = Item(name='Ruby', weight=0.1)
+mark2.inventory.items.append(gem)
+
+# Not adjacent
+far_mark = make_creature(m22, x=5, y=5, stats={Stat.PER: 10}, name='FarMark')
+far_mark.inventory.items.append(Item(name='Gold', weight=0.1))
+r = thief.steal(far_mark, far_mark.inventory.items[0])
+check("Steal not adjacent → fail", r['reason'] == 'not_adjacent')
+
+# Item not in inventory
+phantom = Item(name='Phantom')
+r = thief.steal(mark2, phantom)
+check("Steal non-existent item → fail", r['reason'] == 'item_not_found')
+
+# Statistical steal attempts
+successes = 0
+for _ in range(100):
+    if gem not in mark2.inventory.items:
+        # Return item for next attempt
+        thief.inventory.items.remove(gem)
+        mark2.inventory.items.append(gem)
+    r = thief.steal(mark2, gem)
+    if r['success']:
+        successes += 1
+
+check(f"Steal successes: {successes}/100", successes > 0)
+check(f"Some steals caught: {100 - successes}/100", successes < 100)
+
+# ==========================================================================
+print("\n=== Flee ===")
+m23 = make_map(cols=10, rows=10)
+prey = make_creature(m23, x=5, y=5, stats={Stat.AGL: 12}, name='Prey')
+predator = make_creature(m23, x=4, y=5, name='Predator')
+
+old_x = prey.location.x
+check("Flee succeeds", prey.flee(predator, 10, 10))
+check(f"Moved away: {old_x} → {prey.location.x}",
+      prey.location.x > old_x)  # Should move east (away from predator at x=4)
+
+# Flee with no stamina
+prey.stats.base[Stat.CUR_STAMINA] = 0
+check("Flee with 0 stamina fails", not prey.flee(predator, 10, 10))
+
+# Flee from same tile
+prey.stats.base[Stat.CUR_STAMINA] = prey.stats.active[Stat.MAX_STAMINA]()
+prey.location = predator.location._replace()
+check("Flee from same tile still moves", prey.flee(predator, 10, 10))
+
+# ==========================================================================
+print("\n=== Search Tile ===")
+m24 = make_map()
+searcher = make_creature(m24, x=0, y=0, stats={Stat.PER: 14}, name='Searcher')
+tile24 = m24.tiles[MapKey(0, 0, 0)]
+
+# Place items on tile
+loot1 = Item(name='Coin', weight=0.1)
+loot2 = Item(name='Gem', weight=0.2)
+tile24.inventory.items.extend([loot1, loot2])
+
+r = searcher.search_tile()
+check(f"Found {len(r['items_found'])} items on tile", len(r['items_found']) == 2)
+check("Coin in found items", loot1 in r['items_found'])
+
+# Hidden items with DC
+tile24.stat_mods['hidden_dc'] = 15
+results = [searcher.search_tile()['hidden_found'] for _ in range(100)]
+found_count = sum(1 for r in results if r is True)
+check(f"Hidden DC 15: found {found_count}/100 (DETECTION=dmod(14)=2)",
+      0 < found_count < 100)
+
+# ==========================================================================
+print("\n=== Guard Stance ===")
+m25 = make_map()
+guard_c = make_creature(m25, x=0, y=0, stats={Stat.PER: 12}, name='Guard')
+
+det_before = guard_c.stats.active[Stat.DETECTION]()
+check("Enter guard stance", guard_c.guard(10, 10))
+check("Is guarding", guard_c.is_guarding)
+det_during = guard_c.stats.active[Stat.DETECTION]()
+check(f"Detection boosted: {det_before} → {det_during}", det_during == det_before + 3)
+
+guard_c.stop_guard()
+check("Not guarding after stop", not guard_c.is_guarding)
+det_after = guard_c.stats.active[Stat.DETECTION]()
+check(f"Detection restored: {det_after}", det_after == det_before)
+
+# No stamina
+guard_c.stats.base[Stat.CUR_STAMINA] = 0
+check("Guard with 0 stamina fails", not guard_c.guard(10, 10))
+
+# ==========================================================================
+print("\n=== Run / Sneak ===")
+m26 = make_map(cols=10, rows=10)
+runner = make_creature(m26, x=5, y=5, stats={Stat.AGL: 14}, name='Runner')
+
+stam_before = runner.stats.active[Stat.CUR_STAMINA]()
+check("Run east", runner.run(1, 0, 10, 10))
+check("Moved to (6,5)", runner.location.x == 6)
+stam_after = runner.stats.active[Stat.CUR_STAMINA]()
+check(f"Stamina cost for run: {stam_before - stam_after}", stam_before - stam_after == 3)
+
+stam_before2 = runner.stats.active[Stat.CUR_STAMINA]()
+check("Sneak south", runner.sneak(0, 1, 10, 10))
+check("Moved to (6,6)", runner.location.y == 6)
+stam_after2 = runner.stats.active[Stat.CUR_STAMINA]()
+check(f"Stamina cost for sneak: {stam_before2 - stam_after2}", stam_before2 - stam_after2 == 1)
+
+# No stamina
+runner.stats.base[Stat.CUR_STAMINA] = 0
+check("Run with 0 stamina fails", not runner.run(1, 0, 10, 10))
+check("Sneak with 0 stamina fails", not runner.sneak(1, 0, 10, 10))
+
+# ==========================================================================
+print("\n=== Block Stance ===")
+m27 = make_map()
+blocker = make_creature(m27, x=0, y=0, stats={Stat.STR: 14, Stat.AGL: 12},
+                        name='Blocker')
+
+# Can't block without equipment in hand
+check("Can't block without shield/weapon", not blocker.enter_block_stance())
+
+shield = Wearable(name='Shield', weight=4.0, slots=[Slot.HAND_L], slot_count=1,
+                  buffs={Stat.BLOCK: 3})
+blocker.inventory.items.append(shield)
+blocker.equip(shield)
+
+block_before = blocker.stats.active[Stat.BLOCK]()
+check("Enter block stance", blocker.enter_block_stance())
+check("Is blocking", blocker.is_blocking)
+block_during = blocker.stats.active[Stat.BLOCK]()
+check(f"Block boosted: {block_before} → {block_during}", block_during == block_before + 2)
+
+blocker.exit_block_stance()
+check("Not blocking after exit", not blocker.is_blocking)
+block_after = blocker.stats.active[Stat.BLOCK]()
+check(f"Block restored: {block_after}", block_after == block_before)
+
+# ==========================================================================
+print("\n=== Share Rumor ===")
+m28 = make_map()
+gossip = make_creature(m28, x=0, y=0, stats={Stat.CHR: 16, Stat.PER: 12},
+                       name='Gossip')
+listener = make_creature(m28, x=1, y=0, stats={Stat.PER: 10}, name='Listener')
+subject = make_creature(m28, x=5, y=5, name='Subject')
+
+# Build gossip's opinion of subject
+gossip.record_interaction(subject, -8.0)
+
+# Share rumor multiple times
+shared = 0
+for _ in range(50):
+    if gossip.share_rumor(listener, subject.uid, -5.0, tick=100):
+        shared += 1
+
+check(f"Rumors shared: {shared}/50 (CHR 16 = high chance)", shared > 20)
+
+# Listener should now have rumors about subject
+rumors = listener.rumors.get(subject.uid, [])
+check(f"Listener has {len(rumors)} rumors about subject", len(rumors) > 0)
+
+opinion = listener.rumor_opinion(subject.uid, current_tick=100)
+check(f"Listener's rumor opinion of subject: {opinion:.2f} (negative)", opinion < 0)
 
 # ==========================================================================
 print(f"\n{'='*50}")

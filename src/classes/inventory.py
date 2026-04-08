@@ -109,10 +109,12 @@ class Consumable(Stackable):
 
 class Ammunition(Stackable):
 
-    def __init__(self, *args, damage: float = 0, destroy_on_use_probability: float = 1.0, **kwargs):
+    def __init__(self, *args, damage: float = 0, destroy_on_use_probability: float = 1.0,
+                 recoverable: bool = True, **kwargs):
         super().__init__(*args, **kwargs)
         self.damage                    = damage
         self.destroy_on_use_probability = destroy_on_use_probability
+        self.recoverable               = recoverable
 
 
 class Equippable(Item):

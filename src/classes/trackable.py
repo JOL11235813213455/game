@@ -53,11 +53,17 @@ class Trackable:
 
     def process_ticks(self, now: int):
         """Fire any timed events whose interval has elapsed."""
-        for entry in self._timed_events.values():
+        # Snapshot keys so callbacks can safely unregister ticks
+        for name in list(self._timed_events):
+            entry = self._timed_events.get(name)
+            if entry is None:
+                continue
             interval, last, callback = entry
             if now - last >= interval:
                 callback(now)
-                entry[1] = now
+                # Entry may have been removed by callback
+                if name in self._timed_events:
+                    self._timed_events[name][1] = now
 
     # -- instance tracking -------------------------------------------------
 
