@@ -110,7 +110,7 @@ class SpeciesTab(ttk.Frame):
 
         stat_tips = {
             'strength': 'Physical power — affects melee damage',
-            'constitution': 'Endurance — affects max HP',
+            'vitality': 'Toughness — affects max HP, stamina, resistances',
             'intelligence': 'Mental acuity — affects skills and magic',
             'agility': 'Speed and reflexes — affects dodge and move speed',
             'perception': 'Awareness — affects detection and ranged accuracy',

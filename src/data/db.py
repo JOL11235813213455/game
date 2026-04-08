@@ -2,7 +2,7 @@ import sqlite3
 import json
 from pathlib import Path
 
-from classes.creature import Stat
+from classes.stats import Stat
 from classes.inventory import (
     Item, Stackable, Consumable, Ammunition,
     Equippable, Weapon, Wearable, Structure, Slot, CLASS_MAP
@@ -261,6 +261,9 @@ def _migrate(con: sqlite3.Connection) -> None:
             con.execute(stmt)
         except sqlite3.OperationalError:
             pass
+
+    # Rename CON (constitution) → VIT (vitality) in species_stats
+    con.execute("UPDATE species_stats SET stat='vitality' WHERE stat='constitution'")
 
     con.commit()
 

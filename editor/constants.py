@@ -1,11 +1,11 @@
 ITEM_CLASSES = ['Item', 'Weapon', 'Wearable', 'Consumable', 'Ammunition', 'Structure']
 SLOTS        = ['head', 'neck', 'shoulders', 'chest', 'back', 'wrists', 'hands',
                 'waist', 'legs', 'feet', 'ring_l', 'ring_r', 'hand_l', 'hand_r']
-STATS        = ['strength', 'constitution', 'intelligence', 'agility',
+STATS        = ['strength', 'vitality', 'intelligence', 'agility',
                 'perception', 'charisma', 'luck', 'hit dice']
 STAT_LABELS  = {
     'strength':      'STR',
-    'constitution':  'CON',
+    'vitality':      'VIT',
     'intelligence':  'INT',
     'agility':       'AGL',
     'perception':    'PER',

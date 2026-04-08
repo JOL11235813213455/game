@@ -17,7 +17,8 @@ from main.config import (
     MOVE_DELAY, MENU_OPTIONS,
     get_block_size, get_tile_height, get_zoom, set_zoom, ZOOM_STEP,
 )
-from classes.creature import Creature, NPC, Stat
+from classes.creature import Creature, RandomWanderBehavior
+from classes.stats import Stat
 from classes.inventory import Structure
 from classes.world_object import WorldObject
 from classes.levels import exp_for_level
@@ -46,11 +47,12 @@ def main():
         current_map=game_map,
         location=MapKey(*game_map.entrance, 0),
         species='human',
-        stats={Stat.CON: 10},
+        stats={Stat.VIT: 10},
     )
     # Place NPC on a walkable tile near the entrance
     npc_loc = MapKey(game_map.entrance[0] + 3, game_map.entrance[1] + 2, 0)
-    npcs = [NPC(current_map=game_map, location=npc_loc, species='automaton')]
+    Creature(current_map=game_map, location=npc_loc, species='automaton',
+             behavior=RandomWanderBehavior())
 
     font       = pygame.font.SysFont(None, 28)
     clock_font = pygame.font.SysFont(None, 24)
@@ -80,8 +82,8 @@ def main():
                             player  = result[1]
                             save_ui = None
                             paused  = False
-                            for npc in NPC.all():
-                                npc._last_move = now
+                            for c in Creature.all():
+                                c._last_move = now
 
                 elif event.type == pygame.KEYDOWN:
                     # ---- pause menu -----------------------------------------i want to add this repo to my github. i want to change my global git e-mail to github@jasonlackey.com, which is the same as my github login e-mail.
@@ -114,7 +116,7 @@ def main():
                             if not player.enter():
                                 player.exit()
                         if event.key == pygame.K_l:
-                            lvl = player.stats.get(Stat.LVL, 0)
+                            lvl = player.stats.active[Stat.LVL]()
                             player.gain_exp(exp_for_level(lvl + 1))
                         if event.key in (pygame.K_EQUALS, pygame.K_PLUS, pygame.K_KP_PLUS):
                             set_zoom(get_zoom() + ZOOM_STEP)
@@ -143,7 +145,8 @@ def main():
 
         if save_ui is None and not paused:
             map_objects = WorldObject.on_map(player.current_map)
-            map_npcs = [o for o in map_objects if isinstance(o, NPC)]
+            map_npcs = [o for o in map_objects
+                        if isinstance(o, Creature) and o is not player]
             for npc in map_npcs:
                 npc.update(now, cols, rows)
 
@@ -171,7 +174,7 @@ def main():
 
         # Pass 2: draw sprites/structures sorted by Y (z_index breaks ties on same tile)
         renderables = [o for o in WorldObject.on_map(player.current_map)
-                       if isinstance(o, (Creature, NPC, Structure))]
+                       if isinstance(o, (Creature, Structure))]
         for obj in sorted(renderables, key=lambda o: (o.location.y, o.z_index)):
             result = obj.make_surface(bs)
             if result:

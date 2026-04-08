@@ -13,6 +13,9 @@ leaning towards apocalyptic
 
 ## Key Conventions
 
+- **Speed is tiles-per-second (TPS).** Default base speed is 4 TPS. Movement speed formula: `base_TPS = max(0, 4 + agl_mod)`. After base TPS, two types of external modifiers apply (from a future `Modifiers` class — consumables, equippables; environment TBD): **percent mods** scale the stat-derived base, then **unit mods** add flat TPS on top unscaled. `final_TPS = base_TPS * (1 + pct_mods) + unit_mods`. Final TPS → interval: `interval = 1 / final_TPS`.
+- **D&D-style stat modifiers.** All derived stats use `(base_stat - 10) // 2` as the modifier, not the raw stat value. 10 is neutral (±0), 20 is +5, 1 is -5. This applies across all derived stat formulas.
+- **All stat bonuses stack additively, NEVER multiplicatively.** Two 25% bonuses = 50% total, not 56.25%. This applies everywhere: speed, damage, resistance, all modifiers.
 - MapKey is a namedtuple `(x, y, z)` — hashable, used as dict keys for tile lookups. DB stores x/y/z as separate columns; classes assemble them into MapKey immediately on load.
 - 3/4 perspective: tile height = block_size * 0.75
 - Sprites are character grids + palette dicts, NOT image files
@@ -26,6 +29,17 @@ leaning towards apocalyptic
 - tile sets are dictionaries of Tiles with MapKey keys
 
 ## Critical Architectural Knowledge
+
+### Creature / Stat System (src/classes/creature.py, src/classes/stats.py)
+- **There is exactly ONE creature class** — no subclasses, ever. Players, NPCs, and monsters are all `Creature`. Behavioral differences come from behavior modules assigned to `creature.behavior`.
+- Base stats: STR, PER, VIT, INT, CHR, LCK, AGL (CON was renamed to VIT)
+- `Stat` enum and all stat logic live in `src/classes/stats.py`, NOT in creature.py
+- `creature.stats` is a `Stats` object with four layers: `base`, `derived`, `mods`, `active`
+- `stats.active[Stat.X]()` — callable that returns the final evaluated value
+- Derived stats (MHP, SIGHT_RANGE, etc.) are computed from base stats via formulas in `DERIVED_FORMULAS`
+- Perception derives both `SIGHT_RANGE` and `HEARING_RANGE` (denominated in tiles)
+- Opposing stat contests use `stats.contest(other_stats, contest_name)` with d20 rolls
+- `creature.dialogue` exists as a placeholder for future dialogue system
 
 ### Save System (src/main/save_ui.py, src/save.py)
 - Uses **pickle** serialization — `Trackable.all_instances()` captures every live object
@@ -63,7 +77,7 @@ Every new feature must touch ALL of these layers. Do not skip any.
 ### 1. Data Model (classes)
 - [ ] Add/modify fields on relevant class(es) in `src/classes/`
 - [ ] Update `__init__` parameters and defaults
-- [ ] Update any enums (e.g. `Stat` in creature.py)
+- [ ] Update any enums (e.g. `Stat` in stats.py)
 - [ ] Verify namedtuples if coordinates/keys change
 
 ### 2. Database Schema
@@ -104,12 +118,17 @@ Every new feature must touch ALL of these layers. Do not skip any.
 - [ ] Update `docs/incomplete_features.txt` — add if incomplete, move to completed
 - [ ] update `CLAUDE.md` to reflect any critical architectural knowledge incremented
 
+### 7.5 Review for loose ends again - incomplete features, features implied but not existing
+
 ### 8. Verification
 - [ ] `py_compile` all modified files
 - [ ] Smoke test: editor constructs without error
 - [ ] Smoke test: game launches without error (if runtime changes)
 - [ ] Verify DB migration works on existing database
 - [ ] Verify DB creates correctly from scratch (fresh file)
+
+### 9. Commit
+- [ ] commit code changes to current branch with a summary/comment of changes
 
 ## File Quick Reference
 
@@ -118,7 +137,8 @@ Every new feature must touch ALL of these layers. Do not skip any.
 | Game entry | `src/main.py` |
 | Editor entry | `editor.py` → `editor/app.py` |
 | Map/Tile classes | `src/classes/maps.py` |
-| Creature/NPC/Stats | `src/classes/creature.py` |
+| Creature class | `src/classes/creature.py` |
+| Stat enum + Stats class | `src/classes/stats.py` |
 | Items/Inventory | `src/classes/inventory.py` |
 | WorldObject base | `src/classes/world_object.py` |
 | Instance tracking | `src/classes/trackable.py` |
@@ -132,3 +152,25 @@ Every new feature must touch ALL of these layers. Do not skip any.
 | SQL/ERD/Dictionary | `editor/sql_tab.py` |
 | Incomplete features | `docs/incomplete_features.txt` |
 | Stat system design | `docs/stat_system.md` |
+| ERDs (architecture diagrams) | `src/ERDs/` — see `master.md` for index |
+
+## ERD Maintenance
+
+Architecture diagrams live in `src/ERDs/` as Mermaid-in-Markdown files:
+
+| ERD | Scope |
+|---|---|
+| `master.md` | High-level module map + links to all other ERDs |
+| `class_hierarchy.md` | Inheritance tree, composition, behavior interface |
+| `import_dependencies.md` | Top-level and deferred imports, circular dep chains |
+| `data_flow.md` | Startup, game loop, save/load, sprite rendering pipeline |
+| `stats_system.md` | Stat layers, derived formulas, opposing contests, leveling |
+
+**When to update ERDs:**
+- Adding a new class or changing inheritance → update `class_hierarchy.md`
+- Adding a new module or changing imports → update `import_dependencies.md`
+- Changing the game loop, save system, or rendering pipeline → update `data_flow.md`
+- Changing stats, derived formulas, or contest mechanics → update `stats_system.md`
+- Adding a new ERD scope → add the file and update `master.md` index
+
+commit with comments frequently
