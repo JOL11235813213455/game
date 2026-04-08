@@ -296,6 +296,10 @@ This generalizes beyond trade:
 - **Sex**: creature attribute, affects pairing, display behavior, territorial competition
 - **Species preferences**: preferred/hated species (dropdown in editor)
 - **General proclivities**: aggression baseline, sociability, territoriality, curiosity modifier
+- **Prudishness**: species default (0.0–1.0), stored per creature, shifts with experience.
+  Gates seduce/pairing behavior. High = harder to seduce, less likely to initiate,
+  may react negatively to attempts. Shifts down with successful seduction,
+  shifts up witnessing negative pairing outcomes.
 - These are species-level defaults that individual creatures can deviate from via experience
 
 ## Future Model Input Variables (design notes)
