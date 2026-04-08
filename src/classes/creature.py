@@ -51,25 +51,66 @@ class Creature(WorldObject):
 
         # Behavior module for non-player creatures (NPC AI, monster AI, etc.)
         self.behavior = behavior
-        self.move_interval = move_interval
-        self._last_move = 0
+        self._cols = 0
+        self._rows = 0
+        if behavior is not None:
+            self.register_tick('behavior', move_interval, self._do_behavior)
+
+        # HP regen state
+        self._regen_start = float('inf')  # timestamp when regen kicks in
+        self._regen_fib = (1, 1)
+        self.register_tick('hp_regen', 1000, self._do_hp_regen)
+
+        # Stamina regen
+        self.register_tick('stamina_regen', 1000, self._do_stamina_regen)
 
     # -- Experience ---------------------------------------------------------
 
     def gain_exp(self, amount: int):
         self.stats.gain_exp(amount)
 
-    # -- NPC update (driven by behavior module) -----------------------------
+    # -- Timed behaviors ----------------------------------------------------
 
     def update(self, now: int, cols: int, rows: int):
         """Called each frame for non-player creatures."""
-        if self.behavior is None:
-            return
-        if now - self._last_move >= self.move_interval:
-            self.behavior.think(self, cols, rows)
-            self._last_move = now
+        self._cols = cols
+        self._rows = rows
+        self.process_ticks(now)
+
+    def _do_behavior(self, _now: int):
+        """Behavior think tick."""
+        if self.behavior is not None:
+            self.behavior.think(self, self._cols, self._rows)
         else:
             self.play_animation('idle')
+
+    def on_hit(self, now: int):
+        """Call when this creature takes damage. Resets HP regen timer."""
+        delay_s = self.stats.active[Stat.HP_REGEN_DELAY]()
+        self._regen_start = now + delay_s * 1000
+        self._regen_fib = (1, 1)
+
+    def _do_hp_regen(self, now: int):
+        """Fibonacci HP regen, capped at 15% of HP_MAX per second."""
+        if now < self._regen_start:
+            return
+        hp_curr = self.stats.active[Stat.HP_CURR]()
+        hp_max = self.stats.active[Stat.HP_MAX]()
+        if hp_curr >= hp_max:
+            return
+        cap = max(1, int(hp_max * 0.15))
+        heal = min(self._regen_fib[0], cap)
+        self.stats.base[Stat.HP_CURR] = min(hp_max, hp_curr + heal)
+        self._regen_fib = (self._regen_fib[1], self._regen_fib[0] + self._regen_fib[1])
+
+    def _do_stamina_regen(self, _now: int):
+        """Restore stamina per second based on STAM_REGEN."""
+        cur = self.stats.active[Stat.CUR_STAMINA]()
+        mx = self.stats.active[Stat.MAX_STAMINA]()
+        if cur >= mx:
+            return
+        regen = self.stats.active[Stat.STAM_REGEN]()
+        self.stats.base[Stat.CUR_STAMINA] = min(mx, cur + regen)
 
     # -- Movement -----------------------------------------------------------
 
