@@ -64,6 +64,9 @@ class Creature(WorldObject):
         # Stamina regen
         self.register_tick('stamina_regen', 1000, self._do_stamina_regen)
 
+        # Mana regen
+        self.register_tick('mana_regen', 1000, self._do_mana_regen)
+
     # -- Experience ---------------------------------------------------------
 
     def gain_exp(self, amount: int):
@@ -111,6 +114,15 @@ class Creature(WorldObject):
             return
         regen = self.stats.active[Stat.STAM_REGEN]()
         self.stats.base[Stat.CUR_STAMINA] = min(mx, cur + regen)
+
+    def _do_mana_regen(self, _now: int):
+        """Restore mana per second based on MANA_REGEN."""
+        cur = self.stats.active[Stat.CUR_MANA]()
+        mx = self.stats.active[Stat.MAX_MANA]()
+        if cur >= mx:
+            return
+        regen = self.stats.active[Stat.MANA_REGEN]()
+        self.stats.base[Stat.CUR_MANA] = min(mx, cur + regen)
 
     # -- Movement -----------------------------------------------------------
 

@@ -23,12 +23,13 @@ from classes.levels import level_from_exp, cumulative_exp
 class Stat(Enum):
     # ---- Base stats ----
     STR  = 'strength'
-    PER  = 'perception'
     VIT  = 'vitality'
+    AGL  = 'agility'
+    PER  = 'perception'
     INT  = 'intelligence'
     CHR  = 'charisma'
     LCK  = 'luck'
-    AGL  = 'agility'
+    
 
     # ---- Progression (stored in base) ----
     LVL  = 'level'
@@ -183,10 +184,10 @@ def _max_stamina(g):
     return max(10, total_mod * 15 + 25)
 
 def _max_mana(g):
-    return max(0, _dmod(g(Stat.INT)) * 5)
+    return max(0, (g(Stat.LVL) + 1) * (_dmod(g(Stat.INT)) + 1 + _dmod(g(Stat.LCK))))
 
 def _mana_regen(g):
-    return max(0, _dmod(g(Stat.INT)))
+    return max(0, _dmod(g(Stat.INT)) + 1)  # per second
 
 def _hp_regen(g):
     # Seconds after last hit before regen starts (min 1s)
@@ -206,7 +207,7 @@ def _disease_resist(g):
     return _dmod(g(Stat.VIT)) + _dmod(g(Stat.INT)) + 10
 
 def _magic_resist(g):
-    return _dmod(g(Stat.INT))
+    return _dmod(g(Stat.INT)) + 10 + _dmod(g(Stat.CHR))
 
 def _stagger_resist(g):
     return _dmod(g(Stat.STR))
