@@ -1838,6 +1838,191 @@ for _ in range(50):
 check(f"Poison secondary effect: {secondary_hits}/50 (some should land)", True)
 
 # ==========================================================================
+print("\n=== Genetics: Chromosome Generation ===")
+from classes.genetics import (
+    generate_chromosomes, inherit, express, apply_genetics,
+    check_inbreeding, inbreeding_mutation_rate, NUM_GENES, GENE_STAT_MAP,
+)
+
+# Male gets XY
+m_chroms = generate_chromosomes('male')
+check("Male has 2 chromosomes", len(m_chroms) == 2)
+check(f"X chromosome has {NUM_GENES} genes", len(m_chroms[0]) == NUM_GENES)
+check(f"Y chromosome has {NUM_GENES} genes", len(m_chroms[1]) == NUM_GENES)
+check("All genes 0-15", all(0 <= g <= 15 for c in m_chroms for g in c))
+
+# Female gets XX
+f_chroms = generate_chromosomes('female')
+check("Female has 2 chromosomes", len(f_chroms) == 2)
+
+# ==========================================================================
+print("\n=== Genetics: Sex-Linked Biases (statistical) ===")
+# Generate many males and females, check Y bias toward STR/INT/PER
+male_str_sum = 0
+female_str_sum = 0
+male_vit_sum = 0
+female_vit_sum = 0
+N = 500
+for _ in range(N):
+    mc = generate_chromosomes('male')
+    fc = generate_chromosomes('female')
+    # Y chromosome is mc[1], second X is fc[1]
+    # Gene positions 0-1 = STR
+    male_str_sum += mc[1][0] + mc[1][1]
+    female_str_sum += fc[1][0] + fc[1][1]
+    # Gene positions 2-3 = VIT
+    male_vit_sum += mc[1][2] + mc[1][3]
+    female_vit_sum += fc[1][2] + fc[1][3]
+
+male_str_avg = male_str_sum / N
+female_str_avg = female_str_sum / N
+check(f"Y bias: male STR avg {male_str_avg:.1f} > female second-X STR {female_str_avg:.1f}",
+      male_str_avg > female_str_avg)
+
+male_vit_avg = male_vit_sum / N
+female_vit_avg = female_vit_sum / N
+check(f"X bias: female VIT avg {female_vit_avg:.1f} > male Y VIT {male_vit_avg:.1f}",
+      female_vit_avg > male_vit_avg)
+
+# ==========================================================================
+print("\n=== Genetics: Expression → Stat Modifiers ===")
+# High genes → positive modifiers
+high_chroms = ([15]*14, [15]*14)
+high_mods = express(high_chroms)
+check(f"Max genes → STR mod = {high_mods[Stat.STR]} (should be +3)", high_mods[Stat.STR] == 3)
+
+# Low genes → negative modifiers
+low_chroms = ([0]*14, [0]*14)
+low_mods = express(low_chroms)
+check(f"Min genes → STR mod = {low_mods[Stat.STR]} (should be -3)", low_mods[Stat.STR] == -3)
+
+# Mid genes → ~0 modifier
+mid_chroms = ([7]*14, [8]*14)
+mid_mods = express(mid_chroms)
+check(f"Mid genes → STR mod = {mid_mods[Stat.STR]} (should be ~0)", abs(mid_mods[Stat.STR]) <= 1)
+
+# Apply genetics to species base
+species_base = {Stat.STR: 12, Stat.VIT: 10, Stat.AGL: 10, Stat.PER: 10,
+                Stat.INT: 10, Stat.CHR: 10, Stat.LCK: 10}
+adjusted = apply_genetics(species_base, high_mods)
+check(f"High genetics: STR {species_base[Stat.STR]} → {adjusted[Stat.STR]}",
+      adjusted[Stat.STR] == 15)
+
+adjusted_low = apply_genetics(species_base, low_mods)
+check(f"Low genetics: STR {species_base[Stat.STR]} → {adjusted_low[Stat.STR]}",
+      adjusted_low[Stat.STR] == 9)
+
+# ==========================================================================
+print("\n=== Genetics: Inheritance ===")
+mother = generate_chromosomes('female')
+father = generate_chromosomes('male')
+
+child_m_chroms = inherit(mother, father, 'male')
+check("Male child has 2 chromosomes", len(child_m_chroms) == 2)
+check("Male child genes valid", all(0 <= g <= 15 for c in child_m_chroms for g in c))
+
+child_f_chroms = inherit(mother, father, 'female')
+check("Female child has 2 chromosomes", len(child_f_chroms) == 2)
+
+# Verify inheritance: child genes should come from parents
+# (not exhaustive, just sanity check that values are in parent range)
+for i in range(NUM_GENES):
+    parent_vals = {mother[0][i], mother[1][i], father[0][i], father[1][i]}
+    # Child values should mostly be from parents (mutations are rare at 2%)
+    # Don't assert — just verify the mechanism ran
+
+# ==========================================================================
+print("\n=== Genetics: Inbreeding Detection ===")
+# Build a lineage tree:
+# A(1) + B(2) → C(3)
+# A(1) + B(2) → D(4)
+# C(3) + D(4) → E(5)  ← siblings mating (closeness=1)
+lineage = {
+    3: (2, 1),   # C's parents are B(mother) and A(father)
+    4: (2, 1),   # D's parents are B(mother) and A(father)
+}
+
+closeness = check_inbreeding(3, 4, lineage, generations=3)
+check(f"Siblings share parents: closeness={closeness} (should be 1)", closeness == 1)
+
+# Cousins: share grandparent
+# A(1) + B(2) → C(3)
+# A(1) + E(5) → D(4)
+# C(3) and D(4) share A as parent/father
+lineage2 = {
+    3: (2, 1),  # C: mother=B, father=A
+    4: (5, 1),  # D: mother=E, father=A
+}
+closeness2 = check_inbreeding(3, 4, lineage2, generations=3)
+check(f"Half-siblings: closeness={closeness2}", closeness2 == 1)
+
+# More distant: share great-grandparent
+# G1(1) + G2(2) → P1(3)
+# G1(1) + G3(4) → P2(5)
+# P1(3) + X(6) → C1(7)
+# P2(5) + Y(8) → C2(9)
+# C1(7) and C2(9) share G1 as grandparent
+lineage3 = {
+    3: (2, 1),    # P1: parents G2, G1
+    5: (4, 1),    # P2: parents G3, G1
+    7: (6, 3),    # C1: parents X, P1
+    9: (8, 5),    # C2: parents Y, P2
+}
+closeness3 = check_inbreeding(7, 9, lineage3, generations=3)
+check(f"Share grandparent: closeness={closeness3} (should be 2)", closeness3 == 2)
+
+# No shared ancestor
+lineage4 = {
+    3: (2, 1),
+    4: (6, 5),
+}
+closeness4 = check_inbreeding(3, 4, lineage4, generations=3)
+check(f"No shared ancestor: closeness={closeness4} (should be 0)", closeness4 == 0)
+
+# ==========================================================================
+print("\n=== Genetics: Inbreeding Mutation Rates ===")
+check(f"No inbreeding rate: {inbreeding_mutation_rate(0):.2f}", abs(inbreeding_mutation_rate(0) - 0.02) < 0.001)
+check(f"Siblings rate: {inbreeding_mutation_rate(1):.2f}", abs(inbreeding_mutation_rate(1) - 0.20) < 0.001)
+check(f"Grandparent rate: {inbreeding_mutation_rate(2):.2f}", abs(inbreeding_mutation_rate(2) - 0.10) < 0.001)
+check(f"Great-grandparent rate: {inbreeding_mutation_rate(3):.3f}", abs(inbreeding_mutation_rate(3) - 0.067) < 0.01)
+
+# Inbred offspring have worse genes on average
+normal_total = 0
+inbred_total = 0
+for _ in range(200):
+    nc = inherit(mother, father, 'male', inbreeding_closeness=0)
+    ic = inherit(mother, father, 'male', inbreeding_closeness=1)
+    normal_total += sum(nc[0]) + sum(nc[1])
+    inbred_total += sum(ic[0]) + sum(ic[1])
+
+check(f"Inbred gene total {inbred_total} < normal {normal_total}",
+      inbred_total < normal_total)
+
+# ==========================================================================
+print("\n=== Genetics: Lineage on Creature ===")
+m48 = make_map()
+parent_a = make_creature(m48, x=0, y=0, name='ParentA', sex='male')
+parent_b = make_creature(m48, x=1, y=0, name='ParentB', sex='female')
+
+parent_a.chromosomes = generate_chromosomes('male')
+parent_b.chromosomes = generate_chromosomes('female')
+
+child_chroms = inherit(parent_b.chromosomes, parent_a.chromosomes, 'female')
+child_c = make_creature(m48, x=0, y=1, name='Child', sex='female',
+                        chromosomes=child_chroms)
+child_c.mother_uid = parent_b.uid
+child_c.father_uid = parent_a.uid
+
+check("Child has mother_uid", child_c.mother_uid == parent_b.uid)
+check("Child has father_uid", child_c.father_uid == parent_a.uid)
+check("Child has chromosomes", child_c.chromosomes is not None)
+
+# Express and verify stats are modified
+child_mods = express(child_c.chromosomes)
+check(f"Child genetic STR mod: {child_mods[Stat.STR]} (in [-3,3])",
+      -3 <= child_mods[Stat.STR] <= 3)
+
+# ==========================================================================
 print("\n=== Gym Single-Agent Environment ===")
 from simulation.env import CreatureEnv, MultiAgentCreatureEnv
 

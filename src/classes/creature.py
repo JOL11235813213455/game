@@ -31,6 +31,10 @@ class Creature(WorldObject):
         sex: str = None,
         prudishness: float = None,
         age: int = 0,
+        chromosomes: tuple = None,
+        mother_uid: int = None,
+        father_uid: int = None,
+        is_abomination: bool = False,
     ):
         super().__init__(current_map=current_map, location=location)
         self.name = name
@@ -46,8 +50,17 @@ class Creature(WorldObject):
         self.sex = sex if sex is not None else random.choice(('male', 'female'))
         # Prudishness: species default with per-creature override
         self.prudishness = prudishness if prudishness is not None else species_data.get('prudishness', 0.5)
-        # Age in game ticks (0 = newborn)
+        # Age in game days (0 = newborn)
         self.age = age
+
+        # Genetics and lineage
+        self.chromosomes = chromosomes
+        self.mother_uid = mother_uid
+        self.father_uid = father_uid
+        self.is_abomination = is_abomination
+        self.inbred = False
+        self.is_pregnant = False
+        self._pair_cooldown = 0  # timestamp when next pairing is allowed
 
         # Build Stats from species defaults + overrides
         species_stats = {k: v for k, v in species_data.items() if isinstance(k, Stat)}

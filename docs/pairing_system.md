@@ -12,7 +12,7 @@
 ### Sex-Linked Stat Biases
 - **Y chromosome** carries slight bias toward STR, INT, PER (male-favored stats)
 - **Second X chromosome** carries slight bias toward VIT, AGL, CHR (female-favored stats)
-- LCK is neutral across sexes
+- **LCK** encoded on **both X and Y** chromosomes — not sex-linked
 - These are statistical tendencies, not hard caps — individual variation is wide
 
 ### Inheritance (Mendelian)
@@ -24,6 +24,19 @@
 ### Mutation
 - ~2% chance per gene position to randomize the value
 - Creates rare stat outliers
+
+### Inbreeding (Graduated Severity)
+- Creatures who share a **common ancestor within 3 generations** suffer **deleterious effects**
+- Detection: trace `mother_uid` and `father_uid` up to 3 levels for both parents
+- Severity scales with **closeness of shared ancestor**:
+  - **1 (siblings)**: 20% bad mutation rate per gene
+  - **2 (share grandparent)**: 12% bad mutation rate
+  - **3 (share great-grandparent)**: 7% bad mutation rate
+  - **0 (no shared ancestor)**: normal 2% mutation rate
+- Bad mutations are biased toward lower gene values (0–7 instead of 0–15)
+- Stored on creature as `inbred: bool` for downstream behavioral/social effects
+- **Design intent**: limited genetic stock naturally encourages cross-species pairing
+  (abominations) as the lesser evil vs severe inbreeding depression
 
 ### Stat Derivation for NPCs
 - Genetics primarily determines base stats (STR, VIT, AGL, PER, INT, CHR, LCK)
@@ -40,11 +53,20 @@
 ### Requirements
 - Must be male + female
 - Both must be **18+ game days old** (adult)
-- Cross-species has **very low success rate**
-- Abomination males can **only** pair with abomination females (willingly)
 - Female cannot be pregnant
 - Male cooldown: **1 game day** (tracked via Trackable timer)
 - Minimum positive relationship required — OR barter — OR grapple
+
+### Species Compatibility (Knockout Probability)
+Species match acts as a **knockout gate** — checked before any other desirability factor.
+- **Same species**: 100% pass (species is not a positive factor, just not a blocker)
+- **Different species**: **1% pass** (99% immediate rejection regardless of other factors)
+- **Abomination male + non-abomination female**: **0% pass** (never willing)
+- **Non-abomination male + abomination female**: **0.5% pass**
+- **Abomination + abomination**: **100% pass** (treated as same species)
+
+Only after the species gate passes do the other desirability factors (stats, wealth,
+reputation, relationship, prudishness) get evaluated via the trade-based proposal system.
 
 ### Proposal as Trade
 - Modeled as a virtual trade using existing `propose_trade` mechanics
@@ -220,13 +242,14 @@
 - Both use the existing timed event system
 
 ### Desirability Function
+Species is a **knockout gate**, not a weighted factor. After gate passes:
 ```
 desirability(creature, evaluator):
+    # Species gate already passed before this is called
     stat_score = weighted_sum(STR, CHR, VIT, AGL, ...)  # sex-dependent weights
     wealth = inventory_value + equipment_value
     reputation = sum of positive sentiments from others / total relationships
-    species_match = 1.0 if same species, 0.05 if cross-species, 0.3 if abom+abom
-    return stat_score * 0.3 + wealth * 0.2 + reputation * 0.2 + species_match * 0.3
+    return stat_score * 0.4 + wealth * 0.3 + reputation * 0.3
 ```
 
 ### Egg as Item Subclass
