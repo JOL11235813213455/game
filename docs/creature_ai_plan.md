@@ -331,8 +331,10 @@ Per-creature observation for the RL model:
    - ~~Utility: search, guard, wait, follow, call backup, sleep/wake, set trap~~
    - ~~Movement: run, sneak, flee~~
    - ~~Stances: block~~
+   - ~~Death: die() drops loot, is_alive property~~
+   - ~~Trap trigger: detection vs trap_dc in move(), damage + consume trap~~
+   - ~~Sleep deprivation: 4-tier stacking debuffs, sleep clears all~~
    - Remaining: cast spell (needs spell system), seduce (needs pairing), talk (needs dialogue)
-   - Remaining: trap trigger, sleep deprivation debuffs, death handling
 6. Define observation space — creature inputs (stats, HP%, nearby creatures, relationships,
    terrain, deltas)
 7. Define reward function hierarchy (survival -> HP/gold/allies -> proxy rewards)
