@@ -311,6 +311,21 @@ def _load_species(con: sqlite3.Connection) -> None:
             NONPLAYABLE[name] = block
 
 
+_STAT_BY_VALUE = {s.value: s for s in Stat}
+
+def _parse_buffs(raw: str | None) -> dict[Stat, int]:
+    """Convert JSON buffs string to {Stat: amount} dict."""
+    if not raw:
+        return {}
+    data = json.loads(raw)
+    result = {}
+    for key, val in data.items():
+        stat = _STAT_BY_VALUE.get(key)
+        if stat is not None:
+            result[stat] = val
+    return result
+
+
 def _load_items(con: sqlite3.Connection) -> None:
     rows      = con.execute('SELECT * FROM items').fetchall()
     slot_rows = con.execute('SELECT item_key, slot FROM item_slots').fetchall()
@@ -328,7 +343,7 @@ def _load_items(con: sqlite3.Connection) -> None:
             ,weight      = r['weight']
             ,value       = r['value']
             ,inventoriable = bool(r['inventoriable'])
-            ,buffs       = json.loads(r['buffs'] or '{}')
+            ,buffs       = _parse_buffs(r['buffs'])
         )
         if r['sprite_name'] is not None:
             base['sprite_name'] = r['sprite_name']
