@@ -104,6 +104,13 @@ MOVEMENT VARIANTS
 UTILITY
 - search_tile() implemented: reveals tile inventory, hidden_dc check vs DETECTION
 - guard()/stop_guard() implemented: +3 DETECTION while guarding, stamina drain
+- wait() implemented: skip turn, recover stamina (STAM_REGEN amount)
+- follow() implemented: move one tile toward target (simple, no pathfinding)
+- call_backup() implemented: broadcast within HEARING_RANGE, filters by positive sentiment
+- sleep()/wake() implemented: full stamina+mana restore, -5 DETECTION while asleep
+- set_trap() implemented: place trap item on tile, DC = base + CRAFT_QUALITY
+- Sleep deprivation debuffs not yet implemented (stacking fatigue system)
+- Trap trigger on creature entering tile not yet implemented
 - No use/consume action or effect system
 
 DURABILITY

@@ -990,6 +990,130 @@ r = briber.bribe(hostile, [big_bribe])
 check(f"Big bribe accepted by hostile: {r['accepted']}", r['accepted'])
 
 # ==========================================================================
+print("\n=== Wait / Observe ===")
+m32 = make_map()
+waiter = make_creature(m32, x=0, y=0, stats={Stat.AGL: 12, Stat.VIT: 12, Stat.STR: 12})
+
+# Drain some stamina
+waiter.stats.base[Stat.CUR_STAMINA] = 5
+stam_before = waiter.stats.active[Stat.CUR_STAMINA]()
+regen_rate = waiter.stats.active[Stat.STAM_REGEN]()
+
+check("Wait succeeds", waiter.wait())
+stam_after = waiter.stats.active[Stat.CUR_STAMINA]()
+check(f"Stamina recovered: {stam_before} → {stam_after} (+{regen_rate})",
+      stam_after == stam_before + regen_rate)
+
+# Wait at max stamina (should cap)
+waiter.stats.base[Stat.CUR_STAMINA] = waiter.stats.active[Stat.MAX_STAMINA]()
+max_stam = waiter.stats.active[Stat.MAX_STAMINA]()
+waiter.wait()
+check("Wait at max doesn't exceed max", waiter.stats.active[Stat.CUR_STAMINA]() == max_stam)
+
+# ==========================================================================
+print("\n=== Follow ===")
+m33 = make_map(cols=10, rows=10)
+follower = make_creature(m33, x=0, y=0, name='Follower')
+leader = make_creature(m33, x=3, y=4, name='Leader')
+
+check("Follow moves toward target", follower.follow(leader, 10, 10))
+check(f"Follower at ({follower.location.x},{follower.location.y})",
+      follower.location.x == 1 and follower.location.y == 1)
+
+# Follow again
+follower.follow(leader, 10, 10)
+check(f"Closer: ({follower.location.x},{follower.location.y})",
+      follower.location.x == 2 and follower.location.y == 2)
+
+# Follow when already at target
+follower.location = leader.location._replace()
+check("Follow at same location returns False", not follower.follow(leader, 10, 10))
+
+# ==========================================================================
+print("\n=== Call Backup ===")
+m34 = make_map(cols=20, rows=20)
+caller = make_creature(m34, x=10, y=10, stats={Stat.PER: 12}, name='Caller')
+
+# Create allies and enemies at various distances
+ally1 = make_creature(m34, x=11, y=10, stats={Stat.PER: 14}, name='Ally1')
+# HEARING_RANGE = 3 + dmod(14) = 5, distance = 1 → in range
+ally1.record_interaction(caller, 10.0)  # positive sentiment
+
+ally2 = make_creature(m34, x=13, y=10, stats={Stat.PER: 10}, name='Ally2')
+# HEARING_RANGE = 3, distance = 3 → in range
+ally2.record_interaction(caller, 5.0)
+
+enemy = make_creature(m34, x=12, y=10, stats={Stat.PER: 12}, name='Enemy')
+# Has no relationship or negative — won't respond
+enemy.record_interaction(caller, -5.0)
+
+far_ally = make_creature(m34, x=19, y=19, stats={Stat.PER: 10}, name='FarAlly')
+far_ally.record_interaction(caller, 10.0)
+# HEARING_RANGE = 3, distance = 18 → out of range
+
+responders = caller.call_backup()
+responder_names = [r.name for r in responders]
+check(f"Responders: {responder_names}", 'Ally1' in responder_names)
+check("Ally2 responds", 'Ally2' in responder_names)
+check("Enemy doesn't respond", 'Enemy' not in responder_names)
+check("Far ally doesn't respond", 'FarAlly' not in responder_names)
+
+# ==========================================================================
+print("\n=== Sleep / Wake ===")
+m35 = make_map()
+sleeper = make_creature(m35, x=0, y=0, stats={Stat.PER: 14, Stat.VIT: 12})
+
+# Drain resources
+sleeper.stats.base[Stat.CUR_STAMINA] = 1
+sleeper.stats.base[Stat.CUR_MANA] = 0
+
+det_before = sleeper.stats.active[Stat.DETECTION]()
+check("Enter sleep", sleeper.sleep(now=1000))
+check("Is sleeping", sleeper.is_sleeping)
+check("Stamina fully restored",
+      sleeper.stats.active[Stat.CUR_STAMINA]() == sleeper.stats.active[Stat.MAX_STAMINA]())
+check("Mana fully restored",
+      sleeper.stats.active[Stat.CUR_MANA]() == sleeper.stats.active[Stat.MAX_MANA]())
+
+det_during = sleeper.stats.active[Stat.DETECTION]()
+check(f"Detection reduced while sleeping: {det_before} → {det_during}",
+      det_during == det_before - 5)
+
+# Can't sleep twice
+check("Can't double-sleep", not sleeper.sleep(now=2000))
+
+sleeper.wake()
+check("Not sleeping after wake", not sleeper.is_sleeping)
+det_after = sleeper.stats.active[Stat.DETECTION]()
+check(f"Detection restored: {det_after}", det_after == det_before)
+
+# ==========================================================================
+print("\n=== Set Trap ===")
+m36 = make_map()
+trapper = make_creature(m36, x=0, y=0,
+                        stats={Stat.INT: 14, Stat.PER: 12}, name='Trapper')
+# CRAFT_QUALITY = dmod(14) + dmod(12)//2 = 2 + 1//2 = 2 + 0 = 2
+# Wait, dmod(12)=1, 1//2=0. So CRAFT_QUALITY = 2 + 0 = 2
+
+trap_item = Item(name='Bear Trap', weight=3.0, value=5.0)
+trapper.inventory.items.append(trap_item)
+
+check("Set trap succeeds", trapper.set_trap(trap_item, dc=10))
+check("Trap item removed from inventory", trap_item not in trapper.inventory.items)
+
+tile36 = m36.tiles[MapKey(0, 0, 0)]
+check("Trap item on tile", any(i.name == 'Bear Trap' for i in tile36.inventory.items))
+
+craft_q = trapper.stats.active[Stat.CRAFT_QUALITY]()
+expected_dc = 10 + craft_q
+check(f"Trap DC on tile = {tile36.stat_mods.get('trap_dc')} (10 + craft {craft_q} = {expected_dc})",
+      tile36.stat_mods.get('trap_dc') == expected_dc)
+
+# Can't set trap without the item
+fake_trap = Item(name='Fake', weight=1.0)
+check("Can't set trap without item in inventory", not trapper.set_trap(fake_trap))
+
+# ==========================================================================
 print(f"\n{'='*50}")
 print(f"Results: {PASS} passed, {FAIL} failed out of {PASS+FAIL} tests")
 if FAIL:
