@@ -47,10 +47,38 @@ via reinforcement learning in headless multi-agent simulations.
 - LOOT_GINI: Gini coefficient from LCK for loot generation
 - Additive stacking only, never multiplicative
 
+## Relationship & Rumor System (completed)
+- **Relationships**: `{uid: [sentiment, count, min_score, max_score]}`
+  - sentiment = raw cumulative score
+  - count = number of interactions
+  - min/max = bounds of individual interaction scores
+  - confidence = `count / (count + 5)` (derived, not stored)
+  - curiosity = `1 / (1 + count)` (derived, not stored)
+- **Rumors**: `{subject_uid: [(source_uid, sentiment, confidence, tick)]}`
+  - Inherited opinions weighted by: source trust * confidence * time decay
+  - Strangers get slight trust (0.1) for their rumors
+  - Direct experience always outweighs rumors over time
+
+## Future Model Input Variables (design notes)
+Per-creature observation for the RL model:
+- Own stats (7 base stats, key derived stats)
+- HP%, stamina%, mana%
+- Per nearby creature:
+  - distance, relative direction
+  - species (observable)
+  - relationship sentiment, count, min, max (if known)
+  - relationship confidence (derived from count)
+  - rumor opinion, rumor confidence (if no direct relationship)
+  - curiosity score (high for unknowns)
+  - observable threat level (equipment, size, species)
+- Terrain: tile type, walkability of adjacent tiles
+- Temporal: HP delta, stamina delta, distance-to-nearest-threat delta (over N ticks)
+- INT-scaled curiosity reward for information gathering
+
 ## Implementation Roadmap
 1. ~~Review creature stats, derived stats, contests, and all existing mechanics~~
-2. Add stable UID to Trackable (incrementing int, pickle-safe, reset on load)
-3. Add relationships dict to Creature ({uid: (score, count)})
+2. ~~Add stable UID to Trackable (incrementing int, pickle-safe, reset on load)~~
+3. ~~Add relationships and rumors to Creature~~
 4. Add rumors system (inherited sentiments, probabilistic gossip)
 5. Define action space — all possible creature behaviors
 6. Define interaction mechanics — what happens per action (stat contests, outcomes)

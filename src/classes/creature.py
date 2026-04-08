@@ -49,6 +49,17 @@ class Creature(WorldObject):
         # Dialogue tree placeholder — will hold dialogue data when fleshed out
         self.dialogue = None
 
+        # Relationships: {uid: [sentiment, count, min_score, max_score]}
+        # sentiment = raw cumulative score, count = number of interactions,
+        # min/max = bounds of individual interaction scores
+        self.relationships: dict[int, list] = {}
+
+        # Rumors: {subject_uid: [(source_uid, sentiment, confidence, tick)]}
+        # Inherited opinions from other creatures about third parties.
+        # confidence = source's relationship confidence with the subject
+        # tick = game tick when rumor was received (for decay)
+        self.rumors: dict[int, list] = {}
+
         # Behavior module for non-player creatures (NPC AI, monster AI, etc.)
         self.behavior = behavior
         self._cols = 0
@@ -66,6 +77,84 @@ class Creature(WorldObject):
 
         # Mana regen
         self.register_tick('mana_regen', 1000, self._do_mana_regen)
+
+    # -- Relationships ------------------------------------------------------
+
+    def record_interaction(self, other: 'Creature', score: float):
+        """Record an interaction with another creature.
+
+        Args:
+            other: the creature interacted with
+            score: positive = good, negative = bad
+        """
+        uid = other.uid
+        if uid in self.relationships:
+            rel = self.relationships[uid]
+            rel[0] += score       # sentiment
+            rel[1] += 1           # count
+            if score < rel[2]:
+                rel[2] = score    # min_score
+            if score > rel[3]:
+                rel[3] = score    # max_score
+        else:
+            self.relationships[uid] = [score, 1, score, score]
+
+    def get_relationship(self, other: 'Creature'):
+        """Return (sentiment, count, min_score, max_score) or None."""
+        return self.relationships.get(other.uid)
+
+    def relationship_confidence(self, other: 'Creature') -> float:
+        """Return 0.0–1.0 confidence based on interaction count."""
+        rel = self.relationships.get(other.uid)
+        if rel is None:
+            return 0.0
+        return rel[1] / (rel[1] + 5)
+
+    def curiosity_toward(self, other: 'Creature') -> float:
+        """Return curiosity score (high for strangers, decays with familiarity)."""
+        rel = self.relationships.get(other.uid)
+        if rel is None:
+            return 1.0
+        return 1 / (1 + rel[1])
+
+    # -- Rumors -------------------------------------------------------------
+
+    def receive_rumor(self, source: 'Creature', subject_uid: int,
+                      sentiment: float, confidence: float, tick: int):
+        """Receive a rumor about a third party from a source creature."""
+        entry = (source.uid, sentiment, confidence, tick)
+        if subject_uid in self.rumors:
+            self.rumors[subject_uid].append(entry)
+        else:
+            self.rumors[subject_uid] = [entry]
+
+    def rumor_opinion(self, subject_uid: int, current_tick: int,
+                      decay_rate: float = 0.001) -> float:
+        """Compute weighted opinion of a creature based on rumors.
+
+        Weights: source_trust * confidence * time_decay.
+        Returns 0.0 if no rumors exist.
+        """
+        rumors = self.rumors.get(subject_uid)
+        if not rumors:
+            return 0.0
+        total_weight = 0.0
+        weighted_sentiment = 0.0
+        for source_uid, sentiment, confidence, tick in rumors:
+            source_rel = self.relationships.get(source_uid)
+            if source_rel is not None:
+                # Trust the source based on our relationship with them
+                source_trust = max(0.0, source_rel[0] / (abs(source_rel[0]) + 5))
+            else:
+                source_trust = 0.1  # slight trust for strangers
+            age = current_tick - tick
+            time_decay = 1 / (1 + decay_rate * age)
+            weight = source_trust * confidence * time_decay
+            weighted_sentiment += sentiment * weight
+            total_weight += abs(weight)
+        if total_weight == 0:
+            return 0.0
+        return weighted_sentiment / total_weight
 
     # -- Experience ---------------------------------------------------------
 
