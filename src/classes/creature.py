@@ -405,6 +405,49 @@ class Creature(WorldObject):
 
     # -- Inventory ----------------------------------------------------------
 
+    @property
+    def carried_weight(self) -> float:
+        """Total weight of inventory + equipped items."""
+        inv_weight = sum(getattr(i, 'weight', 0) for i in self.inventory.items)
+        # Equipped items: use a set to avoid double-counting multi-slot items
+        eq_weight = sum(getattr(i, 'weight', 0) for i in set(self.equipment.values()))
+        return inv_weight + eq_weight
+
+    def can_carry(self, item) -> bool:
+        """Return True if picking up this item would not exceed CARRY_WEIGHT."""
+        return self.carried_weight + getattr(item, 'weight', 0) <= self.stats.active[Stat.CARRY_WEIGHT]()
+
+    def pickup(self, item) -> bool:
+        """Pick up an item from the current tile's inventory.
+
+        Checks: item is on the tile, item is inventoriable, weight fits.
+        Returns True if picked up.
+        """
+        tile = self.current_map.tiles.get(self.location)
+        if tile is None or item not in tile.inventory.items:
+            return False
+        if not getattr(item, 'inventoriable', True):
+            return False
+        if not self.can_carry(item):
+            return False
+        tile.inventory.items.remove(item)
+        self.inventory.items.append(item)
+        return True
+
+    def drop(self, item) -> bool:
+        """Drop an item from inventory onto the current tile.
+
+        Returns True if dropped.
+        """
+        if item not in self.inventory.items:
+            return False
+        tile = self.current_map.tiles.get(self.location)
+        if tile is None:
+            return False
+        self.inventory.items.remove(item)
+        tile.inventory.items.append(item)
+        return True
+
     def transfer_item(self, item, source, target):
         tile = self.current_map.tiles.get(self.location)
         accessible = [self.inventory]

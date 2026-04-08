@@ -16,16 +16,19 @@ ITEMS / INVENTORY (classes/inventory.py)
 - health: defined but no consume/use mechanic
 - poison: defined but no poison mechanic
 - durability / durability_current: defined but never decremented or checked
-- value, weight: defined but no economy or encumbrance system
+- value: defined but no economy system
+- weight: used by encumbrance (carried_weight vs CARRY_WEIGHT) — checked on pickup
 - equippable, slots, slot_count: equip/unequip logic now on Creature
 - consumable, stackable, quantity: Stackable.add() and coalesce() implemented but never called
 - ITEMS dict (data/db.py): populated from DB at load but never accessed during gameplay
 - STRUCTURES dict (data/db.py): populated from DB but never accessed (instances render via WorldObject)
-- inventoriable: defined on all items but never checked — no pickup/drop system exists
-- No items or structures are spawned at runtime — no drop/pickup/loot system
+- inventoriable: checked by pickup() but no UI or AI triggers pickup yet
+- pickup/drop implemented on Creature but no runtime caller (no input binding, no AI action)
+- No items or structures are spawned at runtime — no loot system
 
 CREATURE METHODS (classes/creature.py)
 - transfer_item(): fully implemented but never called anywhere
+- pickup/drop: implemented with encumbrance + inventoriable checks, not called yet
 
 CREATURE TRAITS (classes/creature.py)
 - sex: male/female per-creature (randomly assigned if not set), no gameplay effect yet
