@@ -2,7 +2,7 @@ from __future__ import annotations
 import random
 from classes.maps import Map, MapKey, DIRECTION_BOUNDS
 from classes.inventory import (
-    Inventory, Equippable, Consumable, Weapon, Ammunition, Slot,
+    Inventory, Equippable, Consumable, Weapon, Ammunition, Egg, Slot,
 )
 from classes.world_object import WorldObject
 from classes.stats import Stat, Stats
@@ -1424,6 +1424,344 @@ class Creature(WorldObject):
         # Sharing is a social interaction
         self.record_interaction(target, 1.0)
         target.record_interaction(self, 1.0)
+        return True
+
+    # -- Pairing / Reproduction ---------------------------------------------
+
+    ADULT_AGE = 18  # minimum age for pairing
+    PAIR_COOLDOWN_DAYS = 1  # days between pairings (both sexes)
+
+    @staticmethod
+    def _species_gate(male: 'Creature', female: 'Creature') -> bool:
+        """Species knockout check. Returns True if pairing can proceed."""
+        m_abom = male.is_abomination
+        f_abom = female.is_abomination
+
+        # Abom + abom: always pass
+        if m_abom and f_abom:
+            return True
+        # Abom male + non-abom female: never willing
+        if m_abom and not f_abom:
+            return False
+        # Non-abom male + abom female: 0.5% chance
+        if not m_abom and f_abom:
+            return random.random() < 0.005
+        # Same species: pass
+        if male.species == female.species:
+            return True
+        # Different species: 1% chance
+        return random.random() < 0.01
+
+    @staticmethod
+    def desirability(creature: 'Creature', evaluator: 'Creature') -> float:
+        """Compute desirability score of a creature from evaluator's perspective.
+
+        Factors: stats (sex-weighted), wealth, reputation.
+        Species gate is checked separately — this only runs after gate passes.
+        """
+        # Stat score: sex-dependent weighting
+        if evaluator.sex == 'female':
+            # Females value STR, CHR, INT
+            stat_score = (
+                creature.stats.active[Stat.STR]() * 0.3 +
+                creature.stats.active[Stat.CHR]() * 0.3 +
+                creature.stats.active[Stat.INT]() * 0.2 +
+                creature.stats.active[Stat.VIT]() * 0.1 +
+                creature.stats.active[Stat.LCK]() * 0.1
+            ) / 20.0  # normalize to ~1.0
+        else:
+            # Males value VIT, AGL, CHR
+            stat_score = (
+                creature.stats.active[Stat.VIT]() * 0.25 +
+                creature.stats.active[Stat.AGL]() * 0.25 +
+                creature.stats.active[Stat.CHR]() * 0.3 +
+                creature.stats.active[Stat.LCK]() * 0.1 +
+                creature.stats.active[Stat.PER]() * 0.1
+            ) / 20.0
+
+        # Wealth
+        wealth = sum(getattr(i, 'value', 0) for i in creature.inventory.items)
+        wealth += sum(getattr(i, 'value', 0) for i in set(creature.equipment.values()))
+        wealth_score = min(1.0, wealth / 50.0)
+
+        # Reputation (positive sentiment from others)
+        if creature.relationships:
+            pos = sum(r[0] for r in creature.relationships.values() if r[0] > 0)
+            total = len(creature.relationships)
+            rep_score = min(1.0, pos / (total * 5 + 1))
+        else:
+            rep_score = 0.0
+
+        return stat_score * 0.4 + wealth_score * 0.3 + rep_score * 0.3
+
+    def fecundity(self) -> float:
+        """Female fecundity curve: 1.0 at age 18, drops in late adulthood, 0 at old age."""
+        if self.sex != 'female' or self.age < self.ADULT_AGE:
+            return 0.0
+        # Linear ramp from 1.0 at 18 to 0.0 at OLD_MIN
+        if self.age >= self.OLD_MIN:
+            return 0.0
+        adult_span = self.OLD_MIN - self.ADULT_AGE
+        age_in_adulthood = self.age - self.ADULT_AGE
+        # Peak at 1.0, slow decline after midpoint
+        midpoint = adult_span * 0.6
+        if age_in_adulthood <= midpoint:
+            return 1.0
+        return max(0.0, 1.0 - (age_in_adulthood - midpoint) / (adult_span - midpoint))
+
+    def propose_pairing(self, female: 'Creature', now: int) -> dict:
+        """Male proposes pairing to a female. Uses trade-based evaluation.
+
+        Returns dict: accepted, egg (Egg or None), reason.
+        """
+        result = {'accepted': False, 'egg': None, 'reason': '', 'forced': False}
+
+        # Validation
+        if self.sex != 'male' or female.sex != 'female':
+            result['reason'] = 'wrong_sex'
+            return result
+        if self.age < self.ADULT_AGE or female.age < self.ADULT_AGE:
+            result['reason'] = 'underage'
+            return result
+        if female.is_pregnant:
+            result['reason'] = 'already_pregnant'
+            return result
+        if self._sight_distance(female) > 1:
+            result['reason'] = 'not_adjacent'
+            return result
+        if now < self._pair_cooldown:
+            result['reason'] = 'cooldown'
+            return result
+
+        # Species knockout gate
+        if not self._species_gate(self, female):
+            result['reason'] = 'species_rejected'
+            return result
+
+        # Male willingness: inverse of prudishness
+        if random.random() > (1.0 - self.prudishness):
+            result['reason'] = 'male_unwilling'
+            return result
+
+        # Female evaluation: relationship depth + inverse prudishness + fecundity
+        rel = female.get_relationship(self)
+        rel_depth = rel[0] if rel else 0.0
+        min_relationship = 5.0 * female.prudishness  # higher prudishness = need more relationship
+        male_desirability = self.desirability(self, female)
+
+        # Female willingness: needs positive relationship OR sufficient desirability
+        female_willing = (
+            rel_depth >= min_relationship or
+            male_desirability > 0.7  # very attractive males can override
+        )
+        female_willing = female_willing and (random.random() < (1.0 - female.prudishness))
+        female_willing = female_willing and (random.random() < female.fecundity())
+
+        if not female_willing:
+            result['reason'] = 'female_unwilling'
+            return result
+
+        return self._execute_pairing(female, now, result)
+
+    def force_pairing(self, female: 'Creature', now: int) -> dict:
+        """Attempt forced pairing via grapple. Male-initiated only.
+
+        Returns dict: accepted, egg, reason, forced.
+        """
+        result = {'accepted': False, 'egg': None, 'reason': '', 'forced': True}
+
+        # Same validation as propose_pairing
+        if self.sex != 'male' or female.sex != 'female':
+            result['reason'] = 'wrong_sex'
+            return result
+        if self.age < self.ADULT_AGE or female.age < self.ADULT_AGE:
+            result['reason'] = 'underage'
+            return result
+        if female.is_pregnant:
+            result['reason'] = 'already_pregnant'
+            return result
+        if self._sight_distance(female) > 1:
+            result['reason'] = 'not_adjacent'
+            return result
+        if now < self._pair_cooldown:
+            result['reason'] = 'cooldown'
+            return result
+        if not self._species_gate(self, female):
+            result['reason'] = 'species_rejected'
+            return result
+
+        # Grapple check
+        grapple_result = self.grapple(female)
+        if not grapple_result['success']:
+            result['reason'] = 'grapple_failed'
+            female.record_interaction(self, -8.0)
+            return result
+
+        return self._execute_pairing(female, now, result)
+
+    def _execute_pairing(self, female: 'Creature', now: int, result: dict) -> dict:
+        """Common pairing execution after willingness/grapple check passes."""
+        from classes.genetics import (
+            inherit, express, apply_genetics, check_inbreeding,
+            generate_chromosomes,
+        )
+
+        # Costs
+        # Male: small HP + stamina cost
+        hp = self.stats.active[Stat.HP_CURR]()
+        self.stats.base[Stat.HP_CURR] = max(1, hp - max(1, hp // 10))
+        stam = self.stats.active[Stat.CUR_STAMINA]()
+        self.stats.base[Stat.CUR_STAMINA] = max(0, stam - max(1, stam // 5))
+
+        # Cooldowns
+        day_ms = 86_400_000  # 1 game day in ms (assuming 1 day = 1440 real seconds)
+        self._pair_cooldown = now + day_ms
+
+        # Determine child sex
+        child_sex = random.choice(('male', 'female'))
+
+        # Check inbreeding
+        from classes.trackable import Trackable
+        lineage = {}
+        for obj in Trackable.all_instances():
+            if hasattr(obj, 'mother_uid') and hasattr(obj, 'father_uid'):
+                lineage[obj.uid] = (obj.mother_uid, obj.father_uid)
+
+        inbreeding_closeness = check_inbreeding(
+            female.uid, self.uid, lineage, generations=3
+        )
+
+        # Generate child chromosomes
+        if self.chromosomes and female.chromosomes:
+            child_chroms = inherit(
+                female.chromosomes, self.chromosomes,
+                child_sex, inbreeding_closeness=inbreeding_closeness,
+            )
+        else:
+            child_chroms = generate_chromosomes(child_sex)
+
+        # Determine species
+        is_abom = self.species != female.species or self.is_abomination or female.is_abomination
+        child_species = female.species if not is_abom else 'abomination'
+
+        # Derive stats from genetics
+        from data.db import SPECIES
+        species_stats = {}
+        species_data = SPECIES.get(child_species, {})
+        for k, v in species_data.items():
+            if isinstance(k, Stat):
+                species_stats[k] = v
+
+        genetic_mods = express(child_chroms)
+        child_stats = apply_genetics(species_stats, genetic_mods)
+        child_stats[Stat.LVL] = 0
+
+        # Create the creature inside the egg (unhatched, no map yet)
+        child = Creature.__new__(Creature)
+        # Minimal init — full init happens at hatch via Egg.hatch()
+        child.name = None
+        child.species = child_species
+        child.sex = child_sex
+        child.chromosomes = child_chroms
+        child.mother_uid = female.uid
+        child.father_uid = self.uid
+        child.is_abomination = is_abom
+        child.inbred = inbreeding_closeness > 0
+        child.age = 0
+        child.prudishness = species_data.get('prudishness', 0.5)
+        child.relationships = {}
+        child.rumors = {}
+        child.is_pregnant = False
+        child._pair_cooldown = 0
+        child.sleep_debt = 0
+        child._fatigue_level = 0
+        child._stats_for_egg = child_stats  # stored for hatch init
+
+        # Create egg
+        egg = Egg(
+            creature=child,
+            mother_species=female.species,
+            father_species=self.species,
+        )
+
+        # Mother drops abomination eggs immediately
+        if is_abom:
+            tile = female.current_map.tiles.get(female.location)
+            if tile:
+                tile.inventory.items.append(egg)
+            # Reputational + psychic penalty for mother
+            female.record_interaction(self, -5.0)
+        else:
+            # Mother carries the egg — enters pregnancy
+            female.inventory.items.append(egg)
+            female.is_pregnant = True
+            female._pregnancy_egg = egg
+
+            # Apply pregnancy debuffs
+            female.stats.add_mod('pregnancy', Stat.HP_REGEN_DELAY, 3)
+            female.stats.add_mod('pregnancy', Stat.STAM_REGEN, -2)
+            female.stats.add_mod('pregnancy', Stat.MANA_REGEN, -1)
+            female.stats.add_mod('pregnancy', Stat.AGL, -2)
+            female.stats.add_mod('pregnancy', Stat.MOVE_SPEED, -1)
+            # Pregnancy buff: loot quality
+            female.stats.add_mod('pregnancy', Stat.LOOT_GINI, 0.1)
+
+        # Record interactions
+        self.record_interaction(female, 5.0)
+        female.record_interaction(self, 3.0 if not result.get('forced') else -5.0)
+
+        result['accepted'] = True
+        result['egg'] = egg
+        return result
+
+    def end_pregnancy(self):
+        """End pregnancy: remove debuffs, drop/hatch egg."""
+        if not self.is_pregnant:
+            return None
+        self.is_pregnant = False
+        self.stats.remove_mods_by_source('pregnancy')
+        egg = getattr(self, '_pregnancy_egg', None)
+        self._pregnancy_egg = None
+        return egg
+
+    def solicit_rumor(self, target: 'Creature', tick: int) -> bool:
+        """Ask another creature for gossip about someone you barely know.
+
+        Targets creatures you have a weak/shallow opinion of but aren't strangers.
+        Returns True if a rumor was received.
+        """
+        if not self.can_see(target):
+            return False
+
+        # Find a subject we have a weak opinion of
+        candidates = []
+        for uid, rel in self.relationships.items():
+            # Weak = low count (1-3) and small sentiment magnitude
+            if 1 <= rel[1] <= 3 and abs(rel[0]) < 5:
+                candidates.append(uid)
+
+        if not candidates:
+            return False
+
+        subject_uid = random.choice(candidates)
+
+        # Does the target know anything about this subject?
+        target_rel = target.relationships.get(subject_uid)
+        if target_rel is None:
+            return False
+
+        # CHR-scaled success
+        chr_mod = (self.stats.active[Stat.CHR]() - 10) // 2
+        chance = min(0.9, max(0.2, 0.5 + chr_mod * 0.05))
+        if random.random() > chance:
+            return False
+
+        confidence = target_rel[1] / (target_rel[1] + 5)
+        self.receive_rumor(target, subject_uid, target_rel[0], confidence, tick)
+
+        # Social interaction
+        self.record_interaction(target, 0.5)
+        target.record_interaction(self, 0.5)
         return True
 
     # -- Utility Actions ----------------------------------------------------

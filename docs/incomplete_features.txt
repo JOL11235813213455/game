@@ -41,13 +41,20 @@ CREATURE TEMPLATES (data/db.py, editor/creatures_tab.py)
 - Species template + stat/trait overrides (level, sex, age, prudishness, behavior, items)
 - Loaded into CREATURES dict but no spawning system consumes them yet
 
-MATING / PAIRING (not yet implemented)
-- Pairings produce eggs (Item) placed on the ground
-- Eggs can be: scavenged by other creatures, hatch in place, or picked up
-- Cross-species pairing → "SpeciesAxSpeciesB" abomination offspring
-- Abominations shunned by most creatures (large negative disposition penalty)
-- Trait inheritance: offspring stats derived from parents via combination
-- Hatched creatures start at age 0
+MATING / PAIRING (partially implemented)
+- Genetics system: 14-gene chromosomes, Mendelian inheritance, sex-linked biases,
+  2% mutation (graduated inbreeding: siblings 20%, grandparent 12%, great-gp 7%)
+- Egg class: Item containing unhatched Creature, live/dead status, maternal buff
+- propose_pairing(): trade-based evaluation, species knockout gate (99% cross-species
+  rejection), desirability function, fecundity curve, prudishness gating
+- force_pairing(): grapple-based, records negative interactions
+- Pregnancy debuffs: -2 AGL, -1 MOVE_SPEED, -2 STAM_REGEN, -1 MANA_REGEN, +HP_REGEN_DELAY
+- Pregnancy buffs: LOOT_GINI bonus
+- Hatching: creates proper Creature from egg data, maternal stat buff from time with mother
+- solicit_rumor(): ask for gossip about weak acquaintances
+- NOT YET: witness reactions to forced encounters, tent sprite, egg eating reputation,
+  amorous pair travel/work together, gender competition dynamics, age-based behavioral
+  modifiers, egg world limits
 
 DIALOGUE SYSTEM (classes/creature.py, data/db.py, editor/dialogue_tab.py)
 - dialogue table: conversation trees with parent-child nodes (parent_id=NULL for roots)

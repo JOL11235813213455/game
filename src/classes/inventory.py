@@ -179,6 +179,123 @@ class Structure(Item):
         self.entry_points    = entry_points or {}
         self.nested_map_name = nested_map
 
+class Egg(Item):
+    """An egg containing an unhatched creature.
+
+    The egg is a special item: it contains a full Creature object that
+    cannot act until hatched. The creature inside has genetics, stats,
+    parents, species — but zero agency.
+    """
+    z_index   = 2
+    collision = False
+
+    def __init__(
+        self,
+        creature=None,
+        mother_species: str = '',
+        father_species: str = '',
+        **kwargs,
+    ):
+        kwargs.setdefault('name', 'Egg')
+        kwargs.setdefault('description', 'A fertilized egg')
+        kwargs.setdefault('weight', 1.0)
+        kwargs.setdefault('value', 2.0)
+        kwargs.setdefault('inventoriable', True)
+        super().__init__(**kwargs)
+        self.creature = creature           # the Creature inside (unhatched)
+        self.live = True                   # False = stopped growing / dead
+        self.days_with_mother = 0          # days carried by biological mother
+        self.gestation_days = 0            # total days since conception
+        self.gestation_period = 30         # days until hatch
+        self.mother_species = mother_species
+        self.father_species = father_species
+
+    @property
+    def is_abomination(self) -> bool:
+        return self.mother_species != self.father_species
+
+    @property
+    def ready_to_hatch(self) -> bool:
+        return self.live and self.gestation_days >= self.gestation_period
+
+    def tick_gestation(self, carried_by_mother: bool = False):
+        """Advance one day of gestation.
+
+        Args:
+            carried_by_mother: True if biological mother is carrying this egg
+        """
+        if not self.live:
+            return
+        self.gestation_days += 1
+        if carried_by_mother:
+            self.days_with_mother += 1
+
+        # Random chance of egg dying (~1% per day)
+        import random
+        if random.random() < 0.01:
+            self.live = False
+
+    def apply_maternal_buff(self):
+        """Apply stat buff to the creature based on time with mother.
+
+        Full 30 days → +2 to a random base stat.
+        Partial time → proportional chance of +1.
+        """
+        if self.creature is None or self.days_with_mother <= 0:
+            return
+        import random
+        from classes.stats import Stat, BASE_STATS
+        ratio = min(1.0, self.days_with_mother / self.gestation_period)
+        # Full term = guaranteed +2 to random stat, partial = proportional
+        bonus = 2 if ratio >= 1.0 else (1 if random.random() < ratio else 0)
+        if bonus > 0:
+            stat = random.choice(list(BASE_STATS))
+            if hasattr(self.creature, 'stats'):
+                self.creature.stats.base[stat] = self.creature.stats.base.get(stat, 0) + bonus
+
+    def hatch(self, game_map, location):
+        """Hatch the egg: apply maternal buff, create proper creature on map.
+
+        Returns the Creature, or None if egg is dead.
+        """
+        if not self.live or self.creature is None:
+            return None
+
+        self.apply_maternal_buff()
+        embryo = self.creature
+
+        # If the embryo has stored stats (from _execute_pairing), use them
+        # to create a proper fully-initialized Creature
+        stats = getattr(embryo, '_stats_for_egg', None)
+        if stats is not None:
+            from classes.creature import Creature
+            child = Creature(
+                current_map=game_map,
+                location=location,
+                name=embryo.name,
+                species=embryo.species,
+                stats=stats,
+                sex=embryo.sex,
+                age=0,
+                chromosomes=embryo.chromosomes,
+                mother_uid=embryo.mother_uid,
+                father_uid=embryo.father_uid,
+                is_abomination=embryo.is_abomination,
+                prudishness=embryo.prudishness,
+            )
+            child.inbred = getattr(embryo, 'inbred', False)
+        else:
+            # Fallback: embryo is already a full Creature
+            embryo.current_map = game_map
+            embryo.location = location
+            embryo.age = 0
+            child = embryo
+
+        self.live = False  # Egg is consumed
+        self.creature = child  # Update reference
+        return child
+
+
 CLASS_MAP: dict[str, type] = {
     'Item':       Item,
     'Consumable': Consumable,
@@ -186,6 +303,7 @@ CLASS_MAP: dict[str, type] = {
     'Weapon':     Weapon,
     'Wearable':   Wearable,
     'Structure':  Structure,
+    'Egg':        Egg,
 }
 
 class Inventory(Trackable):

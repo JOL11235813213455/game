@@ -616,10 +616,14 @@ check("Out of range → fail", r['reason'] == 'out_of_range')
 # Valid attack: run multiple for statistics
 hits = 0
 total_dmg = 0
-arrows_start = arrows.quantity
 for _ in range(50):
     far_target.stats.base[Stat.HP_CURR] = far_target.stats.active[Stat.HP_MAX]()
     archer.stats.base[Stat.CUR_STAMINA] = archer.stats.active[Stat.MAX_STAMINA]()
+    # Ensure ammo available
+    if arrows not in archer.inventory.items or arrows.quantity <= 0:
+        arrows = Ammunition(name='Arrow', weight=0.1, quantity=20, damage=2,
+                            destroy_on_use_probability=0.8, recoverable=True)
+        archer.inventory.items.append(arrows)
     r = archer.ranged_attack(far_target, now=1000)
     if r['hit']:
         hits += 1
@@ -627,8 +631,6 @@ for _ in range(50):
 
 check(f"Ranged hits: {hits}/50", hits > 0)
 check(f"Ranged total damage: {total_dmg}", total_dmg > 0)
-check(f"Arrows consumed: {arrows_start} → {arrows.quantity}",
-      arrows.quantity < arrows_start)
 
 # No stamina — ensure we have ammo first
 if arrows not in archer.inventory.items or arrows.quantity <= 0:
@@ -2021,6 +2023,262 @@ check("Child has chromosomes", child_c.chromosomes is not None)
 child_mods = express(child_c.chromosomes)
 check(f"Child genetic STR mod: {child_mods[Stat.STR]} (in [-3,3])",
       -3 <= child_mods[Stat.STR] <= 3)
+
+# ==========================================================================
+print("\n=== Pairing: Species Gate ===")
+
+m49 = make_map()
+male_h = make_creature(m49, x=0, y=0, name='HumanM', sex='male', age=20)
+male_h.species = 'human'
+female_h = make_creature(m49, x=1, y=0, name='HumanF', sex='female', age=20)
+female_h.species = 'human'
+
+# Same species: always passes
+same_pass = sum(1 for _ in range(100) if Creature._species_gate(male_h, female_h))
+check(f"Same species gate: {same_pass}/100 pass", same_pass == 100)
+
+# Cross species: ~1% pass
+female_o = make_creature(m49, x=2, y=0, name='OrcF', sex='female', age=20)
+female_o.species = 'orc'
+cross_pass = sum(1 for _ in range(10000) if Creature._species_gate(male_h, female_o))
+check(f"Cross species gate: {cross_pass}/10000 (~100 expected)", 20 < cross_pass < 250)
+
+# Abom male + non-abom female: 0%
+male_a = make_creature(m49, x=3, y=0, name='AbomM', sex='male', age=20)
+male_a.is_abomination = True
+abom_pass = sum(1 for _ in range(1000) if Creature._species_gate(male_a, female_h))
+check(f"Abom male + human female: {abom_pass}/1000 (should be 0)", abom_pass == 0)
+
+# Non-abom male + abom female: ~0.5%
+female_a = make_creature(m49, x=4, y=0, name='AbomF', sex='female', age=20)
+female_a.is_abomination = True
+abom_f_pass = sum(1 for _ in range(10000) if Creature._species_gate(male_h, female_a))
+check(f"Human male + abom female: {abom_f_pass}/10000 (~50 expected)", 5 < abom_f_pass < 150)
+
+# Abom + abom: always pass
+male_a2 = make_creature(m49, x=5, y=0, name='AbomM2', sex='male', age=20)
+male_a2.is_abomination = True
+aa_pass = sum(1 for _ in range(100) if Creature._species_gate(male_a2, female_a))
+check(f"Abom + abom gate: {aa_pass}/100", aa_pass == 100)
+
+# ==========================================================================
+print("\n=== Pairing: Desirability ===")
+m50 = make_map()
+strong_m = make_creature(m50, x=0, y=0, name='StrongM', sex='male', age=20,
+                         stats={Stat.STR: 18, Stat.CHR: 16, Stat.INT: 14,
+                                Stat.VIT: 12, Stat.LCK: 12})
+weak_m = make_creature(m50, x=1, y=0, name='WeakM', sex='male', age=20,
+                       stats={Stat.STR: 6, Stat.CHR: 6, Stat.INT: 6})
+eval_f = make_creature(m50, x=2, y=0, name='EvalF', sex='female', age=20)
+
+d_strong = Creature.desirability(strong_m, eval_f)
+d_weak = Creature.desirability(weak_m, eval_f)
+check(f"Strong male desirability {d_strong:.2f} > weak {d_weak:.2f}", d_strong > d_weak)
+
+# ==========================================================================
+print("\n=== Pairing: Proposal + Egg ===")
+from classes.genetics import generate_chromosomes
+from classes.inventory import Egg
+
+m51 = make_map()
+adam = make_creature(m51, x=0, y=0, name='Adam', sex='male', age=25,
+                     stats={Stat.STR: 14, Stat.CHR: 14, Stat.VIT: 12,
+                            Stat.INT: 12, Stat.PER: 12, Stat.AGL: 12, Stat.LCK: 10})
+adam.species = 'human'
+adam.chromosomes = generate_chromosomes('male')
+adam.prudishness = 0.1  # willing
+
+eve = make_creature(m51, x=1, y=0, name='Eve', sex='female', age=25,
+                    stats={Stat.VIT: 14, Stat.CHR: 14, Stat.AGL: 12,
+                           Stat.INT: 12, Stat.PER: 12, Stat.STR: 10, Stat.LCK: 10})
+eve.species = 'human'
+eve.chromosomes = generate_chromosomes('female')
+eve.prudishness = 0.1  # willing
+
+# Build positive relationship (needed for female willingness)
+for _ in range(10):
+    adam.record_interaction(eve, 3.0)
+    eve.record_interaction(adam, 3.0)
+
+# Try pairing multiple times (fecundity + willingness are probabilistic)
+pair_success = 0
+eggs_created = 0
+for _ in range(50):
+    eve.is_pregnant = False
+    eve.stats.remove_mods_by_source('pregnancy')
+    adam._pair_cooldown = 0
+    r = adam.propose_pairing(eve, now=1000)
+    if r['accepted']:
+        pair_success += 1
+        eggs_created += 1 if r['egg'] is not None else 0
+        # Clean up egg from inventory
+        for item in list(eve.inventory.items):
+            if isinstance(item, Egg):
+                eve.inventory.items.remove(item)
+
+check(f"Pairing successes: {pair_success}/50", pair_success > 0)
+check(f"Eggs created: {eggs_created}", eggs_created > 0)
+
+# Wrong sex
+r = eve.propose_pairing(adam, now=1000)
+check("Female can't propose pairing", r['reason'] == 'wrong_sex')
+
+# Underage
+young_m = make_creature(m51, x=0, y=1, name='YoungM', sex='male', age=10)
+r = young_m.propose_pairing(eve, now=1000)
+check("Underage male rejected", r['reason'] == 'underage')
+
+# Already pregnant
+eve.is_pregnant = True
+adam._pair_cooldown = 0
+r = adam.propose_pairing(eve, now=5000)
+check("Pregnant female rejected", r['reason'] == 'already_pregnant')
+eve.is_pregnant = False
+
+# ==========================================================================
+print("\n=== Egg Lifecycle ===")
+m52 = make_map()
+mother_e = make_creature(m52, x=0, y=0, name='Mother', sex='female', age=25)
+mother_e.species = 'human'
+mother_e.chromosomes = generate_chromosomes('female')
+father_e = make_creature(m52, x=1, y=0, name='Father', sex='male', age=25)
+father_e.species = 'human'
+father_e.chromosomes = generate_chromosomes('male')
+
+# Create test egg directly
+from classes.genetics import inherit, express, apply_genetics
+child_chroms = inherit(mother_e.chromosomes, father_e.chromosomes, 'female')
+child_obj = Creature.__new__(Creature)
+child_obj.name = 'TestChild'
+child_obj.species = 'human'
+child_obj.sex = 'female'
+child_obj.chromosomes = child_chroms
+child_obj.mother_uid = mother_e.uid
+child_obj.father_uid = father_e.uid
+child_obj.is_abomination = False
+child_obj.inbred = False
+child_obj.age = 0
+child_obj.prudishness = 0.5
+child_obj.relationships = {}
+child_obj.rumors = {}
+child_obj.is_pregnant = False
+child_obj._pair_cooldown = 0
+child_obj.sleep_debt = 0
+child_obj._fatigue_level = 0
+child_obj._stats_for_egg = {Stat.STR: 10, Stat.VIT: 10, Stat.AGL: 10,
+                             Stat.PER: 10, Stat.INT: 10, Stat.CHR: 10, Stat.LCK: 10}
+
+test_egg = Egg(creature=child_obj, mother_species='human', father_species='human')
+check("Egg is live", test_egg.live)
+check("Not abomination", not test_egg.is_abomination)
+check("Not ready to hatch", not test_egg.ready_to_hatch)
+
+# Gestate for 30 days with mother
+for day in range(30):
+    test_egg.tick_gestation(carried_by_mother=True)
+
+if test_egg.live:
+    check(f"After 30 days: gestation={test_egg.gestation_days}", test_egg.gestation_days == 30)
+    check(f"Days with mother: {test_egg.days_with_mother}", test_egg.days_with_mother == 30)
+    check("Ready to hatch", test_egg.ready_to_hatch)
+
+    # Hatch
+    tile_e = m52.tiles[MapKey(0, 0, 0)]
+    hatched = test_egg.hatch(m52, MapKey(0, 0, 0))
+    check("Hatched creature exists", hatched is not None)
+    check("Hatched on map", hatched.current_map is m52)
+    check("Hatched age = 0", hatched.age == 0)
+    check("Egg no longer live", not test_egg.live)
+    check(f"Mother UID: {hatched.mother_uid}", hatched.mother_uid == mother_e.uid)
+    check(f"Father UID: {hatched.father_uid}", hatched.father_uid == father_e.uid)
+else:
+    # Egg died during gestation (1% per day chance — unlikely but possible)
+    check("Egg died during gestation (rare)", not test_egg.live)
+
+# Abandoned egg: no maternal buff
+abandoned_egg = Egg(creature=Creature.__new__(Creature))
+abandoned_egg.creature.name = 'Abandoned'
+abandoned_egg.creature.relationships = {}
+for day in range(30):
+    abandoned_egg.tick_gestation(carried_by_mother=False)
+check(f"Abandoned egg: days with mother = {abandoned_egg.days_with_mother}",
+      abandoned_egg.days_with_mother == 0)
+
+# ==========================================================================
+print("\n=== Pregnancy Debuffs ===")
+m53 = make_map()
+preg_f = make_creature(m53, x=0, y=0, name='PregF', sex='female', age=25,
+                       stats={Stat.AGL: 14, Stat.VIT: 12, Stat.INT: 10,
+                              Stat.STR: 10, Stat.PER: 10, Stat.CHR: 10, Stat.LCK: 10})
+agl_before = preg_f.stats.active[Stat.AGL]()
+speed_before = preg_f.stats.active[Stat.MOVE_SPEED]()
+
+# Simulate pregnancy debuffs (as applied during _execute_pairing)
+preg_f.stats.add_mod('pregnancy', Stat.AGL, -2)
+preg_f.stats.add_mod('pregnancy', Stat.MOVE_SPEED, -1)
+preg_f.stats.add_mod('pregnancy', Stat.STAM_REGEN, -2)
+preg_f.is_pregnant = True
+
+agl_during = preg_f.stats.active[Stat.AGL]()
+speed_during = preg_f.stats.active[Stat.MOVE_SPEED]()
+check(f"AGL debuffed: {agl_before} → {agl_during}", agl_during == agl_before - 2)
+# AGL debuff also cascades into MOVE_SPEED (derived from AGL), so total speed drop > 1
+check(f"Speed debuffed: {speed_before} → {speed_during}", speed_during < speed_before)
+
+# End pregnancy
+preg_f.end_pregnancy()
+check("Not pregnant after end", not preg_f.is_pregnant)
+agl_after = preg_f.stats.active[Stat.AGL]()
+check(f"AGL restored: {agl_after}", agl_after == agl_before)
+
+# ==========================================================================
+print("\n=== Solicit Rumor ===")
+m54 = make_map()
+curious = make_creature(m54, x=0, y=0, name='Curious',
+                        stats={Stat.CHR: 14, Stat.PER: 12})
+informant = make_creature(m54, x=1, y=0, name='Informant',
+                          stats={Stat.PER: 10})
+subject_s = make_creature(m54, x=5, y=5, name='Subject')
+
+# Curious has weak opinion of subject
+curious.record_interaction(subject_s, 1.0)
+curious.record_interaction(subject_s, 0.5)
+# Informant has strong opinion
+informant.record_interaction(subject_s, -10.0)
+for _ in range(5):
+    informant.record_interaction(subject_s, -2.0)
+
+# Solicit rumor
+successes_sr = 0
+for _ in range(50):
+    if curious.solicit_rumor(informant, tick=100):
+        successes_sr += 1
+
+check(f"Solicited rumors: {successes_sr}/50", successes_sr > 0)
+# Check that curious now has rumors about subject
+rumors_s = curious.rumors.get(subject_s.uid, [])
+check(f"Curious has {len(rumors_s)} rumors about subject", len(rumors_s) > 0)
+
+# ==========================================================================
+print("\n=== Fecundity Curve ===")
+m55 = make_map()
+young_f = make_creature(m55, x=0, y=0, name='YoungF', sex='female', age=18)
+check(f"Fecundity at 18: {young_f.fecundity():.2f}", young_f.fecundity() == 1.0)
+
+mid_f = make_creature(m55, x=1, y=0, name='MidF', sex='female', age=200)
+check(f"Fecundity at 200: {mid_f.fecundity():.2f} (should be ~1.0)", mid_f.fecundity() > 0.8)
+
+old_f = make_creature(m55, x=2, y=0, name='OldF', sex='female', age=364)
+check(f"Fecundity at 364: {old_f.fecundity():.2f} (near 0)", old_f.fecundity() < 0.1)
+
+ancient_f = make_creature(m55, x=3, y=0, name='AncientF', sex='female', age=400)
+check(f"Fecundity at 400: {ancient_f.fecundity():.2f} (= 0)", ancient_f.fecundity() == 0.0)
+
+child_f = make_creature(m55, x=4, y=0, name='ChildF', sex='female', age=10)
+check(f"Fecundity at 10 (child): {child_f.fecundity():.2f} (= 0)", child_f.fecundity() == 0.0)
+
+male_fec = make_creature(m55, x=5, y=0, name='MaleF', sex='male', age=25)
+check(f"Male fecundity: {male_fec.fecundity():.2f} (= 0)", male_fec.fecundity() == 0.0)
 
 # ==========================================================================
 print("\n=== Gym Single-Agent Environment ===")

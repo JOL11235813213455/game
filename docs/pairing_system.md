@@ -53,8 +53,9 @@
 ### Requirements
 - Must be male + female
 - Both must be **18+ game days old** (adult)
-- Female cannot be pregnant
+- Female cannot be made pregnant while pregnant
 - Male cooldown: **1 game day** (tracked via Trackable timer)
+- female cooldown: hatching birthing egg + 1 day
 - Minimum positive relationship required — OR barter — OR grapple
 
 ### Species Compatibility (Knockout Probability)
