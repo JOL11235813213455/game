@@ -314,8 +314,9 @@ DERIVED_FORMULAS: dict[Stat, callable] = {
 # Each side rolls d20 + their stat; higher wins.
 
 OPPOSING_STATS: dict[str, tuple[Stat, Stat]] = {
-    # -- Combat: hit resolution --
+    # -- Combat: active defenses (defender chooses dodge OR block, not both) --
     'accuracy_vs_dodge':     (Stat.ACCURACY,      Stat.DODGE),
+    'accuracy_vs_block':     (Stat.ACCURACY,      Stat.BLOCK),
     'stealth_vs_detection':  (Stat.STEALTH,      Stat.DETECTION),
     # -- Social: action vs resistance --
     'persuasion_vs_fear':    (Stat.PERSUASION,    Stat.FEAR_RESIST),
@@ -331,7 +332,6 @@ OPPOSING_STATS: dict[str, tuple[Stat, Stat]] = {
 # Damage is separate from DC.
 #
 # Combat:
-#   weapon_dc vs BLOCK     — can defender block? (requires shield)
 #   weapon_dc vs ARMOR     — does armor absorb?
 #   hit_force vs STAGGER_RESIST — is defender staggered?
 #
