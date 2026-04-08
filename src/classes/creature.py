@@ -40,7 +40,7 @@ class Creature(WorldObject):
         # Build Stats from species defaults + overrides
         species_stats = {k: v for k, v in species_data.items() if isinstance(k, Stat)}
         merged = {**species_stats, **(stats or {})}
-        hd = merged.pop(Stat.HD, 6)
+        hd = merged.pop(Stat.HIT_DICE, 6)
         self.stats = Stats(base_stats=merged, hit_dice=hd)
 
         self.inventory = Inventory(items=items or [])
