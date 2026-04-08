@@ -26,6 +26,8 @@ class Creature(WorldObject):
         items: list = None,
         behavior: object = None,
         move_interval: int = 1000,
+        sex: str = None,
+        prudishness: float = None,
     ):
         super().__init__(current_map=current_map, location=location)
         self.name = name
@@ -36,6 +38,10 @@ class Creature(WorldObject):
         self.tile_scale     = species_data.get('tile_scale',     self.__class__.tile_scale)
         self.sprite_name    = species_data.get('sprite_name',    self.__class__.sprite_name)
         self.composite_name = species_data.get('composite_name', self.__class__.composite_name)
+
+        # Sex and prudishness: species default, overridable per creature
+        self.sex = sex if sex is not None else species_data.get('sex')
+        self.prudishness = prudishness if prudishness is not None else species_data.get('prudishness', 0.5)
 
         # Build Stats from species defaults + overrides
         species_stats = {k: v for k, v in species_data.items() if isinstance(k, Stat)}
@@ -329,6 +335,11 @@ class Creature(WorldObject):
             return False
         if not item.slots:
             return False
+
+        # Check stat requirements
+        for stat, min_val in item.requirements.items():
+            if self.stats.active[stat]() < min_val:
+                return False
 
         # Find slot_count free slots from the item's allowed slots
         free = [s for s in item.slots if s not in self.equipment]

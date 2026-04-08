@@ -33,6 +33,8 @@ class Item(WorldObject):
         ,sprite_name: str = None
         ,inventoriable: bool = True
         ,buffs: dict = None
+        ,action_word: str = ''
+        ,requirements: dict = None
         ):
         super().__init__()
         self.name         = name
@@ -42,6 +44,8 @@ class Item(WorldObject):
         self.sprite_name  = sprite_name
         self.inventoriable = inventoriable
         self.buffs        = buffs or {}
+        self.action_word  = action_word
+        self.requirements = requirements or {}
 
 class Stackable(Item):
 

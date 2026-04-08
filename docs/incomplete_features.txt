@@ -1,6 +1,6 @@
 INCOMPLETE FEATURES
 ===================
-Last updated: 2026-04-06
+Last updated: 2026-04-08
 
 TILE (classes/maps.py)
 - covered: declared and stored but never read — no gameplay or rendering effect
@@ -17,7 +17,7 @@ ITEMS / INVENTORY (classes/inventory.py)
 - poison: defined but no poison mechanic
 - durability / durability_current: defined but never decremented or checked
 - value, weight: defined but no economy or encumbrance system
-- equippable, slots, slot_count: no equip/unequip logic exists
+- equippable, slots, slot_count: equip/unequip logic now on Creature
 - consumable, stackable, quantity: Stackable.add() and coalesce() implemented but never called
 - ITEMS dict (data/db.py): populated from DB at load but never accessed during gameplay
 - STRUCTURES dict (data/db.py): populated from DB but never accessed (instances render via WorldObject)
@@ -26,6 +26,10 @@ ITEMS / INVENTORY (classes/inventory.py)
 
 CREATURE METHODS (classes/creature.py)
 - transfer_item(): fully implemented but never called anywhere
+
+CREATURE TRAITS (classes/creature.py)
+- sex: per-species default with per-creature override, stored but no gameplay effect yet
+- prudishness: 0.0–1.0 species default with per-creature override, no gameplay effect yet
 
 NPC BEHAVIOR (classes/creature.py)
 - NPC subclass removed; all creatures use Creature with behavior modules
@@ -38,8 +42,10 @@ COMBAT
 - No death handling beyond the death animation binding
 
 EQUIPMENT
-- No equip/unequip mechanic — slots and slot_count defined but unused
+- equip/unequip implemented with stat mod passthrough and stat requirement checks
 - render_on_creature field on Weapon/Wearable has no rendering path
+- action_word defined on items but no description-building system consumes it yet
+- requirements defined on items (JSON stat→min) — checked during equip()
 
 ECONOMY
 - No shop, trade, or currency system
