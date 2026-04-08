@@ -2413,6 +2413,98 @@ check("Egg limit with max=99999: not reached", not Creature.egg_limit_reached(99
 check("Egg limit with max=0: reached", Creature.egg_limit_reached(0))
 
 # ==========================================================================
+print("\n=== Pair Bond ===")
+m62 = make_map(cols=10, rows=10)
+mate_m = make_creature(m62, x=0, y=0, name='MateM', sex='male', age=25)
+mate_f = make_creature(m62, x=1, y=0, name='MateF', sex='female', age=25)
+
+# Form bond
+mate_m.partner_uid = mate_f.uid
+mate_f.partner_uid = mate_m.uid
+
+check("Male has partner", mate_m.has_partner)
+check("Female has partner", mate_f.has_partner)
+check("Male's partner is female", mate_m.get_partner() is mate_f)
+check("Female's partner is male", mate_f.get_partner() is mate_m)
+
+# Break bond
+mate_m.break_pair_bond()
+check("Male has no partner after break", not mate_m.has_partner)
+check("Female also unpartnered", not mate_f.has_partner)
+
+# ==========================================================================
+print("\n=== PairedBehavior ===")
+from classes.creature import PairedBehavior
+
+m63 = make_map(cols=10, rows=10)
+paired_m = make_creature(m63, x=0, y=0, name='PairedM', sex='male', age=25)
+paired_f = make_creature(m63, x=5, y=5, name='PairedF', sex='female', age=25)
+
+paired_m.partner_uid = paired_f.uid
+paired_f.partner_uid = paired_m.uid
+
+pb = PairedBehavior()
+# Partner is far (dist=10) → should follow
+old_loc = paired_m.location
+pb.think(paired_m, 10, 10)
+check("PairedBehavior: moved toward partner", paired_m.location != old_loc)
+# Should be closer now
+new_dist = abs(paired_m.location.x - paired_f.location.x) + abs(paired_m.location.y - paired_f.location.y)
+check(f"Closer to partner: dist={new_dist}", new_dist < 10)
+
+# Run 20 cycles
+for _ in range(20):
+    pb.think(paired_m, 10, 10)
+final_dist = abs(paired_m.location.x - paired_f.location.x) + abs(paired_m.location.y - paired_f.location.y)
+check(f"After 20 cycles: dist={final_dist} (should be <=3)", final_dist <= 3)
+
+# Dead partner → break bond
+paired_f.stats.base[Stat.HP_CURR] = 0
+pb.think(paired_m, 10, 10)
+check("Bond broken when partner dies", not paired_m.has_partner)
+
+# ==========================================================================
+print("\n=== Child-Parent No-Collide ===")
+m64 = make_map(cols=5, rows=5)
+parent_nc = make_creature(m64, x=2, y=2, name='ParentNC', age=30)
+child_nc = make_creature(m64, x=2, y=1, name='ChildNC', age=5,
+                         mother_uid=parent_nc.uid)
+child_nc.mother_uid = parent_nc.uid
+
+# Child should be able to walk onto parent's tile
+old_child_loc = child_nc.location
+child_nc.move(0, 1, 5, 5)  # move south into parent's tile (2,2)
+check(f"Child walked onto parent tile: ({child_nc.location.x},{child_nc.location.y})",
+      child_nc.location.x == 2 and child_nc.location.y == 2)
+
+# Adult creature should be BLOCKED by parent (collision=True)
+other_adult = make_creature(m64, x=2, y=3, name='OtherAdult', age=30)
+old_other_loc = other_adult.location
+other_adult.move(0, -1, 5, 5)  # try to move into (2,2) which has parent + child
+# parent_nc has collision=True, so other_adult should be blocked
+check(f"Adult blocked by creature on tile: stayed at ({other_adult.location.x},{other_adult.location.y})",
+      other_adult.location == old_other_loc)
+
+# ==========================================================================
+print("\n=== Tent Spawn/Despawn ===")
+from classes.world_object import WorldObject as WO
+
+m65 = make_map()
+tent = Creature.spawn_tent(m65, MapKey(3, 3, 0))
+check("Tent is a WorldObject", isinstance(tent, WO))
+check("Tent sprite is tent_pairing", tent.sprite_name == 'tent_pairing')
+check("Tent on map", tent.current_map is m65)
+
+# Check it's in the map's object registry
+objects_on_map = WO.on_map(m65)
+check("Tent in map objects", tent in objects_on_map)
+
+Creature.despawn_tent(tent)
+check("Tent removed from map", tent.current_map is None)
+objects_after = WO.on_map(m65)
+check("Tent not in map objects after despawn", tent not in objects_after)
+
+# ==========================================================================
 print("\n=== Gym Single-Agent Environment ===")
 from simulation.env import CreatureEnv, MultiAgentCreatureEnv
 

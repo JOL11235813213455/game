@@ -62,8 +62,12 @@ MATING / PAIRING (partially implemented)
   Males increase effort with attractive rivals, females lower standards
 - Egg world limits: count_eggs_in_world(), egg_limit_reached()
 - Tent sprite placeholder (tent_pairing, 32x32 red circus tent)
-- NOT YET: amorous pair travel/work together, tent rendering during act,
-  children no-collide with parents until adult
+- PairedBehavior: follows partner, stays within 3 tiles, shares consumables
+  when partner is low HP, breaks bond on partner death
+- Pair bond tracking: partner_uid, get_partner(), break_pair_bond()
+- Child-parent no-collide: _is_family_passthrough() in _tile_blocked()
+- Tent spawn/despawn: spawn_tent() places tent_pairing WorldObject at z=4,
+  despawn_tent() removes it. Caller manages timing.
 
 DIALOGUE SYSTEM (classes/creature.py, data/db.py, editor/dialogue_tab.py)
 - dialogue table: conversation trees with parent-child nodes (parent_id=NULL for roots)

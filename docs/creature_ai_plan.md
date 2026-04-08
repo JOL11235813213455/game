@@ -336,7 +336,8 @@ Per-creature observation for the RL model:
    - ~~Sleep deprivation: 4-tier stacking debuffs, sleep clears all~~
    - ~~Talk/dialogue: conversation engine with tree traversal, condition filtering, effects~~
    - ~~Cast spell: 4 effect types, dodge/resist, timed buffs, secondary resist, self-target~~
-   - Remaining: seduce (needs pairing system)
+   - ~~Pairing/reproduction: genetics, egg lifecycle, pregnancy, pairing proposal,
+     gender dynamics, witness reactions, parent bonding, paired behavior~~
 6. ~~Define observation space~~ — 114-element vector in `src/classes/observation.py`
    - Self: 7 base stats + 8 derived, HP%/stamina%/mana%, status flags
    - Per-neighbor (up to 8): distance, direction, sentiment, confidence, curiosity,

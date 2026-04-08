@@ -61,6 +61,7 @@ class Creature(WorldObject):
         self.inbred = False
         self.is_pregnant = False
         self._pair_cooldown = 0  # timestamp when next pairing is allowed
+        self.partner_uid: int | None = None  # UID of amorous partner (None = single)
 
         # Build Stats from species defaults + overrides
         species_stats = {k: v for k, v in species_data.items() if isinstance(k, Stat)}
@@ -267,9 +268,11 @@ class Creature(WorldObject):
         (-1,  1): 'walk_south', (1,  1): 'walk_south',
     }
 
-    @staticmethod
-    def _tile_blocked(game_map, x: int, y: int) -> bool:
-        """Return True if any WorldObject with collision=True occupies (x, y)."""
+    def _tile_blocked(self, game_map, x: int, y: int) -> bool:
+        """Return True if any WorldObject with collision=True occupies (x, y).
+
+        Children can pass through their parents (and vice versa) until adult.
+        """
         from classes.world_object import WorldObject
         from classes.inventory import Structure
         for obj in WorldObject.colliders_on_map(game_map):
@@ -278,7 +281,21 @@ class Creature(WorldObject):
                 if (x - ox, y - oy) in obj.collision_mask:
                     return True
             elif obj.location.x == x and obj.location.y == y:
+                # Skip parent-child collision if child is not yet adult
+                if isinstance(obj, Creature) and self._is_family_passthrough(obj):
+                    continue
                 return True
+        return False
+
+    def _is_family_passthrough(self, other: 'Creature') -> bool:
+        """Return True if self and other are parent-child and child is not adult."""
+        # Am I this creature's child (and I'm not adult)?
+        if self.is_child and (self.mother_uid == other.uid or self.father_uid == other.uid):
+            return True
+        # Is this creature my child (and they're not adult)?
+        if (isinstance(other, Creature) and other.is_child and
+                (other.mother_uid == self.uid or other.father_uid == self.uid)):
+            return True
         return False
 
     def move(self, dx: int, dy: int, cols: int, rows: int):
@@ -1710,19 +1727,64 @@ class Creature(WorldObject):
         self.record_interaction(female, 5.0)
         female.record_interaction(self, 3.0 if not result.get('forced') else -5.0)
 
+        # Form amorous pair bond (only for willing pairings)
+        if not result.get('forced'):
+            self.partner_uid = female.uid
+            female.partner_uid = self.uid
+
         result['accepted'] = True
         result['egg'] = egg
         return result
 
+    @staticmethod
+    def spawn_tent(game_map, location: MapKey) -> WorldObject:
+        """Place a tent sprite on the map during a pairing act.
+
+        Returns the tent WorldObject for later removal.
+        """
+        tent = WorldObject(current_map=game_map, location=location)
+        tent.sprite_name = 'tent_pairing'
+        tent.z_index = 4  # above creatures
+        tent.collision = False
+        tent.tile_scale = 2.0
+        return tent
+
+    @staticmethod
+    def despawn_tent(tent: WorldObject):
+        """Remove a tent from the map."""
+        tent.current_map = None  # removes from _by_map index
+
     def end_pregnancy(self):
-        """End pregnancy: remove debuffs, drop/hatch egg."""
+        """End pregnancy: remove debuffs, return egg."""
         if not self.is_pregnant:
             return None
         self.is_pregnant = False
         self.stats.remove_mods_by_source('pregnancy')
         egg = getattr(self, '_pregnancy_egg', None)
         self._pregnancy_egg = None
+        # Female cooldown: 1 day after hatching
+        self._pair_cooldown = 86_400_000  # reset by caller with actual timestamp
         return egg
+
+    @property
+    def has_partner(self) -> bool:
+        return self.partner_uid is not None
+
+    def get_partner(self) -> 'Creature | None':
+        """Find partner creature by UID on the same map."""
+        if self.partner_uid is None:
+            return None
+        for obj in WorldObject.on_map(self.current_map):
+            if isinstance(obj, Creature) and obj.uid == self.partner_uid:
+                return obj
+        return None
+
+    def break_pair_bond(self):
+        """End the amorous pair bond. Updates both partners."""
+        partner = self.get_partner()
+        self.partner_uid = None
+        if partner:
+            partner.partner_uid = None
 
     def solicit_rumor(self, target: 'Creature', tick: int) -> bool:
         """Ask another creature for gossip about someone you barely know.
@@ -2270,6 +2332,55 @@ class RandomWanderBehavior:
             (-1,  1), (0,  1), (1,  1),
         ])
         creature.move(dx, dy, cols, rows)
+
+
+class PairedBehavior:
+    """Behavior for amorous pairs: follow partner, share resources.
+
+    Wraps an inner behavior (e.g. StatWeightedBehavior) and overrides
+    movement to stay near partner. When partner is out of sight,
+    falls back to inner behavior. If bond is broken, reverts fully.
+    """
+
+    def __init__(self, inner_behavior=None):
+        self.inner = inner_behavior or RandomWanderBehavior()
+
+    def think(self, creature: Creature, cols: int, rows: int):
+        partner = creature.get_partner()
+
+        if partner is None or not partner.is_alive:
+            # Bond broken — revert to inner behavior
+            creature.break_pair_bond()
+            self.inner.think(creature, cols, rows)
+            return
+
+        dist = creature._sight_distance(partner)
+
+        # Stay near partner: if too far, follow
+        if dist > 3:
+            creature.follow(partner, cols, rows)
+            return
+
+        # If adjacent, occasionally share resources
+        if dist <= 1 and random.random() < 0.1:
+            # Share healing if partner is low HP
+            p_hp_ratio = partner.stats.active[Stat.HP_CURR]() / max(1, partner.stats.active[Stat.HP_MAX]())
+            if p_hp_ratio < 0.5:
+                # Look for consumable to give
+                from classes.inventory import Consumable as C
+                for item in creature.inventory.items:
+                    if isinstance(item, C) and item.buffs:
+                        creature.inventory.items.remove(item)
+                        partner.inventory.items.append(item)
+                        creature.record_interaction(partner, 2.0)
+                        partner.record_interaction(creature, 2.0)
+                        break
+
+        # Otherwise, use inner behavior but bias toward partner's direction
+        if dist > 1:
+            creature.follow(partner, cols, rows)
+        else:
+            self.inner.think(creature, cols, rows)
 
 
 class NeuralBehavior:
