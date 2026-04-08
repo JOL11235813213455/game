@@ -348,11 +348,18 @@ Per-creature observation for the RL model:
    - Curiosity (INT-scaled: high INT = stronger exploration reward)
    - Social (sentiment improvement, new creatures met)
    - Penalties (fatigue increase, combat losses)
-8. Build headless simulation mode (game loop without rendering)
-9. Build random arena generator (varied maps, obstacles, creature compositions)
-10. Implement observation gathering + batched input vector assembly
-11. Implement neural net inference engine (NumPy matrix multiplies)
+8. ~~Build headless simulation mode (game loop without rendering)~~
+9. ~~Build random arena generator (varied maps, obstacles, creature compositions)~~
+10. ~~Implement observation gathering + batched input vector assembly~~
+    - Action enum (48 actions) + dispatch system in `src/classes/actions.py`
+11. ~~Implement neural net inference engine (NumPy matrix multiplies)~~
+    - `src/simulation/net.py`: 3-layer feedforward, Xavier init, softmax output
+    - Single + batched forward pass, temperature-controlled sampling
+    - Save/load via .npz files
 12. Implement RL training harness (PPO/DQN, Gym-compatible environment)
 13. Train + evaluate — validate emergent behavior differences across stat profiles
-14. Integrate trained model as NeuralBehavior.think() module
-15. Implement stat-weighted decision tables as interim/fallback behavior
+14. ~~Integrate trained model as NeuralBehavior.think() module~~
+    - Builds observation, runs net, picks nearest visible target, dispatches action
+15. ~~Implement stat-weighted decision tables as interim/fallback behavior~~
+    - StatWeightedBehavior: stat-based action weighting (STR→melee, INT→social, etc.)
+    - Curiosity for strangers, flee when low HP, wait when low stamina

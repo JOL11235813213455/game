@@ -1587,3 +1587,160 @@ class RandomWanderBehavior:
             (-1,  1), (0,  1), (1,  1),
         ])
         creature.move(dx, dy, cols, rows)
+
+
+class NeuralBehavior:
+    """Neural net-driven behavior module.
+
+    Uses a shared CreatureNet to select actions. The net takes the
+    creature's observation vector and outputs action probabilities.
+    A target selection heuristic picks the best target for targeted actions.
+    """
+
+    def __init__(self, net, temperature: float = 1.0):
+        """Args:
+            net: a simulation.net.CreatureNet instance (shared across all creatures)
+            temperature: sampling temperature (0 = greedy, 1 = stochastic)
+        """
+        self.net = net
+        self.temperature = temperature
+        self._prev_snapshot = None
+
+    def think(self, creature: Creature, cols: int, rows: int):
+        from classes.observation import build_observation, make_snapshot
+        from classes.actions import dispatch, Action
+        from classes.world_object import WorldObject
+        import numpy as np
+
+        # Build observation
+        obs = build_observation(creature, cols, rows, prev_snapshot=self._prev_snapshot)
+        self._prev_snapshot = make_snapshot(creature)
+
+        # Select action
+        obs_arr = np.array(obs, dtype=np.float32)
+        action_idx = self.net.select_action(obs_arr, self.temperature)
+
+        # Build context — find nearest visible creature as target
+        target = None
+        nearest_dist = 999
+        for obj in WorldObject.on_map(creature.current_map):
+            if not isinstance(obj, Creature) or obj is creature or not obj.is_alive:
+                continue
+            dist = creature._sight_distance(obj)
+            if dist < nearest_dist and creature.can_see(obj):
+                nearest_dist = dist
+                target = obj
+
+        now = 0  # ticks managed by simulation loop
+        context = {
+            'cols': cols, 'rows': rows,
+            'target': target, 'now': now,
+        }
+
+        dispatch(creature, action_idx, context)
+
+
+class StatWeightedBehavior:
+    """Stat-weighted decision table behavior (fallback/interim).
+
+    Uses creature stats to weight action probabilities directly,
+    without a neural net. Higher STR → prefer melee, higher INT →
+    prefer social actions, higher AGL → prefer movement/flee, etc.
+
+    Serves as immediate usable AI before training, and as a baseline
+    for comparing against the neural net.
+    """
+
+    def think(self, creature: Creature, cols: int, rows: int):
+        from classes.world_object import WorldObject
+        from classes.actions import dispatch, Action
+
+        # Compute stat-based weights
+        str_mod = (creature.stats.active[Stat.STR]() - 10) // 2
+        agl_mod = (creature.stats.active[Stat.AGL]() - 10) // 2
+        int_mod = (creature.stats.active[Stat.INT]() - 10) // 2
+        chr_mod = (creature.stats.active[Stat.CHR]() - 10) // 2
+        per_mod = (creature.stats.active[Stat.PER]() - 10) // 2
+
+        hp_ratio = creature.stats.active[Stat.HP_CURR]() / max(1, creature.stats.active[Stat.HP_MAX]())
+        stam_ratio = creature.stats.active[Stat.CUR_STAMINA]() / max(1, creature.stats.active[Stat.MAX_STAMINA]())
+
+        # Find nearest visible creature
+        target = None
+        nearest_dist = 999
+        for obj in WorldObject.on_map(creature.current_map):
+            if not isinstance(obj, Creature) or obj is creature or not obj.is_alive:
+                continue
+            dist = creature._sight_distance(obj)
+            if dist < nearest_dist and creature.can_see(obj):
+                nearest_dist = dist
+                target = obj
+
+        # Build weighted action candidates
+        candidates = []
+
+        # Always consider wandering
+        wander_weight = 5 + agl_mod
+        for d in range(8):
+            candidates.append((d, wander_weight))
+
+        if stam_ratio < 0.2:
+            # Low stamina → strongly prefer waiting
+            candidates.append((Action.WAIT, 20))
+        else:
+            candidates.append((Action.WAIT, 2))
+
+        if target is not None:
+            rel = creature.get_relationship(target)
+            sentiment = rel[0] if rel else 0.0
+
+            if nearest_dist <= 1:
+                # Adjacent — combat or social
+                if sentiment < -3 or hp_ratio > 0.5:
+                    # Hostile or healthy → consider attack
+                    candidates.append((Action.MELEE_ATTACK, 8 + str_mod * 2))
+                    candidates.append((Action.GRAPPLE, 4 + str_mod))
+
+                if sentiment >= 0:
+                    # Neutral/positive → social
+                    candidates.append((Action.TALK, 5 + chr_mod * 2))
+                    candidates.append((Action.INTIMIDATE, 3 + str_mod + chr_mod))
+
+                # Curiosity-driven approach for strangers
+                if rel is None:
+                    curiosity = creature.curiosity_toward(target)
+                    candidates.append((Action.TALK, int(curiosity * 10 + int_mod * 2)))
+
+            elif nearest_dist <= 8:
+                # Medium range
+                if sentiment < -3:
+                    candidates.append((Action.RANGED_ATTACK, 5 + per_mod * 2))
+                    candidates.append((Action.FLEE, 3 + agl_mod))
+
+                # Follow interesting creatures
+                if rel is None or sentiment > 0:
+                    candidates.append((Action.FOLLOW, 5 + int_mod))
+
+            # Low HP → flee or wait
+            if hp_ratio < 0.3 and sentiment < 0:
+                candidates.append((Action.FLEE, 15 + agl_mod * 2))
+
+        # Search tiles occasionally (curiosity)
+        candidates.append((Action.SEARCH, 2 + int_mod + per_mod))
+
+        # Guard stance if guarding makes sense (territorial)
+        candidates.append((Action.GUARD, 1 + str_mod))
+
+        # Normalize weights and select
+        weights = [max(1, w) for _, w in candidates]
+        total = sum(weights)
+        probs = [w / total for w in weights]
+        idx = random.choices(range(len(candidates)), weights=probs, k=1)[0]
+        chosen_action = candidates[idx][0]
+
+        context = {
+            'cols': cols, 'rows': rows,
+            'target': target, 'now': 0,
+        }
+
+        dispatch(creature, chosen_action, context)

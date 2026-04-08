@@ -1562,6 +1562,142 @@ for _ in range(200):
 check(f"Survived 260 steps without crash", sim.step_count == 260)
 
 # ==========================================================================
+print("\n=== Action Dispatch ===")
+from classes.actions import Action, dispatch, NUM_ACTIONS
+import numpy as np
+
+m44 = make_map(cols=10, rows=10)
+actor = make_creature(m44, x=5, y=5, stats={Stat.STR: 14, Stat.AGL: 12}, name='Actor')
+dummy = make_creature(m44, x=6, y=5, stats={Stat.VIT: 12, Stat.PER: 10, Stat.LVL: 3}, name='Dummy')
+
+check(f"NUM_ACTIONS = {NUM_ACTIONS}", NUM_ACTIONS == 48)
+
+# Move south via dispatch (east is blocked by dummy at 6,5)
+ctx = {'cols': 10, 'rows': 10}
+r = dispatch(actor, Action.MOVE_S, ctx)
+check(f"Dispatch MOVE_S: moved to ({actor.location.x},{actor.location.y})", r['success'])
+
+# Wait via dispatch
+r = dispatch(actor, Action.WAIT, ctx)
+check("Dispatch WAIT succeeds", r['success'])
+
+# Melee with target
+actor.location = actor.location._replace(x=5, y=5)
+ctx_t = {'cols': 10, 'rows': 10, 'target': dummy, 'now': 1000}
+actor.stats.base[Stat.CUR_STAMINA] = actor.stats.active[Stat.MAX_STAMINA]()
+r = dispatch(actor, Action.MELEE_ATTACK, ctx_t)
+check("Dispatch MELEE_ATTACK ran", 'reason' in r or r.get('hit') is not None)
+
+# No target → fail
+r = dispatch(actor, Action.MELEE_ATTACK, {'cols': 10, 'rows': 10, 'now': 0})
+check("Melee with no target fails", not r['success'])
+
+# Unknown action
+r = dispatch(actor, 999, ctx)
+check("Unknown action fails", not r['success'])
+
+# ==========================================================================
+print("\n=== Neural Net ===")
+from simulation.net import CreatureNet
+
+net = CreatureNet(h1_size=64, h2_size=32)
+check(f"Net param count: {net.param_count()}", net.param_count() > 0)
+
+# Single forward pass
+obs = np.random.randn(OBSERVATION_SIZE).astype(np.float32)
+probs = net.forward(obs)
+check(f"Output shape: {probs.shape}", probs.shape == (NUM_ACTIONS,))
+check(f"Probs sum ≈ 1.0: {probs.sum():.4f}", abs(probs.sum() - 1.0) < 1e-4)
+check("All probs >= 0", (probs >= 0).all())
+
+# Batch forward pass
+batch = np.random.randn(5, OBSERVATION_SIZE).astype(np.float32)
+batch_probs = net.forward(batch)
+check(f"Batch shape: {batch_probs.shape}", batch_probs.shape == (5, NUM_ACTIONS))
+check("Batch probs sum ≈ 1.0 per row",
+      all(abs(batch_probs[i].sum() - 1.0) < 1e-4 for i in range(5)))
+
+# Action selection
+action = net.select_action(obs, temperature=1.0)
+check(f"Selected action: {action} (in range)", 0 <= action < NUM_ACTIONS)
+
+# Greedy selection
+action_g = net.select_action(obs, temperature=0)
+check(f"Greedy action: {action_g} == argmax", action_g == int(np.argmax(net.forward(obs))))
+
+# Batch selection
+actions = net.batch_select(batch, temperature=1.0)
+check(f"Batch actions: {len(actions)} = 5", len(actions) == 5)
+check("All actions in range", all(0 <= a < NUM_ACTIONS for a in actions))
+
+# Save/load roundtrip
+import tempfile, os
+with tempfile.NamedTemporaryFile(suffix='.npz', delete=False) as f:
+    tmp_path = f.name
+net.save(tmp_path)
+net2 = CreatureNet(h1_size=64, h2_size=32)
+net2.load(tmp_path)
+probs2 = net2.forward(obs)
+check("Save/load roundtrip: same output", np.allclose(probs, probs2, atol=1e-6))
+os.unlink(tmp_path)
+
+# ==========================================================================
+print("\n=== StatWeightedBehavior ===")
+from classes.creature import StatWeightedBehavior
+
+m45 = make_map(cols=10, rows=10)
+sw_creature = make_creature(m45, x=5, y=5,
+                            stats={Stat.STR: 16, Stat.AGL: 12, Stat.INT: 10,
+                                   Stat.CHR: 10, Stat.PER: 12, Stat.VIT: 12},
+                            name='StatBot')
+sw_target = make_creature(m45, x=6, y=5,
+                          stats={Stat.VIT: 12, Stat.PER: 10, Stat.LVL: 3},
+                          name='SWTarget')
+
+sw_beh = StatWeightedBehavior()
+# Run 50 think cycles — should not crash
+for _ in range(50):
+    sw_creature.stats.base[Stat.CUR_STAMINA] = sw_creature.stats.active[Stat.MAX_STAMINA]()
+    sw_creature.stats.base[Stat.HP_CURR] = sw_creature.stats.active[Stat.HP_MAX]()
+    sw_beh.think(sw_creature, 10, 10)
+check("StatWeightedBehavior: 50 cycles without crash", True)
+
+# ==========================================================================
+print("\n=== NeuralBehavior ===")
+from classes.creature import NeuralBehavior
+
+m46 = make_map(cols=10, rows=10)
+neural_creature = make_creature(m46, x=5, y=5,
+                                stats={Stat.STR: 12, Stat.AGL: 14, Stat.INT: 14,
+                                       Stat.PER: 12, Stat.VIT: 12},
+                                name='NeuralBot')
+neural_target = make_creature(m46, x=6, y=5,
+                              stats={Stat.VIT: 12, Stat.PER: 10},
+                              name='NTarget')
+
+nb = NeuralBehavior(net=CreatureNet(h1_size=64, h2_size=32), temperature=1.0)
+for _ in range(50):
+    neural_creature.stats.base[Stat.CUR_STAMINA] = neural_creature.stats.active[Stat.MAX_STAMINA]()
+    neural_creature.stats.base[Stat.HP_CURR] = neural_creature.stats.active[Stat.HP_MAX]()
+    nb.think(neural_creature, 10, 10)
+check("NeuralBehavior: 50 cycles without crash", True)
+
+# ==========================================================================
+print("\n=== Simulation with StatWeightedBehavior ===")
+from simulation.arena import generate_arena
+
+sw_arena = generate_arena(cols=15, rows=15, num_creatures=6, obstacle_density=0.05)
+# Replace all behaviors with StatWeightedBehavior
+for c in sw_arena['creatures']:
+    c.behavior = StatWeightedBehavior()
+    c.register_tick('behavior', 500, c._do_behavior)
+
+sw_sim = Simulation(sw_arena, tick_ms=100)
+for _ in range(100):
+    sw_sim.step()
+check(f"StatWeighted sim: 100 steps, {sw_sim.alive_count} alive", sw_sim.step_count == 100)
+
+# ==========================================================================
 print(f"\n{'='*50}")
 print(f"Results: {PASS} passed, {FAIL} failed out of {PASS+FAIL} tests")
 if FAIL:
