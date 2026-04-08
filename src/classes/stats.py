@@ -85,7 +85,7 @@ class Stat(Enum):
     DECEPTION       = 'deception'
 
     # ---- Derived: Loot / Craft ----
-    LOOT_QUALITY  = 'loot quality'
+    LOOT_GINI     = 'loot gini'
     CRAFT_QUALITY = 'craft quality'
     DURABILITY_USE = 'durability use'
 
@@ -213,7 +213,7 @@ def _magic_resist(g):
     return _dmod(g(Stat.INT)) + 10 + _dmod(g(Stat.CHR))
 
 def _stagger_resist(g):
-    return _dmod(g(Stat.STR))
+    return _dmod(g(Stat.STR)) + _dmod(g(Stat.VIT)) + 10
 
 def _fear_resist(g):
     return max(0, _dmod(g(Stat.INT)) + g(Stat.LVL) // 3 + 10 + _dmod(g(Stat.STR)))
@@ -236,8 +236,16 @@ def _intimidation(g):
 def _deception(g):
     return _dmod(g(Stat.CHR)) + _dmod(g(Stat.AGL)) // 2
 
-def _loot_quality(g):
-    return _dmod(g(Stat.LCK))
+def _loot_gini(g):
+    # 0-to-1 Gini index for loot generation. Each additional "9" is an
+    # exponential leap in value. Most creatures cluster around 0.5;
+    # only extreme LCK pushes into 0.9+ territory.
+    # Formula: 1 - 10^(-((lck_mod + 2) / 4))
+    lck_mod = _dmod(g(Stat.LCK))
+    exponent = (lck_mod + 2) / 4
+    if exponent <= 0:
+        return 0.0
+    return 1 - 10 ** (-exponent)
 
 def _craft_quality(g):
     return _dmod(g(Stat.INT)) + _dmod(g(Stat.PER)) // 2
@@ -289,7 +297,7 @@ DERIVED_FORMULAS: dict[Stat, callable] = {
     Stat.PERSUASION:     _persuasion,
     Stat.INTIMIDATION:   _intimidation,
     Stat.DECEPTION:      _deception,
-    Stat.LOOT_QUALITY:   _loot_quality,
+    Stat.LOOT_GINI:      _loot_gini,
     Stat.CRAFT_QUALITY:  _craft_quality,
     Stat.DURABILITY_USE: _durability_use,
     Stat.XP_MOD:         _xp_mod,
