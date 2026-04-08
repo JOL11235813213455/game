@@ -308,22 +308,40 @@ DERIVED_FORMULAS: dict[Stat, callable] = {
 
 
 # ---------------------------------------------------------------------------
-# Opposing stats
+# Opposing stats — d20 contests (both sides roll)
 # ---------------------------------------------------------------------------
-# Maps (attacker_stat, defender_stat) pairs for contested checks.
+# Used with stats.contest(other_stats, contest_name).
+# Each side rolls d20 + their stat; higher wins.
 
 OPPOSING_STATS: dict[str, tuple[Stat, Stat]] = {
-    'stealth_vs_detection':  (Stat.STEALTH,      Stat.DETECTION),
+    # -- Combat: hit resolution --
     'accuracy_vs_dodge':     (Stat.ACCURACY,      Stat.DODGE),
+    'stealth_vs_detection':  (Stat.STEALTH,      Stat.DETECTION),
+    # -- Social: action vs resistance --
     'persuasion_vs_fear':    (Stat.PERSUASION,    Stat.FEAR_RESIST),
     'intimidation_vs_fear':  (Stat.INTIMIDATION,  Stat.FEAR_RESIST),
     'deception_vs_detection':(Stat.DECEPTION,     Stat.DETECTION),
-    'melee_vs_armor':        (Stat.MELEE_DMG,     Stat.ARMOR),
-    'melee_vs_block':        (Stat.MELEE_DMG,     Stat.BLOCK),
-    'magic_vs_resist':       (Stat.MAGIC_DMG,     Stat.MAGIC_RESIST),
-    'stagger_vs_resist':     (Stat.MELEE_DMG,     Stat.STAGGER_RESIST),
-    'poison_vs_resist':      (Stat.MAGIC_DMG,     Stat.POISON_RESIST),
 }
+
+# ---------------------------------------------------------------------------
+# DC resist checks — attack has a DC, defender checks resistance
+# ---------------------------------------------------------------------------
+# Used with stats.resist_check(dc, resist_stat).
+# DC comes from the weapon/spell/ability, NOT from the attacker's stats.
+# Damage is separate from DC.
+#
+# Combat:
+#   weapon_dc vs BLOCK     — can defender block? (requires shield)
+#   weapon_dc vs ARMOR     — does armor absorb?
+#   hit_force vs STAGGER_RESIST — is defender staggered?
+#
+# Magic:
+#   spell_dc vs MAGIC_RESIST   — does the spell effect land?
+#
+# Status effects:
+#   poison_dc vs POISON_RESIST   — is defender poisoned?
+#   disease_dc vs DISEASE_RESIST — is defender diseased?
+#   fear_dc vs FEAR_RESIST       — is defender frightened?
 
 
 # ---------------------------------------------------------------------------
