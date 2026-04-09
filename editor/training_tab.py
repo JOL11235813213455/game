@@ -6,6 +6,7 @@ Launch/stop training, view live stats, open TensorBoard.
 import os
 import signal
 import subprocess
+import sys
 import tkinter as tk
 from tkinter import ttk, messagebox
 import threading
@@ -185,7 +186,7 @@ class TrainingTab(ttk.Frame):
         cmd = [
             'systemd-inhibit', '--what=idle:sleep',
             '--who=RPGTraining', '--why=Training',
-            'python', '-u', '-m', 'editor.simulation.train',
+            sys.executable, '-u', '-m', 'editor.simulation.train',
             '--cycles', self.v_cycles.get(),
             '--mappo-steps', self.v_mappo.get(),
             '--ppo-steps', self.v_ppo.get(),

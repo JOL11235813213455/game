@@ -322,6 +322,52 @@ def run_training_viewer(cell_size: int = 20):
             clock.tick(5)
             continue
 
+        # ES phase has no map — show progress screen instead
+        if state.get('phase') == 'ES' and state['cols'] == 0:
+            info = state.get('info', {})
+            gen = info.get('generation', 0)
+            total_gen = info.get('total_generations', 0)
+            var = info.get('variant', 0)
+            total_var = info.get('total_variants', 0)
+            best_r = info.get('best_reward', 0)
+            avg_r = info.get('avg_reward', 0)
+
+            y = 50
+            def es_text(s, color=C_WHITE, big=False):
+                nonlocal y
+                f = font_lg if big else font
+                screen.blit(f.render(s, True, color), (50, y))
+                y += 22 if big else 16
+
+            es_text('Evolutionary Strategies Phase', C_YELLOW, big=True)
+            y += 10
+            es_text(f'Generation: {gen} / {total_gen}')
+            es_text(f'Variant: {var} / {total_var}')
+            y += 10
+            # Progress bar
+            if total_gen > 0:
+                pct = (gen - 1) / total_gen + (var / total_var / total_gen) if total_gen else 0
+                bar_w = 400
+                bar_h = 20
+                pygame.draw.rect(screen, C_GRAY, (50, y, bar_w, bar_h))
+                pygame.draw.rect(screen, C_GREEN, (50, y, int(bar_w * pct), bar_h))
+                es_text(f'{pct * 100:.1f}%', C_WHITE)
+                y += 10
+            color_r = C_GREEN if avg_r > 0 else C_RED if avg_r < 0 else C_GRAY
+            es_text(f'Best reward this gen: {best_r:+.2f}', color_r)
+            es_text(f'Avg reward this gen: {avg_r:+.2f}', color_r)
+            y += 10
+            es_text('Randomizing weights to find better starting points...', C_GRAY)
+            es_text('PPO fine-tuning will follow.', C_GRAY)
+
+            if state.get('stale'):
+                y += 20
+                es_text('STALE — training may have stopped', C_RED)
+
+            pygame.display.flip()
+            clock.tick(5)
+            continue
+
         cols = state['cols']
         rows = state['rows']
         panel_w = 300

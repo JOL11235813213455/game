@@ -263,6 +263,16 @@ def run_es(net: TorchCreatureNet, generations: int = 50,
                     break
             rewards.append(total_r)
 
+        # Write ES progress for live viewer
+        from editor.simulation.train_state import write_es_state
+        rewards_arr_tmp = np.array(rewards)
+        write_es_state(
+            generation=gen, total_generations=generations,
+            variant=len(rewards), total_variants=variants,
+            best_reward=float(np.max(rewards_arr_tmp)) if rewards else 0.0,
+            avg_reward=float(np.mean(rewards_arr_tmp)) if rewards else 0.0,
+        )
+
         rewards = np.array(rewards)
         order = np.argsort(rewards)[::-1]
         top_n = max(1, variants // 5)

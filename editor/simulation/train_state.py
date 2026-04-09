@@ -83,6 +83,38 @@ def read_state() -> dict | None:
     return None
 
 
+def write_es_state(generation: int, total_generations: int,
+                   variant: int, total_variants: int,
+                   best_reward: float = 0.0, avg_reward: float = 0.0,
+                   info: dict = None):
+    """Write ES phase progress for the viewer (no sim needed)."""
+    state = {
+        'timestamp': time.time(),
+        'phase': 'ES',
+        'step': generation * total_variants + variant,
+        'tick': 0,
+        'cols': 0,
+        'rows': 0,
+        'alive': 0,
+        'total': 0,
+        'creatures': [],
+        'tile_info': [],
+        'info': {
+            'generation': generation + 1,
+            'total_generations': total_generations,
+            'variant': variant + 1,
+            'total_variants': total_variants,
+            'best_reward': round(best_reward, 2),
+            'avg_reward': round(avg_reward, 2),
+            **(info or {}),
+        },
+    }
+    try:
+        STATE_FILE.write_text(json.dumps(state))
+    except Exception:
+        pass
+
+
 def clear_state():
     """Remove the state file."""
     try:
