@@ -13,4 +13,8 @@ from editor import EditorApp
 
 if __name__ == '__main__':
     app = EditorApp()
+    app.lift()
+    app.attributes('-topmost', True)
+    app.after(100, lambda: app.attributes('-topmost', False))
+    app.focus_force()
     app.mainloop()
