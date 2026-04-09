@@ -72,14 +72,20 @@ class Simulation:
                 c.update(self.now, self.cols, self.rows)
 
         # Collect results
+        from classes.temporal import make_history_snapshot
         results = []
         for c in self.creatures:
             prev_obs = self._obs_snapshots.get(c.uid)
             prev_rew = self._reward_snapshots.get(c.uid)
 
-            # Build current observation
+            # Build current observation (uses creature's history buffer)
             obs = build_observation(c, self.cols, self.rows, prev_snapshot=prev_obs,
                                    world_data=self.world_data)
+
+            # Apply observation mask if creature has one
+            if c.observation_mask:
+                from classes.observation import apply_preset_mask
+                apply_preset_mask(obs, c.observation_mask)
 
             # Compute reward
             curr_rew = make_reward_snapshot(c)
@@ -88,6 +94,10 @@ class Simulation:
             # Update snapshots
             self._obs_snapshots[c.uid] = make_snapshot(c)
             self._reward_snapshots[c.uid] = curr_rew
+
+            # Append to creature's history buffer for temporal transforms
+            if hasattr(c, '_history'):
+                c._history.append(make_history_snapshot(c))
 
             results.append({
                 'creature': c,

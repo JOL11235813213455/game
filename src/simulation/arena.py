@@ -1,30 +1,33 @@
 """
 Random arena generator for headless RL training.
 
-Generates varied maps with obstacles, places creatures with randomized
-stats, and returns a ready-to-simulate environment.
+Generates varied maps with obstacles, spawns creatures with full
+genetics, sex, species, age, deity, equipment, and gold.
 """
 from __future__ import annotations
 import random
 from classes.maps import Map, MapKey, Tile
 from classes.creature import Creature, RandomWanderBehavior
-from classes.inventory import Weapon, Wearable, Slot
+from classes.inventory import Weapon, Wearable, Consumable, Slot
 from classes.stats import Stat
+from classes.genetics import generate_chromosomes, express, apply_genetics
+from classes.gods import DEFAULT_GODS
 
 
 BASE_STATS = [Stat.STR, Stat.VIT, Stat.AGL, Stat.PER, Stat.INT, Stat.CHR, Stat.LCK]
 
+# Species defaults (just human for now — add more species here)
+SPECIES_DEFAULTS = {
+    'human': {
+        Stat.STR: 10, Stat.VIT: 10, Stat.AGL: 10, Stat.PER: 10,
+        Stat.INT: 10, Stat.CHR: 10, Stat.LCK: 10,
+        'size': 'medium', 'prudishness': 0.5,
+    },
+}
+
 
 def random_stats(profile: str = 'balanced') -> dict:
-    """Generate random base stats with a profile bias.
-
-    Profiles:
-      balanced: all stats 8-14
-      fighter:  high STR/VIT, low INT/CHR
-      mage:    high INT/CHR, low STR/VIT
-      rogue:   high AGL/PER, low STR/VIT
-      random:  fully random 3-18
-    """
+    """Generate random base stats with a profile bias."""
     if profile == 'random':
         return {s: random.randint(3, 18) for s in BASE_STATS}
 
@@ -45,6 +48,11 @@ def random_stats(profile: str = 'balanced') -> dict:
         base[Stat.PER] = random.randint(14, 18)
         base[Stat.STR] = random.randint(6, 12)
         base[Stat.VIT] = random.randint(6, 12)
+    elif profile == 'social':
+        base[Stat.CHR] = random.randint(14, 18)
+        base[Stat.INT] = random.randint(12, 16)
+        base[Stat.PER] = random.randint(12, 16)
+        base[Stat.STR] = random.randint(4, 10)
 
     return base
 
@@ -65,22 +73,170 @@ def random_weapon() -> Weapon:
     )
 
 
+def random_armor() -> Wearable:
+    """Create random armor piece."""
+    templates = [
+        ('Leather Cap', Slot.HEAD, {Stat.ARMOR: 1}),
+        ('Chain Shirt', Slot.CHEST, {Stat.ARMOR: 3, Stat.AGL: -1}),
+        ('Iron Helm', Slot.HEAD, {Stat.ARMOR: 2}),
+        ('Boots', Slot.FEET, {Stat.MOVE_SPEED: 0, Stat.ARMOR: 1}),
+        ('Shield', Slot.HAND_L, {Stat.BLOCK: 3, Stat.ARMOR: 1}),
+    ]
+    name, slot, buffs = random.choice(templates)
+    return Wearable(
+        name=name, weight=random.uniform(1.0, 8.0), value=random.uniform(2.0, 12.0),
+        slots=[slot], slot_count=1, buffs=buffs,
+    )
+
+
+def random_consumable() -> Consumable:
+    """Create a random consumable."""
+    templates = [
+        ('Health Potion', {Stat.HP_CURR: 5}, 0, 3),
+        ('Stamina Tonic', {Stat.STAM_REGEN: 3}, 10.0, 5),
+        ('Strength Draught', {Stat.STR: 3}, 15.0, 8),
+    ]
+    name, buffs, duration, value = random.choice(templates)
+    return Consumable(
+        name=name, weight=0.3, value=value, quantity=random.randint(1, 3),
+        buffs=buffs, duration=duration,
+    )
+
+
+def spawn_creature(game_map: Map, location: MapKey,
+                   species: str = 'human',
+                   profile: str = 'balanced',
+                   age: int = None,
+                   sex: str = None,
+                   deity: str = None,
+                   behavior=None,
+                   name: str = None,
+                   observation_mask: str = None) -> Creature:
+    """Spawn a fully-realized creature with genetics, equipment, gold, deity.
+
+    This is the canonical creature spawner for training and gameplay.
+    """
+    species_data = SPECIES_DEFAULTS.get(species, SPECIES_DEFAULTS['human'])
+
+    # Sex
+    if sex is None:
+        sex = random.choice(('male', 'female'))
+
+    # Chromosomes + genetic stat modification
+    chromosomes = generate_chromosomes(sex)
+    genetic_mods = express(chromosomes)
+    species_stats = {k: v for k, v in species_data.items() if isinstance(k, Stat)}
+    base_stats = apply_genetics(species_stats, genetic_mods)
+
+    # Profile overlay (training diversity)
+    profile_stats = random_stats(profile)
+    # Blend: 60% genetics + 40% profile for training variety
+    final_stats = {}
+    for s in BASE_STATS:
+        gen_val = base_stats.get(s, 10)
+        prof_val = profile_stats.get(s, 10)
+        final_stats[s] = max(1, int(gen_val * 0.6 + prof_val * 0.4))
+
+    # Level
+    level = random.randint(1, 5)
+    final_stats[Stat.LVL] = level
+
+    # Age
+    if age is None:
+        age = random.randint(18, 200)  # adults for training
+
+    # Deity
+    if deity is None:
+        if random.random() < 0.7:  # 70% have a deity
+            deity = random.choice([g.name for g in DEFAULT_GODS])
+
+    # Prudishness
+    prudishness = species_data.get('prudishness', 0.5)
+    prudishness += random.uniform(-0.2, 0.2)
+    prudishness = max(0.0, min(1.0, prudishness))
+
+    # Name
+    if name is None:
+        name = f'{species}_{sex[0]}_{random.randint(1000, 9999)}'
+
+    # Create creature
+    c = Creature(
+        current_map=game_map,
+        location=location,
+        name=name,
+        species=species,
+        stats=final_stats,
+        sex=sex,
+        age=age,
+        prudishness=prudishness,
+        chromosomes=chromosomes,
+        behavior=behavior or RandomWanderBehavior(),
+        move_interval=500,
+        size=species_data.get('size', 'medium'),
+    )
+
+    # Deity + piety
+    c.deity = deity
+    if deity:
+        c.piety = random.uniform(0.1, 0.8)
+
+    # Gold
+    c.gold = random.randint(5, 50 + level * 20)
+
+    # Equipment
+    if random.random() < 0.7:
+        w = random_weapon()
+        c.inventory.items.append(w)
+        c.equip(w)
+        c._item_prices[id(w)] = w.value
+
+    if random.random() < 0.5:
+        a = random_armor()
+        c.inventory.items.append(a)
+        c.equip(a)
+        c._item_prices[id(a)] = a.value
+
+    # Consumables
+    if random.random() < 0.4:
+        cons = random_consumable()
+        c.inventory.items.append(cons)
+
+    # Observation mask
+    if observation_mask:
+        c.observation_mask = observation_mask
+
+    return c
+
+
 def generate_arena(cols: int = 20, rows: int = 20,
                    num_creatures: int = 6,
                    obstacle_density: float = 0.1,
-                   profiles: list[str] = None) -> dict:
-    """Generate a random arena with creatures.
+                   profiles: list[str] = None,
+                   species_mix: dict[str, float] = None,
+                   mask_probability: float = 0.0,
+                   mask_pool: list[str] = None) -> dict:
+    """Generate a random arena with fully-realized creatures.
 
     Args:
         cols, rows: map dimensions
         num_creatures: how many creatures to place
-        obstacle_density: fraction of tiles that are unwalkable (0.0–1.0)
-        profiles: list of stat profiles for creatures (cycles if shorter)
+        obstacle_density: fraction of unwalkable tiles (0.0-1.0)
+        profiles: stat profiles to cycle through
+        species_mix: {species: probability} for species selection
+        mask_probability: chance each creature gets an observation mask
+        mask_pool: list of mask preset names to draw from
 
     Returns:
         dict with keys: map, creatures, cols, rows
     """
-    profiles = profiles or ['balanced', 'fighter', 'mage', 'rogue', 'random']
+    profiles = profiles or ['balanced', 'fighter', 'mage', 'rogue', 'social', 'random']
+    species_mix = species_mix or {'human': 1.0}
+    mask_pool = mask_pool or ['socially_deaf', 'blind', 'fearless', 'feral',
+                              'impulsive', 'nearsighted']
+
+    # Normalize species probabilities
+    species_list = list(species_mix.keys())
+    species_weights = [species_mix[s] for s in species_list]
 
     # Generate map with random obstacles
     tiles = {}
@@ -89,12 +245,10 @@ def generate_arena(cols: int = 20, rows: int = 20,
             walkable = random.random() >= obstacle_density
             tiles[MapKey(x, y, 0)] = Tile(walkable=walkable)
 
-    # Ensure entrance is walkable
     tiles[MapKey(0, 0, 0)] = Tile(walkable=True)
     game_map = Map(tile_set=tiles, entrance=(0, 0),
                    x_max=cols, y_max=rows)
 
-    # Place creatures on random walkable tiles
     walkable_tiles = [k for k, t in tiles.items() if t.walkable]
     random.shuffle(walkable_tiles)
 
@@ -102,26 +256,29 @@ def generate_arena(cols: int = 20, rows: int = 20,
     for i in range(min(num_creatures, len(walkable_tiles))):
         loc = walkable_tiles[i]
         profile = profiles[i % len(profiles)]
-        stats = random_stats(profile)
-        level = random.randint(1, 5)
-        stats[Stat.LVL] = level
+        species = random.choices(species_list, weights=species_weights, k=1)[0]
 
-        c = Creature(
-            current_map=game_map,
+        # Maybe apply observation mask
+        mask = None
+        if mask_probability > 0 and random.random() < mask_probability:
+            mask = random.choice(mask_pool)
+
+        c = spawn_creature(
+            game_map=game_map,
             location=loc,
-            name=f'{profile.capitalize()}_{i}',
-            stats=stats,
-            behavior=RandomWanderBehavior(),
-            move_interval=500,
+            species=species,
+            profile=profile,
+            observation_mask=mask,
         )
-
-        # Give some creatures weapons
-        if random.random() < 0.6:
-            w = random_weapon()
-            c.inventory.items.append(w)
-            c.equip(w)
-
         creatures.append(c)
+
+    # Give some creatures pre-existing relationships
+    for c in creatures:
+        for other in creatures:
+            if other is c:
+                continue
+            if random.random() < 0.3:
+                c.record_interaction(other, random.uniform(-5, 10))
 
     return {
         'map': game_map,
