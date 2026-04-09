@@ -35,6 +35,16 @@ classDiagram
         +on_map() list
     }
 
+    CombatMixin <|-- Creature
+    SocialMixin <|-- Creature
+    MovementMixin <|-- Creature
+    InventoryMixin <|-- Creature
+    ReproductionMixin <|-- Creature
+    RelationshipsMixin <|-- Creature
+    ConversationMixin <|-- Creature
+    UtilityMixin <|-- Creature
+    RegenMixin <|-- Creature
+
     class Creature {
         +name, species, sex, age, size
         +stats: Stats
@@ -45,8 +55,20 @@ classDiagram
         +deity, piety, quest_log
         +gold, loans, loans_given
         +behavior, observation_mask
+        +model_name, model_version
         +_history: deque
+        creature/ package with mixins
     }
+
+    class CombatMixin { melee_attack, ranged_attack, cast_spell, grapple, die }
+    class SocialMixin { intimidate, deceive, trade, bribe, steal, proselytize }
+    class MovementMixin { move, enter, exit, flee, follow, run, sneak }
+    class InventoryMixin { equip, unequip, pickup, drop, use_item }
+    class ReproductionMixin { pairing, pregnancy, eggs, bonding }
+    class RelationshipsMixin { interactions, rumors, loans }
+    class ConversationMixin { dialogue system }
+    class UtilityMixin { search, guard, sleep, fatigue, traps, stances }
+    class RegenMixin { HP/stamina/mana regen }
 
     class Stats {
         +base, mods, active
@@ -101,14 +123,34 @@ classDiagram
 ```mermaid
 classDiagram
     class CreatureNet {
-        1454 → 1024 → 512 → 256 → 49
+        1464 → 1024 → 512 → 256 → 49
         +forward(), +select_action()
         +save(), +load()
+    }
+    class TorchCreatureNet {
+        Training version with autograd
+        +get_action(), +evaluate_actions()
+        +export_to_numpy()
     }
     class Simulation { +step() → results }
     class CreatureEnv { Gym single-agent }
     class MultiAgentCreatureEnv { Gym multi-agent }
-    class PPOTrainer { +update(buffer) }
-    PPOTrainer --> CreatureNet
+    class PPO { +update(buffer) }
+    class TrainingSink { JSONL writer for analytics }
+    PPO --> TorchCreatureNet
+    TorchCreatureNet --> CreatureNet : exports weights
     CreatureEnv --> Simulation
+
+    class nn_models_db {
+        name, version, weights BLOB
+        obs_schema_id, act_schema_id
+        training_params, training_stats
+    }
+    class training_db {
+        training_runs, phase_snapshots
+        episode_summaries, creature_episodes
+        observation_schemas, action_schemas
+    }
+    TrainingSink --> training_db : post-run summarize
+    TorchCreatureNet --> nn_models_db : save/load
 ```

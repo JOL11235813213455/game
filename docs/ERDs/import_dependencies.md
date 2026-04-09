@@ -25,6 +25,21 @@ graph TD
     classes.creature --> classes.world_object
     classes.creature --> classes.stats
 
+    subgraph "creature/ package"
+        creature.__init__
+        creature._combat
+        creature._social
+        creature._movement
+        creature._inventory
+        creature._reproduction
+        creature._relationships
+        creature._conversation
+        creature._utility
+        creature._regen
+        creature._behaviors
+        creature._constants
+    end
+
     classes.world_object --> classes.trackable
     classes.world_object --> classes.animation
 

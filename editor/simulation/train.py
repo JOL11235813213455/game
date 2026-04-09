@@ -43,44 +43,116 @@ DB_PATH = _SRC_DIR / 'data' / 'game.db'
 _writer = None
 
 
-def _load_state_into_net(net: TorchCreatureNet, saved_state: dict) -> TorchCreatureNet:
-    """Load a saved state_dict into a net, auto-padding input and output layers.
+def _load_state_into_net(net: TorchCreatureNet, saved_state: dict,
+                         old_obs_schema_id: int | None = None,
+                         old_act_schema_id: int | None = None) -> TorchCreatureNet:
+    """Load a saved state_dict into a net, remapping by named sections.
+
+    When schema IDs are provided, uses named section/action remapping so that
+    reordered or inserted sections are correctly aligned. Falls back to
+    positional padding when schema IDs are not available (backward compat).
 
     Handles:
-    - Observation size changes (fc1 input dimension)
-    - Action count changes (policy_head output dimension)
-    Preserves all learned weights for unchanged dimensions.
+    - Observation size changes (fc1 input dimension) via section remapping
+    - Action count changes (policy_head output dimension) via action name remapping
+    Preserves all learned weights for matched sections/actions.
     """
     curr_state = net.state_dict()
 
-    # Handle input layer (fc1) dimension change
+    # --- fc1 (input layer): columns = observation features ---
     saved_w1 = saved_state.get('fc1.weight')
     if saved_w1 is not None and saved_w1.shape != curr_state['fc1.weight'].shape:
         old_in = saved_w1.shape[1]
         new_in = curr_state['fc1.weight'].shape[1]
-        print(f'  Observation size changed: {old_in} -> {new_in}, padding fc1')
-        padded = torch.zeros_like(curr_state['fc1.weight'])
-        min_in = min(old_in, new_in)
-        padded[:, :min_in] = saved_w1[:, :min_in]
-        saved_state['fc1.weight'] = padded
+        print(f'  Observation size changed: {old_in} -> {new_in}')
 
-    # Handle output layer (policy_head) dimension change
+        if old_obs_schema_id is not None:
+            # Named section remapping
+            from editor.simulation.training_db import (
+                get_schema, generate_observation_schema,
+            )
+            old_layout, _ = get_schema('observation', old_obs_schema_id)
+            new_layout = generate_observation_schema()
+            old_by_name = {s['section']: s for s in old_layout}
+            new_by_name = {s['section']: s for s in new_layout}
+
+            padded = torch.zeros_like(curr_state['fc1.weight'])
+            matched = []
+            for name in old_by_name.keys() & new_by_name.keys():
+                old_s, new_s = old_by_name[name], new_by_name[name]
+                copy_size = min(old_s['size'], new_s['size'])
+                padded[:, new_s['start']:new_s['start'] + copy_size] = \
+                    saved_w1[:, old_s['start']:old_s['start'] + copy_size]
+                matched.append(name)
+
+            added = set(new_by_name) - set(old_by_name)
+            dropped = set(old_by_name) - set(new_by_name)
+            print(f'  fc1 section remap: {len(matched)} matched, '
+                  f'{len(added)} new (zeroed), {len(dropped)} dropped')
+            if added:
+                print(f'    Added: {sorted(added)}')
+            if dropped:
+                print(f'    Dropped: {sorted(dropped)}')
+            saved_state['fc1.weight'] = padded
+        else:
+            # Positional fallback (no schema available)
+            print(f'  fc1: positional padding (no obs schema)')
+            padded = torch.zeros_like(curr_state['fc1.weight'])
+            min_in = min(old_in, new_in)
+            padded[:, :min_in] = saved_w1[:, :min_in]
+            saved_state['fc1.weight'] = padded
+
+    # --- policy_head (output layer): rows = actions ---
     saved_ph = saved_state.get('policy_head.weight')
     if saved_ph is not None and saved_ph.shape != curr_state['policy_head.weight'].shape:
         old_out = saved_ph.shape[0]
         new_out = curr_state['policy_head.weight'].shape[0]
-        print(f'  Action count changed: {old_out} -> {new_out}, padding policy_head')
-        # Weight
-        padded_w = torch.zeros_like(curr_state['policy_head.weight'])
-        min_out = min(old_out, new_out)
-        padded_w[:min_out, :] = saved_ph[:min_out, :]
-        saved_state['policy_head.weight'] = padded_w
-        # Bias
-        saved_pb = saved_state.get('policy_head.bias')
-        if saved_pb is not None:
+        print(f'  Action count changed: {old_out} -> {new_out}')
+
+        if old_act_schema_id is not None:
+            # Named action remapping
+            from editor.simulation.training_db import (
+                get_schema, generate_action_schema,
+            )
+            old_layout, _ = get_schema('action', old_act_schema_id)
+            new_layout = generate_action_schema()
+            old_by_name = {a['name']: a for a in old_layout}
+            new_by_name = {a['name']: a for a in new_layout}
+
+            padded_w = torch.zeros_like(curr_state['policy_head.weight'])
             padded_b = torch.zeros_like(curr_state['policy_head.bias'])
-            padded_b[:min_out] = saved_pb[:min_out]
+            saved_pb = saved_state.get('policy_head.bias')
+            matched = []
+            for name in old_by_name.keys() & new_by_name.keys():
+                old_idx = old_by_name[name]['index']
+                new_idx = new_by_name[name]['index']
+                padded_w[new_idx, :] = saved_ph[old_idx, :]
+                if saved_pb is not None:
+                    padded_b[new_idx] = saved_pb[old_idx]
+                matched.append(name)
+
+            added = set(new_by_name) - set(old_by_name)
+            dropped = set(old_by_name) - set(new_by_name)
+            print(f'  policy_head action remap: {len(matched)} matched, '
+                  f'{len(added)} new (zeroed), {len(dropped)} dropped')
+            if added:
+                print(f'    Added: {sorted(added)}')
+            if dropped:
+                print(f'    Dropped: {sorted(dropped)}')
+            saved_state['policy_head.weight'] = padded_w
             saved_state['policy_head.bias'] = padded_b
+        else:
+            # Positional fallback
+            print(f'  policy_head: positional padding (no act schema)')
+            padded_w = torch.zeros_like(curr_state['policy_head.weight'])
+            min_out = min(old_out, new_out)
+            padded_w[:min_out, :] = saved_ph[:min_out, :]
+            saved_state['policy_head.weight'] = padded_w
+            saved_pb = saved_state.get('policy_head.bias')
+            if saved_pb is not None:
+                padded_b = torch.zeros_like(curr_state['policy_head.bias'])
+                padded_b[:min_out] = saved_pb[:min_out]
+                saved_state['policy_head.bias'] = padded_b
 
     net.load_state_dict(saved_state, strict=False)
     return net
@@ -88,7 +160,9 @@ def _load_state_into_net(net: TorchCreatureNet, saved_state: dict) -> TorchCreat
 
 def _save_model_to_db(net: TorchCreatureNet, name: str, parent_version: int | None,
                       training_params: dict, training_stats: dict,
-                      training_seconds: float, notes: str = '') -> int:
+                      training_seconds: float, notes: str = '',
+                      obs_schema_id: int | None = None,
+                      act_schema_id: int | None = None) -> int:
     """Save model weights + metadata to nn_models table. Returns new version number."""
     import sqlite3, json, io
     from datetime import datetime
@@ -106,13 +180,14 @@ def _save_model_to_db(net: TorchCreatureNet, name: str, parent_version: int | No
 
     con.execute('''INSERT INTO nn_models
         (name, version, parent_version, weights, observation_size, num_actions,
-         training_params, training_stats, training_seconds, created_at, notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+         training_params, training_stats, training_seconds, created_at, notes,
+         obs_schema_id, act_schema_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
         (name, version, parent_version, weights_blob,
          OBSERVATION_SIZE, NUM_ACTIONS,
          json.dumps(training_params), json.dumps(training_stats),
          training_seconds, datetime.utcnow().isoformat(sep=' ', timespec='seconds'),
-         notes))
+         notes, obs_schema_id, act_schema_id))
     con.commit()
     con.close()
     print(f'  Saved to DB: {name} v{version}')
@@ -154,7 +229,11 @@ def _load_model_from_db(net: TorchCreatureNet, name: str,
 
     buf = io.BytesIO(row_dict['weights'])
     saved_state = torch.load(buf, weights_only=True)
-    net = _load_state_into_net(net, saved_state)
+    net = _load_state_into_net(
+        net, saved_state,
+        old_obs_schema_id=row_dict.get('obs_schema_id'),
+        old_act_schema_id=row_dict.get('act_schema_id'),
+    )
 
     row_dict['training_params'] = json.loads(row_dict['training_params'])
     row_dict['training_stats'] = json.loads(row_dict['training_stats'])
@@ -828,6 +907,7 @@ def train(cycles: int = 3, mappo_steps: int = 100000,
     version = _save_model_to_db(
         net, model_name, parent_version,
         training_params, training_stats, total_seconds,
+        obs_schema_id=obs_schema_id, act_schema_id=act_schema_id,
     )
 
     # Create training_runs record and summarize sink to training.db
