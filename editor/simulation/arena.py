@@ -289,3 +289,142 @@ def generate_arena(cols: int = 20, rows: int = 20,
         'cols': cols,
         'rows': rows,
     }
+
+
+def _load_db_items():
+    """Load all items from the DB and return instantiated objects by key."""
+    import sqlite3, json
+    from pathlib import Path as P
+    from classes.inventory import CLASS_MAP, Slot as S
+    db = P(__file__).parent.parent.parent / 'src' / 'data' / 'game.db'
+    if not db.exists():
+        return {}
+    con = sqlite3.connect(db)
+    con.row_factory = sqlite3.Row
+    items = {}
+    slot_map = {}
+    for r in con.execute('SELECT item_key, slot FROM item_slots'):
+        slot_map.setdefault(r['item_key'], []).append(S(r['slot']))
+    for r in con.execute('SELECT * FROM items'):
+        cls = CLASS_MAP.get(r['class'])
+        if cls is None:
+            continue
+        kw = dict(name=r['name'], weight=r['weight'] or 0, value=r['value'] or 0,
+                  inventoriable=bool(r['inventoriable']),
+                  buffs=json.loads(r['buffs'] or '{}'))
+        if r['sprite_name']:
+            kw['sprite_name'] = r['sprite_name']
+        if r['class'] in ('Stackable','Consumable','Ammunition'):
+            kw['max_stack_size'] = r['max_stack_size'] or 99
+            kw['quantity'] = r['quantity'] or 1
+        if r['class'] == 'Consumable':
+            kw['duration'] = r['duration'] or 0
+        if r['class'] == 'Ammunition':
+            kw['damage'] = r['damage'] or 0
+            kw['destroy_on_use_probability'] = r['destroy_on_use_probability'] or 1.0
+            kw['recoverable'] = bool(r['recoverable']) if r['recoverable'] is not None else True
+        if r['class'] in ('Weapon','Wearable'):
+            kw['slots'] = slot_map.get(r['key'], [])
+            kw['slot_count'] = r['slot_count'] or 1
+            kw['durability_max'] = r['durability_max'] or 100
+            kw['durability_current'] = r['durability_current'] or 100
+        if r['class'] == 'Weapon':
+            kw['damage'] = r['damage'] or 0
+            kw['attack_time_ms'] = r['attack_time_ms'] or 500
+            kw['range'] = r['range'] or 1
+        try:
+            items[r['key']] = cls(**kw)
+        except Exception:
+            pass
+    con.close()
+    return items
+
+
+def generate_trade_scenario(cols: int = 25, rows: int = 25,
+                            num_creatures: int = 10) -> dict:
+    """Generate an asymmetric trading scenario.
+
+    One creature (the merchant) gets every item in the DB and no gold.
+    All other creatures get lots of gold and no items.
+    Items are also scattered on random tiles.
+
+    Watch: items flow from merchant to buyers via trade,
+    gold flows from buyers to merchant, items get dropped and picked up.
+    """
+    db_items = _load_db_items()
+    if not db_items:
+        print('Warning: no items in DB, using default arena')
+        return generate_arena(cols=cols, rows=rows, num_creatures=num_creatures)
+
+    tiles = {}
+    for x in range(cols):
+        for y in range(rows):
+            walkable = random.random() >= 0.05
+            tiles[MapKey(x, y, 0)] = Tile(walkable=walkable)
+    tiles[MapKey(0, 0, 0)] = Tile(walkable=True)
+    game_map = Map(tile_set=tiles, entrance=(0, 0), x_max=cols, y_max=rows)
+
+    walkable_tiles = [k for k, t in tiles.items() if t.walkable]
+    random.shuffle(walkable_tiles)
+
+    creatures = []
+
+    # Creature 0: THE MERCHANT — all items, no gold
+    merchant = spawn_creature(
+        game_map=game_map, location=walkable_tiles[0],
+        species='human', profile='social', name='Merchant',
+        age=40,
+    )
+    merchant.gold = 0
+    # Give one copy of every item
+    import copy
+    for key, item in db_items.items():
+        item_copy = copy.deepcopy(item)
+        merchant.inventory.items.append(item_copy)
+        merchant._item_prices[id(item_copy)] = item_copy.value
+    creatures.append(merchant)
+
+    # Creatures 1-N: BUYERS — lots of gold, no items
+    species_options = ['human', 'orc']
+    for i in range(1, min(num_creatures, len(walkable_tiles))):
+        species = random.choice(species_options)
+        c = spawn_creature(
+            game_map=game_map, location=walkable_tiles[i],
+            species=species,
+            profile=random.choice(['fighter', 'mage', 'rogue', 'balanced']),
+        )
+        # Clear inventory, give lots of gold
+        c.inventory.items.clear()
+        c.equipment.clear()
+        c.gold = random.randint(100, 500)
+        creatures.append(c)
+
+    # Scatter some items on random tiles
+    for i, (key, item) in enumerate(db_items.items()):
+        if i >= 15:
+            break
+        tile_key = walkable_tiles[num_creatures + i] if num_creatures + i < len(walkable_tiles) else walkable_tiles[-1]
+        tile = tiles[tile_key]
+        item_copy = copy.deepcopy(item)
+        tile.inventory.items.append(item_copy)
+
+    # Scatter gold on some tiles
+    for i in range(10):
+        idx = num_creatures + 15 + i
+        if idx < len(walkable_tiles):
+            tiles[walkable_tiles[idx]].gold = random.randint(10, 50)
+
+    # Pre-existing relationships
+    for c in creatures:
+        for other in creatures:
+            if other is c:
+                continue
+            if random.random() < 0.3:
+                c.record_interaction(other, random.uniform(-3, 8))
+
+    return {
+        'map': game_map,
+        'creatures': creatures,
+        'cols': cols,
+        'rows': rows,
+    }
