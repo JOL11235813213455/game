@@ -264,6 +264,21 @@ CREATE TABLE IF NOT EXISTS maps (
     y_min INTEGER NOT NULL DEFAULT 0,  y_max INTEGER NOT NULL DEFAULT 0,
     z_min INTEGER NOT NULL DEFAULT 0,  z_max INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS nn_models (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    name             TEXT NOT NULL,
+    version          INTEGER NOT NULL,
+    parent_version   INTEGER,
+    weights          BLOB NOT NULL,
+    observation_size INTEGER NOT NULL,
+    num_actions      INTEGER NOT NULL,
+    training_params  TEXT NOT NULL DEFAULT '{}',
+    training_stats   TEXT NOT NULL DEFAULT '{}',
+    training_seconds REAL NOT NULL DEFAULT 0,
+    created_at       TEXT NOT NULL DEFAULT '',
+    notes            TEXT NOT NULL DEFAULT '',
+    UNIQUE(name, version)
+);
 CREATE TABLE IF NOT EXISTS animations (
     name        TEXT PRIMARY KEY,
     target_type TEXT NOT NULL DEFAULT 'creature'

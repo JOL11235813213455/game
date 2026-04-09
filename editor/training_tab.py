@@ -149,26 +149,26 @@ class TrainingTab(ttk.Frame):
         ttk.Radiobutton(btn_row, text='Arena', variable=self.v_scenario, value='arena').pack(side=tk.LEFT, padx=2)
         ttk.Radiobutton(btn_row, text='Trade', variable=self.v_scenario, value='trade').pack(side=tk.LEFT, padx=2)
 
-        # Run name + resume
-        name_row = ttk.Frame(ctrl)
-        name_row.pack(fill=tk.X, pady=2)
-        ttk.Label(name_row, text='Run name:').pack(side=tk.LEFT, padx=4)
-        self.v_run_name = tk.StringVar(value='')
-        e = ttk.Entry(name_row, textvariable=self.v_run_name, width=20)
+        # Model name + resume from DB
+        model_row = ttk.Frame(ctrl)
+        model_row.pack(fill=tk.X, pady=2)
+        ttk.Label(model_row, text='Model name:').pack(side=tk.LEFT, padx=4)
+        self.v_model_name = tk.StringVar(value='alpha')
+        e = ttk.Entry(model_row, textvariable=self.v_model_name, width=20)
         e.pack(side=tk.LEFT, padx=2)
-        add_tooltip(e, 'Name for this training run (blank = auto timestamp)')
+        add_tooltip(e, 'Model lineage name — versions auto-increment in the DB')
 
-        ttk.Label(name_row, text='Resume from:').pack(side=tk.LEFT, padx=8)
+        ttk.Label(model_row, text='Resume from:').pack(side=tk.LEFT, padx=8)
         self.v_resume = tk.StringVar(value='(new)')
         self._checkpoint_list = ['(new)']
         self._refresh_checkpoints()
-        self.resume_cb = ttk.Combobox(name_row, textvariable=self.v_resume,
-                                      values=self._checkpoint_list, width=25)
+        self.resume_cb = ttk.Combobox(model_row, textvariable=self.v_resume,
+                                      values=self._checkpoint_list, width=35)
         self.resume_cb.pack(side=tk.LEFT, padx=2)
-        add_tooltip(self.resume_cb, 'Start fresh or resume from a saved .pt checkpoint')
-        btn_refresh = ttk.Button(name_row, text='↻', width=3, command=self._refresh_checkpoints)
+        add_tooltip(self.resume_cb, 'Start fresh or resume from a saved model version (name:version)')
+        btn_refresh = ttk.Button(model_row, text='↻', width=3, command=self._refresh_checkpoints)
         btn_refresh.pack(side=tk.LEFT, padx=2)
-        add_tooltip(btn_refresh, 'Refresh checkpoint list')
+        add_tooltip(btn_refresh, 'Refresh model list from DB')
 
         # Status
         self.v_status = tk.StringVar(value='Idle')
@@ -186,25 +186,27 @@ class TrainingTab(ttk.Frame):
         self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         log_sb.pack(side=tk.RIGHT, fill=tk.Y)
 
-        # -- Saved models --
-        models_frame = ttk.LabelFrame(self, text='Saved Models', padding=4)
+        # -- Saved models (from DB) --
+        models_frame = ttk.LabelFrame(self, text='Model Versions (game.db)', padding=4)
         models_frame.pack(fill=tk.X, padx=8, pady=4)
 
-        self.models_list = tk.Listbox(models_frame, height=4, width=60)
+        self.models_list = tk.Listbox(models_frame, height=5, width=80,
+                                       font=('Consolas', 9))
         self.models_list.pack(fill=tk.X)
         self._refresh_models()
 
     def _refresh_checkpoints(self):
         self._checkpoint_list = ['(new)']
-        if MODELS_DIR.exists():
-            # Root-level .pt files
-            for f in sorted(MODELS_DIR.glob('*.pt')):
-                self._checkpoint_list.append(f.name)
-            # Run-specific subdirectories
-            for d in sorted(MODELS_DIR.iterdir()):
-                if d.is_dir() and not d.name.startswith('_'):
-                    for f in sorted(d.glob('*.pt')):
-                        self._checkpoint_list.append(f'{d.name}/{f.name}')
+        try:
+            from editor.simulation.train import _list_models_from_db
+            for m in _list_models_from_db():
+                label = f'{m["name"]}:{m["version"]}'
+                secs = m.get('training_seconds', 0)
+                mins = secs / 60 if secs else 0
+                extra = f' ({mins:.0f}min, obs={m["observation_size"]}, act={m["num_actions"]})'
+                self._checkpoint_list.append(label + extra)
+        except Exception:
+            pass
         if hasattr(self, 'resume_cb'):
             self.resume_cb['values'] = self._checkpoint_list
 
@@ -236,12 +238,14 @@ class TrainingTab(ttk.Frame):
             '--arena-rows', self.v_arena_rows.get(),
             '--num-creatures', self.v_num_creatures.get(),
         ]
-        run_name = self.v_run_name.get().strip()
-        if run_name:
-            cmd.extend(['--name', run_name])
+        model_name = self.v_model_name.get().strip()
+        if model_name:
+            cmd.extend(['--model', model_name])
         resume = self.v_resume.get()
         if resume and resume != '(new)':
-            cmd.extend(['--resume', str(MODELS_DIR / resume)])
+            # Extract "name:version" from the display string (before the parenthetical)
+            resume_key = resume.split(' (')[0]
+            cmd.extend(['--resume', resume_key])
 
         self._log(f'Starting: {" ".join(cmd)}\n\n')
         self._process = subprocess.Popen(
@@ -275,6 +279,7 @@ class TrainingTab(ttk.Frame):
         self.btn_start.configure(state='normal')
         self.btn_stop.configure(state='disabled')
         self._refresh_models()
+        self._refresh_checkpoints()
         self._log(f'\n--- Training finished (exit {rc}) ---\n')
 
     def _stop(self):
@@ -320,19 +325,17 @@ class TrainingTab(ttk.Frame):
 
     def _refresh_models(self):
         self.models_list.delete(0, tk.END)
-        if MODELS_DIR.exists():
-            # Root-level .npz files
-            for f in sorted(MODELS_DIR.glob('*.npz')):
-                if f.name.startswith('_'):
-                    continue
-                size_mb = f.stat().st_size / (1024 * 1024)
-                mtime = time.strftime('%Y-%m-%d %H:%M', time.localtime(f.stat().st_mtime))
-                self.models_list.insert(tk.END, f'{f.name:30s} {size_mb:.1f}MB  {mtime}')
-            # Run-specific subdirectories
-            for d in sorted(MODELS_DIR.iterdir()):
-                if d.is_dir() and not d.name.startswith('_'):
-                    for f in sorted(d.glob('*.npz')):
-                        label = f'{d.name}/{f.name}'
-                        size_mb = f.stat().st_size / (1024 * 1024)
-                        mtime = time.strftime('%Y-%m-%d %H:%M', time.localtime(f.stat().st_mtime))
-                        self.models_list.insert(tk.END, f'{label:40s} {size_mb:.1f}MB  {mtime}')
+        try:
+            from editor.simulation.train import _list_models_from_db
+            for m in _list_models_from_db():
+                secs = m.get('training_seconds', 0)
+                mins = secs / 60 if secs else 0
+                notes = m.get('notes', '')[:30]
+                line = (f'{m["name"]:15s} v{m["version"]:<4d} '
+                        f'obs={m["observation_size"]}  act={m["num_actions"]}  '
+                        f'{mins:5.0f}min  {m["created_at"]}')
+                if notes:
+                    line += f'  {notes}'
+                self.models_list.insert(tk.END, line)
+        except Exception:
+            self.models_list.insert(tk.END, '(no models in DB)')

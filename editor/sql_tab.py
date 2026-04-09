@@ -424,6 +424,11 @@ class SqlTab(ttk.Frame):
             'color': '#2a2a1a',
             'tables': ['dialogue'],
         },
+        {
+            'label': 'Neural Net',
+            'color': '#2a1a1a',
+            'tables': ['nn_models'],
+        },
     ]
 
     def _draw_erd(self):
@@ -874,6 +879,19 @@ class SqlTab(ttk.Frame):
             ('maps', 'default_tile_template'): 'Template for unset coordinates',
             ('maps', 'entrance_x'): 'Player spawn X when entering this map',
             ('maps', 'entrance_y'): 'Player spawn Y when entering this map',
+            # nn_models
+            ('nn_models', 'id'): 'Auto-increment row ID',
+            ('nn_models', 'name'): 'Model lineage name (e.g. "alpha")',
+            ('nn_models', 'version'): 'Auto-incrementing version within lineage',
+            ('nn_models', 'parent_version'): 'Version this was resumed from (NULL = fresh start)',
+            ('nn_models', 'weights'): 'PyTorch state_dict serialized as BLOB',
+            ('nn_models', 'observation_size'): 'Observation vector size at time of training',
+            ('nn_models', 'num_actions'): 'Action space size at time of training',
+            ('nn_models', 'training_params'): 'JSON: all training hyperparameters',
+            ('nn_models', 'training_stats'): 'JSON: training duration, per-cycle stats',
+            ('nn_models', 'training_seconds'): 'Wall-clock seconds for this training run',
+            ('nn_models', 'created_at'): 'Timestamp when model was saved',
+            ('nn_models', 'notes'): 'Free-form annotation',
         }
 
         con = get_con()

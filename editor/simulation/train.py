@@ -36,8 +36,145 @@ SAVE_DIR.mkdir(exist_ok=True)
 LOG_DIR = Path(__file__).parent.parent / 'runs'
 LOG_DIR.mkdir(exist_ok=True)
 
+DB_PATH = _SRC_DIR / 'data' / 'game.db'
+
 # TensorBoard writer — initialized in train()
 _writer = None
+
+
+def _load_state_into_net(net: TorchCreatureNet, saved_state: dict) -> TorchCreatureNet:
+    """Load a saved state_dict into a net, auto-padding input and output layers.
+
+    Handles:
+    - Observation size changes (fc1 input dimension)
+    - Action count changes (policy_head output dimension)
+    Preserves all learned weights for unchanged dimensions.
+    """
+    curr_state = net.state_dict()
+
+    # Handle input layer (fc1) dimension change
+    saved_w1 = saved_state.get('fc1.weight')
+    if saved_w1 is not None and saved_w1.shape != curr_state['fc1.weight'].shape:
+        old_in = saved_w1.shape[1]
+        new_in = curr_state['fc1.weight'].shape[1]
+        print(f'  Observation size changed: {old_in} -> {new_in}, padding fc1')
+        padded = torch.zeros_like(curr_state['fc1.weight'])
+        min_in = min(old_in, new_in)
+        padded[:, :min_in] = saved_w1[:, :min_in]
+        saved_state['fc1.weight'] = padded
+
+    # Handle output layer (policy_head) dimension change
+    saved_ph = saved_state.get('policy_head.weight')
+    if saved_ph is not None and saved_ph.shape != curr_state['policy_head.weight'].shape:
+        old_out = saved_ph.shape[0]
+        new_out = curr_state['policy_head.weight'].shape[0]
+        print(f'  Action count changed: {old_out} -> {new_out}, padding policy_head')
+        # Weight
+        padded_w = torch.zeros_like(curr_state['policy_head.weight'])
+        min_out = min(old_out, new_out)
+        padded_w[:min_out, :] = saved_ph[:min_out, :]
+        saved_state['policy_head.weight'] = padded_w
+        # Bias
+        saved_pb = saved_state.get('policy_head.bias')
+        if saved_pb is not None:
+            padded_b = torch.zeros_like(curr_state['policy_head.bias'])
+            padded_b[:min_out] = saved_pb[:min_out]
+            saved_state['policy_head.bias'] = padded_b
+
+    net.load_state_dict(saved_state, strict=False)
+    return net
+
+
+def _save_model_to_db(net: TorchCreatureNet, name: str, parent_version: int | None,
+                      training_params: dict, training_stats: dict,
+                      training_seconds: float, notes: str = '') -> int:
+    """Save model weights + metadata to nn_models table. Returns new version number."""
+    import sqlite3, json, io
+    from datetime import datetime
+
+    # Serialize state_dict to bytes
+    buf = io.BytesIO()
+    torch.save(net.state_dict(), buf)
+    weights_blob = buf.getvalue()
+
+    con = sqlite3.connect(DB_PATH)
+    # Get next version for this name
+    row = con.execute('SELECT COALESCE(MAX(version), 0) FROM nn_models WHERE name = ?',
+                      (name,)).fetchone()
+    version = row[0] + 1
+
+    con.execute('''INSERT INTO nn_models
+        (name, version, parent_version, weights, observation_size, num_actions,
+         training_params, training_stats, training_seconds, created_at, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+        (name, version, parent_version, weights_blob,
+         OBSERVATION_SIZE, NUM_ACTIONS,
+         json.dumps(training_params), json.dumps(training_stats),
+         training_seconds, datetime.utcnow().isoformat(sep=' ', timespec='seconds'),
+         notes))
+    con.commit()
+    con.close()
+    print(f'  Saved to DB: {name} v{version}')
+    return version
+
+
+def _load_model_from_db(net: TorchCreatureNet, name: str,
+                        version: int | None = None) -> tuple[TorchCreatureNet, dict]:
+    """Load model weights from nn_models table.
+
+    Args:
+        net: target network (may have different dimensions)
+        name: model lineage name
+        version: specific version, or None for latest
+
+    Returns:
+        (net_with_loaded_weights, row_dict)
+    """
+    import sqlite3, json, io
+
+    con = sqlite3.connect(DB_PATH)
+    con.row_factory = sqlite3.Row
+    if version is None:
+        row = con.execute(
+            'SELECT * FROM nn_models WHERE name = ? ORDER BY version DESC LIMIT 1',
+            (name,)).fetchone()
+    else:
+        row = con.execute(
+            'SELECT * FROM nn_models WHERE name = ? AND version = ?',
+            (name, version)).fetchone()
+    con.close()
+
+    if row is None:
+        raise ValueError(f'Model not found: {name} v{version}')
+
+    row_dict = dict(row)
+    print(f'  Loading from DB: {name} v{row_dict["version"]} '
+          f'(obs={row_dict["observation_size"]}, actions={row_dict["num_actions"]})')
+
+    buf = io.BytesIO(row_dict['weights'])
+    saved_state = torch.load(buf, weights_only=True)
+    net = _load_state_into_net(net, saved_state)
+
+    row_dict['training_params'] = json.loads(row_dict['training_params'])
+    row_dict['training_stats'] = json.loads(row_dict['training_stats'])
+    # Don't return blob in dict
+    del row_dict['weights']
+    return net, row_dict
+
+
+def _list_models_from_db() -> list[dict]:
+    """List all model versions from the DB."""
+    import sqlite3, json
+    if not DB_PATH.exists():
+        return []
+    con = sqlite3.connect(DB_PATH)
+    con.row_factory = sqlite3.Row
+    rows = con.execute(
+        'SELECT id, name, version, parent_version, observation_size, num_actions, '
+        'training_seconds, created_at, notes FROM nn_models ORDER BY name, version'
+    ).fetchall()
+    con.close()
+    return [dict(r) for r in rows]
 
 def _log(tag: str, value: float, step: int):
     """Log a scalar to TensorBoard if writer is available."""
@@ -470,44 +607,70 @@ def train(cycles: int = 3, mappo_steps: int = 100000,
           es_generations: int = 50, es_variants: int = 50,
           es_steps: int = 500,
           ppo_steps: int = 100000, lr: float = 3e-4,
-          run_name: str = None, resume_from: str = None,
+          model_name: str = None, resume_from: str = None,
           arena_cols: int = 25, arena_rows: int = 25,
           num_creatures: int = 16):
-    """Run the full MAPPO → ES → PPO training pipeline."""
+    """Run the full MAPPO → ES → PPO training pipeline.
+
+    Models are saved to the game.db nn_models table with versioning.
+    TensorBoard logs still go to editor/runs/.
+    """
     global _writer, SAVE_DIR
     from torch.utils.tensorboard import SummaryWriter
-    if not run_name:
-        run_name = f'train_{time.strftime("%Y%m%d_%H%M%S")}'
-    # Save models to run-specific subfolder
-    SAVE_DIR = Path(__file__).parent.parent / 'models' / run_name
+
+    if not model_name:
+        model_name = f'model_{time.strftime("%Y%m%d_%H%M%S")}'
+    run_tag = f'{model_name}_{time.strftime("%Y%m%d_%H%M%S")}'
+
+    # Keep a run-specific dir for TensorBoard + .npz runtime weights
+    SAVE_DIR = Path(__file__).parent.parent / 'models' / run_tag
     SAVE_DIR.mkdir(parents=True, exist_ok=True)
-    _writer = SummaryWriter(log_dir=LOG_DIR / run_name)
+    _writer = SummaryWriter(log_dir=LOG_DIR / run_tag)
+
+    training_params = {
+        'cycles': cycles,
+        'mappo_steps': mappo_steps,
+        'es_generations': es_generations,
+        'es_variants': es_variants,
+        'es_steps': es_steps,
+        'ppo_steps': ppo_steps,
+        'lr': lr,
+        'arena_cols': arena_cols,
+        'arena_rows': arena_rows,
+        'num_creatures': num_creatures,
+        'observation_size': OBSERVATION_SIZE,
+        'num_actions': NUM_ACTIONS,
+    }
+
     print(f'TensorBoard: tensorboard --logdir {LOG_DIR}')
-    print(f'Run name: {run_name}')
-    print(f'Models dir: {SAVE_DIR}')
+    print(f'Model name: {model_name}')
     print(f'Training pipeline: {cycles} cycles')
     print(f'  MAPPO: {mappo_steps} steps per cycle')
-    print(f'  ES: {es_generations} generations × {es_variants} variants × {es_steps} steps')
+    print(f'  ES: {es_generations} generations x {es_variants} variants x {es_steps} steps')
     print(f'  PPO: {ppo_steps} steps per cycle')
     print(f'  Observation size: {OBSERVATION_SIZE}')
     print(f'  Action space: {NUM_ACTIONS}')
     print(f'  Learning rate: {lr}')
 
     net = TorchCreatureNet()
+    parent_version = None
+
+    # Resume: try DB first (name:version format), then fall back to .pt file
     if resume_from:
-        print(f'  Resuming from: {resume_from}')
-        saved_state = torch.load(resume_from, weights_only=True)
-        # Handle observation size change — pad fc1 weights if needed
-        saved_w1 = saved_state.get('fc1.weight')
-        curr_w1 = net.state_dict()['fc1.weight']
-        if saved_w1 is not None and saved_w1.shape != curr_w1.shape:
-            old_in = saved_w1.shape[1]
-            new_in = curr_w1.shape[1]
-            print(f'  Observation size changed: {old_in} → {new_in}, padding fc1')
-            padded = torch.zeros_like(curr_w1)
-            padded[:, :old_in] = saved_w1
-            saved_state['fc1.weight'] = padded
-        net.load_state_dict(saved_state, strict=False)
+        if ':' in resume_from:
+            # DB format: "model_name:version" or "model_name" for latest
+            parts = resume_from.split(':', 1)
+            rname = parts[0]
+            rver = int(parts[1]) if parts[1] else None
+            net, row_info = _load_model_from_db(net, rname, rver)
+            parent_version = row_info['version']
+            print(f'  Resumed from DB: {rname} v{parent_version}')
+        else:
+            # Legacy .pt file path
+            print(f'  Resuming from file: {resume_from}')
+            saved_state = torch.load(resume_from, weights_only=True)
+            net = _load_state_into_net(net, saved_state)
+
     ppo = PPO(net, lr=lr)
     print(f'  Net params: {net.param_count():,}')
     print(f'  Arena: {arena_cols}x{arena_rows}, {num_creatures} creatures')
@@ -521,7 +684,6 @@ def train(cycles: int = 3, mappo_steps: int = 100000,
         'mask_pool': ['socially_deaf', 'blind', 'deaf', 'fearless',
                       'feral', 'impulsive', 'nearsighted', 'paranoid'],
     }
-    # ES uses smaller arena and more masks by default
     es_arena_kwargs = {
         **arena_kwargs,
         'mask_probability': 0.15,
@@ -529,6 +691,9 @@ def train(cycles: int = 3, mappo_steps: int = 100000,
                       'feral', 'impulsive', 'nearsighted', 'paranoid',
                       'amnesiac', 'greedy', 'zealot'],
     }
+
+    pipeline_t0 = time.time()
+    all_cycle_stats = []
 
     for cycle in range(cycles):
         print(f'\n{"="*60}')
@@ -539,40 +704,46 @@ def train(cycles: int = 3, mappo_steps: int = 100000,
 
         # Phase 1: MAPPO
         net = run_mappo(net, ppo, steps=mappo_steps, arena_kwargs=arena_kwargs)
+        # Save .npz for runtime inference during training
         net.export_to_numpy(SAVE_DIR / f'mappo_cycle{cycle+1}.npz')
-        torch.save(net.state_dict(), SAVE_DIR / f'mappo_cycle{cycle+1}.pt')
 
         # Phase 2: ES
         net = run_es(net, generations=es_generations, variants=es_variants,
                      steps_per_variant=es_steps, arena_kwargs=es_arena_kwargs)
-        net.export_to_numpy(SAVE_DIR / f'es_cycle{cycle+1}.npz')
-        torch.save(net.state_dict(), SAVE_DIR / f'es_cycle{cycle+1}.pt')
 
         # Phase 3: PPO
         ppo = PPO(net, lr=lr)  # fresh optimizer
         net = run_ppo(net, ppo, steps=ppo_steps, checkpoint_dir=SAVE_DIR,
                       arena_kwargs=arena_kwargs)
-        net.export_to_numpy(SAVE_DIR / f'ppo_cycle{cycle+1}.npz')
-        torch.save(net.state_dict(), SAVE_DIR / f'ppo_cycle{cycle+1}.pt')
 
         elapsed = time.time() - t0
+        all_cycle_stats.append({'cycle': cycle + 1, 'seconds': round(elapsed, 1)})
         print(f'\nCycle {cycle+1} complete in {elapsed:.0f}s')
 
-    # Save final
+    # Save final model to DB
+    total_seconds = time.time() - pipeline_t0
+    training_stats = {
+        'total_seconds': round(total_seconds, 1),
+        'cycles': all_cycle_stats,
+    }
+
+    version = _save_model_to_db(
+        net, model_name, parent_version,
+        training_params, training_stats, total_seconds,
+    )
+
+    # Also export .npz for runtime use
     net.export_to_numpy(SAVE_DIR / 'final.npz')
-    torch.save(net.state_dict(), SAVE_DIR / 'final.pt')
-    # Also save to root models/ for easy resume
     root_models = Path(__file__).parent.parent / 'models'
-    net.export_to_numpy(root_models / 'final.npz')
-    torch.save(net.state_dict(), root_models / 'final.pt')
+    net.export_to_numpy(root_models / 'latest.npz')
+
     if _writer:
         _writer.close()
-    # Clear live state so viewer knows training is done
     from editor.simulation.train_state import clear_state
     clear_state()
-    print(f'\nTraining complete. Models saved to {SAVE_DIR}/')
-    print(f'  NumPy weights: final.npz (load with CreatureNet)')
-    print(f'  PyTorch state: final.pt (resume training)')
+    print(f'\nTraining complete in {total_seconds:.0f}s')
+    print(f'  Saved to DB: {model_name} v{version}')
+    print(f'  NumPy weights: {SAVE_DIR}/final.npz')
     print(f'  TensorBoard: tensorboard --logdir {LOG_DIR}')
 
 
@@ -586,8 +757,9 @@ if __name__ == '__main__':
     parser.add_argument('--ppo-steps', type=int, default=100000)
     parser.add_argument('--lr', type=float, default=3e-4)
     parser.add_argument('--seed', type=int, default=42)
-    parser.add_argument('--name', type=str, default=None, help='Run name for TensorBoard')
-    parser.add_argument('--resume', type=str, default=None, help='Path to .pt checkpoint to resume from')
+    parser.add_argument('--model', type=str, default=None, help='Model lineage name (stored in DB)')
+    parser.add_argument('--resume', type=str, default=None,
+                        help='Resume from: "name:version" for DB, or path to .pt file')
     parser.add_argument('--arena-cols', type=int, default=25, help='Arena width in tiles')
     parser.add_argument('--arena-rows', type=int, default=25, help='Arena height in tiles')
     parser.add_argument('--num-creatures', type=int, default=16, help='Creatures per arena')
@@ -605,7 +777,7 @@ if __name__ == '__main__':
         es_steps=args.es_steps,
         ppo_steps=args.ppo_steps,
         lr=args.lr,
-        run_name=args.name,
+        model_name=args.model,
         resume_from=args.resume,
         arena_cols=args.arena_cols,
         arena_rows=args.arena_rows,

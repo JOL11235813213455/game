@@ -177,6 +177,17 @@ def _migrate(con: sqlite3.Connection) -> None:
     opposed_god TEXT, aligned_actions TEXT NOT NULL DEFAULT '[]',
     opposed_actions TEXT NOT NULL DEFAULT '[]',
     description TEXT NOT NULL DEFAULT '')""",
+        """CREATE TABLE IF NOT EXISTS nn_models (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL, version INTEGER NOT NULL,
+    parent_version INTEGER, weights BLOB NOT NULL,
+    observation_size INTEGER NOT NULL, num_actions INTEGER NOT NULL,
+    training_params TEXT NOT NULL DEFAULT '{}',
+    training_stats TEXT NOT NULL DEFAULT '{}',
+    training_seconds REAL NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT '',
+    notes TEXT NOT NULL DEFAULT '',
+    UNIQUE(name, version))""",
     ]:
         try:
             con.execute(stmt)
