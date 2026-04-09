@@ -136,18 +136,9 @@ class TrainingTab(ttk.Frame):
         self.btn_tb.pack(side=tk.LEFT, padx=4)
         add_tooltip(self.btn_tb, 'Launch TensorBoard in browser (http://localhost:6006)')
 
-        self.btn_viewer = ttk.Button(btn_row, text='👁 Sim Viewer', command=self._open_viewer)
-        self.btn_viewer.pack(side=tk.LEFT, padx=4)
-        add_tooltip(self.btn_viewer, 'Open standalone simulation viewer')
-
         self.btn_train_viewer = ttk.Button(btn_row, text='🔴 Watch Training', command=self._open_training_viewer)
         self.btn_train_viewer.pack(side=tk.LEFT, padx=4)
         add_tooltip(self.btn_train_viewer, 'Watch the LIVE training simulation (must be running)')
-
-        # Viewer scenario
-        self.v_scenario = tk.StringVar(value='arena')
-        ttk.Radiobutton(btn_row, text='Arena', variable=self.v_scenario, value='arena').pack(side=tk.LEFT, padx=2)
-        ttk.Radiobutton(btn_row, text='Trade', variable=self.v_scenario, value='trade').pack(side=tk.LEFT, padx=2)
 
         # Model name + resume from DB
         model_row = ttk.Frame(ctrl)
@@ -302,22 +293,10 @@ class TrainingTab(ttk.Frame):
         # Open browser after short delay
         self.after(2000, lambda: __import__('webbrowser').open('http://localhost:6006'))
 
-    def _open_viewer(self):
-        """Launch the standalone pygame simulation viewer."""
-        scenario = self.v_scenario.get()
-        cmd = [
-            'python', '-m', 'editor.simulation.viewer',
-            '--scenario', scenario,
-            '--cols', '25', '--rows', '25',
-            '--creatures', '12', '--cell', '20',
-        ]
-        self._log(f'Launching viewer: {scenario}\n')
-        subprocess.Popen(cmd, cwd=str(EDITOR_DIR.parent))
-
     def _open_training_viewer(self):
         """Launch the LIVE training viewer — shows what training is doing right now."""
         cmd = [
-            'python', '-m', 'editor.simulation.viewer',
+            sys.executable, '-m', 'editor.simulation.viewer',
             '--scenario', 'training',
         ]
         self._log('Launching live training viewer\n')
