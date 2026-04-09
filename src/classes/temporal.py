@@ -182,6 +182,76 @@ def generate_temporal_transforms(history: deque, current: dict) -> list[float]:
                 # Streak
                 obs.append(_streak(var_history[-window:]) / max(1, window))
 
+            # Acceleration: is the change speeding up or slowing down?
+            # ln(t/t-1) - ln(t-1/t-2)
+            if n >= window + 1 and window > 0:
+                prev_past = hist_list[-(window + 1)].get(var, 0) if n > window else past_val
+                accel = _safe_ln_ratio(cur_val, past_val) - _safe_ln_ratio(past_val, prev_past)
+                obs.append(max(-5.0, min(5.0, accel)))
+            else:
+                obs.append(0.0)
+
+            # Momentum: how consistently trending (sum of signs / window)
+            if len(window_vals) >= 2:
+                signs = sum(1 if window_vals[i] > window_vals[i-1]
+                           else (-1 if window_vals[i] < window_vals[i-1] else 0)
+                           for i in range(1, len(window_vals)))
+                obs.append(signs / max(1, len(window_vals) - 1))
+            else:
+                obs.append(0.0)
+
+            # Mean reversion: how far from recent average (z-score)
+            if len(window_vals) >= 2:
+                mean_val = sum(window_vals) / len(window_vals)
+                sd = _stdev(window_vals)
+                z = (cur_val - mean_val) / max(0.001, sd)
+                obs.append(max(-3.0, min(3.0, z)))
+            else:
+                obs.append(0.0)
+
+            # Relative position: where in recent range (0 = at min, 1 = at max)
+            if len(window_vals) >= 2:
+                rng = max(window_vals) - min(window_vals)
+                if rng > 0.001:
+                    obs.append((cur_val - min(window_vals)) / rng)
+                else:
+                    obs.append(0.5)
+            else:
+                obs.append(0.5)
+
+    # ==== CROSS-VARIABLE TEMPORAL INTERACTIONS ====
+    # Products of key variable trends across windows
+    # "Am I losing HP while enemy approaches?" etc.
+    _cross_pairs = [
+        ('hp_ratio', 'closest_enemy_dist'),       # dying + threat approaching
+        ('hp_ratio', 'stam_ratio'),                # double resource drain
+        ('gold', 'allies'),                        # economic-social correlation
+        ('stam_ratio', 'closest_enemy_dist'),      # exhausted + threat
+        ('reputation', 'allies'),                  # social trend coherence
+        ('gold', 'reputation'),                    # wealth-reputation correlation
+        ('hp_ratio', 'fatigue'),                   # health + tiredness
+        ('mana_ratio', 'closest_enemy_dist'),      # mana drain + threat
+        ('piety', 'reputation'),                   # religious-social alignment
+        ('kills', 'reputation'),                   # violence-reputation tradeoff
+    ]
+
+    for var_a, var_b in _cross_pairs:
+        cur_a = current.get(var_a, 0)
+        cur_b = current.get(var_b, 0)
+        for window in WINDOWS:
+            if n >= window and window > 0:
+                past_a = hist_list[-window].get(var_a, 0)
+                past_b = hist_list[-window].get(var_b, 0)
+                trend_a = _safe_ln_ratio(cur_a, past_a)
+                trend_b = _safe_ln_ratio(cur_b, past_b)
+            else:
+                trend_a = 0.0
+                trend_b = 0.0
+            # Product of trends: positive when both moving same direction
+            obs.append(trend_a * trend_b)
+            # Sum of trends: total pressure
+            obs.append(trend_a + trend_b)
+
     return obs
 
 
@@ -208,6 +278,13 @@ def generate_time_since(creature, current_tick: int) -> list[float]:
 
 
 # Size constants for observation integration
-TEMPORAL_TRANSFORMS_SIZE = len(TRACKED_VARS) * len(WINDOWS) * 3 + 5 * len(WINDOWS) * 2
+# Per var per window: 3 base (ln, sign, stdev) + 4 new (accel, momentum, z-score, rel_pos) = 7
+# Key vars add 2 more (range, streak) = 9
+_n_key = 5
+_n_vars = len(TRACKED_VARS)
+_n_win = len(WINDOWS)
+_n_cross = 10  # cross-variable pairs
+TEMPORAL_TRANSFORMS_SIZE = (_n_vars * _n_win * 7 + _n_key * _n_win * 2
+                            + _n_cross * _n_win * 2)
 TIME_SINCE_SIZE = len(EVENT_TYPES)
 TOTAL_TEMPORAL_SIZE = TEMPORAL_TRANSFORMS_SIZE + TIME_SINCE_SIZE
