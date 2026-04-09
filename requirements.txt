@@ -13,5 +13,7 @@ python-dotenv==1.2.2
 PyTMX==3.32
 ruff==0.15.8
 six==1.17.0
+torch>=2.0.0
+platformdirs>=3.0.0
 sqlite3
 tkinter
