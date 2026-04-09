@@ -114,6 +114,11 @@ class Creature(WorldObject):
         # See observation.py PRESET_MASKS for options (socially_deaf, blind, feral, etc.)
         self.observation_mask: str | None = None
 
+        # History buffer for temporal transforms (ring buffer, max 100 snapshots)
+        from collections import deque
+        self._history: deque = deque(maxlen=100)
+        self._event_ticks: dict[str, int] = {}  # event_name → last tick it happened
+
         # RL tracking counters
         self.life_goal_attainment: int = 0  # pairing, hatch, child milestones
         self.failed_actions: int = 0        # actions failed due to resources

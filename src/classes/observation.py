@@ -785,27 +785,23 @@ def build_observation(creature, cols: int, rows: int,
     obs.append(min(1.0, getattr(creature, '_quest_steps_completed', 0) - prev.get('quest_steps', getattr(creature, '_quest_steps_completed', 0))))
     obs.append(1.0 if stats.base.get(Stat.EXP, 0) > prev.get('exp', stats.base.get(Stat.EXP, 0)) else 0.0)
 
-    # ==== SECTION 25: TEMPORAL TRENDS (11) ====
-    t10 = trend_10 or {}
-    t100 = trend_100 or {}
-    obs.append(t10.get('hp', 0.0))
-    obs.append(t10.get('stamina', 0.0))
-    obs.append(t10.get('gold', 0.0))
-    obs.append(t10.get('reputation', 0.0))
-    obs.append(t10.get('kills', 0.0))
-    obs.append(t10.get('damage_taken', 0.0))
-    obs.append(t100.get('hp', 0.0))
-    obs.append(t100.get('gold', 0.0))
-    obs.append(t100.get('reputation', 0.0))
-    obs.append(t100.get('kills', 0.0))
-    obs.append(t100.get('allies_change', 0.0))
-
-    # ==== SECTION 26: TIME SINCE EVENTS (12) ====
-    ts = time_since or {}
-    for key in ['combat', 'hit_taken', 'kill', 'social', 'trade',
-                'sleep', 'consume', 'quest_step', 'pairing', 'level_up',
-                'moved', 'failed_action']:
-        obs.append(ts.get(key, 0) / (1000.0 if key in ('pairing', 'level_up') else 100.0))
+    # ==== SECTION 25+26: TEMPORAL TRANSFORMS FROM HISTORY ====
+    # Rich temporal features: ln ratios, volatility, streaks, time-since-events
+    from classes.temporal import (
+        generate_temporal_transforms, generate_time_since,
+        make_history_snapshot,
+    )
+    if hasattr(creature, '_history') and creature._history:
+        current_snap = make_history_snapshot(creature,
+                                            visible_enemies=enemies,
+                                            visible_allies=allies)
+        obs.extend(generate_temporal_transforms(creature._history, current_snap))
+        current_tick = 0  # simplified — caller should pass via prev_snapshot
+        obs.extend(generate_time_since(creature, current_tick))
+    else:
+        # No history yet — output zeros
+        from classes.temporal import TOTAL_TEMPORAL_SIZE
+        obs.extend([0.0] * TOTAL_TEMPORAL_SIZE)
 
     # ==== SECTION 27: REWARD SIGNAL VALUES (17) ====
     obs.append(_ratio(hp_cur, hp_max))

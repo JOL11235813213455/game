@@ -42,7 +42,7 @@ class CreatureNet:
         b3: (output_size,)
     """
 
-    def __init__(self, h1_size: int = 512, h2_size: int = 256,
+    def __init__(self, h1_size: int = 768, h2_size: int = 512,
                  input_size: int = OBSERVATION_SIZE,
                  output_size: int = NUM_ACTIONS):
         self.input_size = input_size
