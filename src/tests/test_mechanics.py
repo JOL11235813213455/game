@@ -2694,9 +2694,77 @@ d_trade = compute_trade_price(weak_sword, desperate, buyer)
 if d_trade['feasible']:
     check(f"Desperate seller accepts lower price: {d_trade['price']:.1f}", d_trade['price'] > 0)
 
-# Liabilities field exists
-check("Creature has liabilities", hasattr(val_creature, 'liabilities'))
-check("Default liabilities = 0", val_creature.liabilities == 0.0)
+# ==========================================================================
+print("\n=== Loan System ===")
+m68 = make_map()
+lender = make_creature(m68, x=0, y=0, name='Lender',
+                       stats={Stat.CHR: 14, Stat.STR: 10, Stat.PER: 10})
+lender.gold = 500
+borrower_l = make_creature(m68, x=1, y=0, name='Borrower',
+                           stats={Stat.CHR: 10, Stat.STR: 10, Stat.PER: 10})
+borrower_l.gold = 50
+
+# Give a loan
+check("Give loan succeeds", lender.give_loan(borrower_l, 100, daily_rate=0.1, now=0))
+check(f"Lender gold: {lender.gold}", lender.gold == 400)
+check(f"Borrower gold: {borrower_l.gold}", borrower_l.gold == 150)
+check("Loan recorded on borrower", lender.uid in borrower_l.loans)
+check("Loan recorded on lender", borrower_l.uid in lender.loans_given)
+
+# Debt calculation (no time passed)
+owed = borrower_l.debt_owed_to(lender.uid, now=0)
+check(f"Debt at t=0: {owed:.1f} (should be 100)", abs(owed - 100) < 0.1)
+
+# Debt with interest (1 day at 10%)
+owed_1d = borrower_l.debt_owed_to(lender.uid, now=86_400_000)
+check(f"Debt after 1 day: {owed_1d:.1f} (should be ~110)", abs(owed_1d - 110) < 1)
+
+# Debt after 5 days
+owed_5d = borrower_l.debt_owed_to(lender.uid, now=5 * 86_400_000)
+check(f"Debt after 5 days: {owed_5d:.1f} (compounding)", owed_5d > 150)
+
+# Total debt
+total = borrower_l.total_debt(now=0)
+check(f"Total debt: {total:.1f}", abs(total - 100) < 0.1)
+
+# Disposable wealth
+disp = borrower_l.disposable_wealth(now=0)
+check(f"Disposable wealth: {disp:.1f} (150 - 100 = 50)", abs(disp - 50) < 0.1)
+
+# Underwater after interest
+disp_5d = borrower_l.disposable_wealth(now=5 * 86_400_000)
+check(f"Underwater after 5 days: disposable={disp_5d:.1f}", disp_5d < 0)
+
+# Partial repayment
+r = borrower_l.repay_loan(lender, 60.0, now=0)
+check(f"Partial repay: paid={r['paid']:.1f}", r['paid'] == 60)
+check(f"Remaining: {r['remaining']:.1f}", r['remaining'] > 0)
+check("Not fully repaid", not r['fully_repaid'])
+check(f"Borrower gold after repay: {borrower_l.gold}", borrower_l.gold == 90)
+
+# Full repayment
+borrower_l.gold = 200
+r2 = borrower_l.repay_loan(lender, 200.0, now=0)
+check("Fully repaid", r2['fully_repaid'])
+check("Loan cleared from borrower", lender.uid not in borrower_l.loans)
+check("Loan cleared from lender", borrower_l.uid not in lender.loans_given)
+
+# Collect debt
+lender.give_loan(borrower_l, 50, daily_rate=0.05, now=0)
+borrower_l.gold = 10  # can't fully pay
+r3 = lender.collect_debt(borrower_l, now=0)
+check(f"Collected: {r3['collected']:.1f} (partial)", r3['collected'] == 10)
+check(f"Remaining: {r3['remaining']:.1f}", r3['remaining'] > 0)
+
+# Default: 0 gold
+borrower_l.gold = 0
+r4 = lender.collect_debt(borrower_l, now=0)
+check("Default: can't pay", r4['defaulted'])
+
+# Can't loan more than you have
+poor = make_creature(m68, x=2, y=0, name='Poor')
+poor.gold = 5
+check("Can't loan more than you have", not poor.give_loan(borrower_l, 100))
 
 # ==========================================================================
 print("\n=== Gods / Piety System ===")

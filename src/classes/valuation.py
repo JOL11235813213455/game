@@ -284,10 +284,10 @@ def compute_trade_price(item, seller, buyer) -> dict:
         sentiment_shift = rel[0] / (abs(rel[0]) + 20) * 0.2
         seller_share = max(0.1, min(0.9, seller_share - sentiment_shift))
 
-    # Desperation adjustments
-    # Disposable wealth = gold - liabilities
-    buyer_disposable = buyer.gold - getattr(buyer, 'liabilities', 0)
-    seller_disposable = seller.gold - getattr(seller, 'liabilities', 0)
+    # Desperation adjustments using disposable wealth (gold - debt)
+    # Use now=0 as approximation; caller can pass context if needed
+    buyer_disposable = buyer.disposable_wealth(0) if hasattr(buyer, 'disposable_wealth') else buyer.gold
+    seller_disposable = seller.disposable_wealth(0) if hasattr(seller, 'disposable_wealth') else seller.gold
 
     # Buyer desperate: item worth > half their disposable wealth
     if buyer_disposable > 0 and b_max > buyer_disposable * 0.5:
