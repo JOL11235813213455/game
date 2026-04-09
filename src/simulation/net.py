@@ -30,24 +30,23 @@ def softmax(x: np.ndarray) -> np.ndarray:
 class CreatureNet:
     """Feedforward neural net for creature action selection.
 
-    Architecture: input(114) → hidden1(128) → hidden2(64) → output(48)
+    Architecture: input → hidden1(1024) → hidden2(512) → hidden3(256) → output(49)
     Activation: ReLU on hidden layers, softmax on output (action probabilities).
 
-    Weights stored as dict of numpy arrays:
-        w1: (input_size, h1_size)
-        b1: (h1_size,)
-        w2: (h1_size, h2_size)
-        b2: (h2_size,)
-        w3: (h2_size, output_size)
-        b3: (output_size,)
+    Three hidden layers:
+      Layer 1: "what's happening" — compress raw perception into abstract features
+      Layer 2: "what matters" — combine features into situational assessment
+      Layer 3: "which action" — map assessment to behavioral intent
     """
 
     def __init__(self, h1_size: int = 1024, h2_size: int = 512,
+                 h3_size: int = 256,
                  input_size: int = OBSERVATION_SIZE,
                  output_size: int = NUM_ACTIONS):
         self.input_size = input_size
         self.h1_size = h1_size
         self.h2_size = h2_size
+        self.h3_size = h3_size
         self.output_size = output_size
         self.weights: dict[str, np.ndarray] = {}
         self._init_random()
@@ -56,15 +55,18 @@ class CreatureNet:
         """Xavier initialization for weights."""
         s1 = np.sqrt(2.0 / (self.input_size + self.h1_size))
         s2 = np.sqrt(2.0 / (self.h1_size + self.h2_size))
-        s3 = np.sqrt(2.0 / (self.h2_size + self.output_size))
+        s3 = np.sqrt(2.0 / (self.h2_size + self.h3_size))
+        s4 = np.sqrt(2.0 / (self.h3_size + self.output_size))
 
         self.weights = {
             'w1': np.random.randn(self.input_size, self.h1_size).astype(np.float32) * s1,
             'b1': np.zeros(self.h1_size, dtype=np.float32),
             'w2': np.random.randn(self.h1_size, self.h2_size).astype(np.float32) * s2,
             'b2': np.zeros(self.h2_size, dtype=np.float32),
-            'w3': np.random.randn(self.h2_size, self.output_size).astype(np.float32) * s3,
-            'b3': np.zeros(self.output_size, dtype=np.float32),
+            'w3': np.random.randn(self.h2_size, self.h3_size).astype(np.float32) * s3,
+            'b3': np.zeros(self.h3_size, dtype=np.float32),
+            'w4': np.random.randn(self.h3_size, self.output_size).astype(np.float32) * s4,
+            'b4': np.zeros(self.output_size, dtype=np.float32),
         }
 
     def forward(self, obs: np.ndarray) -> np.ndarray:
@@ -81,12 +83,10 @@ class CreatureNet:
         if single:
             x = x.reshape(1, -1)
 
-        # Hidden 1
         x = relu(x @ self.weights['w1'] + self.weights['b1'])
-        # Hidden 2
         x = relu(x @ self.weights['w2'] + self.weights['b2'])
-        # Output
-        x = x @ self.weights['w3'] + self.weights['b3']
+        x = relu(x @ self.weights['w3'] + self.weights['b3'])
+        x = x @ self.weights['w4'] + self.weights['b4']
         probs = softmax(x)
 
         return probs[0] if single else probs
