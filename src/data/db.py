@@ -76,6 +76,18 @@ def _migrate(con: sqlite3.Connection) -> None:
         "ALTER TABLE species ADD COLUMN size TEXT NOT NULL DEFAULT 'medium'",
         "ALTER TABLE items ADD COLUMN action_word TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE items ADD COLUMN requirements TEXT NOT NULL DEFAULT '{}'",
+        "ALTER TABLE items ADD COLUMN hit_dice INTEGER",
+        "ALTER TABLE items ADD COLUMN hit_dice_count INTEGER",
+        "ALTER TABLE items ADD COLUMN crit_chance_mod INTEGER",
+        "ALTER TABLE items ADD COLUMN crit_damage_mod REAL",
+        "ALTER TABLE items ADD COLUMN stagger_dc INTEGER",
+        "ALTER TABLE items ADD COLUMN stamina_cost INTEGER",
+        "ALTER TABLE items ADD COLUMN status_effect TEXT",
+        "ALTER TABLE items ADD COLUMN status_dc INTEGER",
+        "ALTER TABLE items ADD COLUMN heal_amount INTEGER",
+        "ALTER TABLE items ADD COLUMN mana_restore INTEGER",
+        "ALTER TABLE items ADD COLUMN stamina_restore INTEGER",
+        "ALTER TABLE items ADD COLUMN recoverable INTEGER",
         "ALTER TABLE species ADD COLUMN sex TEXT",
         "ALTER TABLE species ADD COLUMN prudishness REAL",
         """CREATE TABLE IF NOT EXISTS creatures (
@@ -588,14 +600,27 @@ def _load_items(con: sqlite3.Connection) -> None:
             if r['quantity'] is not None:
                 base['quantity'] = r['quantity']
 
-        if cls == Consumable and r['duration'] is not None:
-            base['duration'] = r['duration']
+        if cls == Consumable:
+            if r['duration'] is not None:
+                base['duration'] = r['duration']
+            if r['heal_amount'] is not None:
+                base['heal_amount'] = r['heal_amount']
+            if r['mana_restore'] is not None:
+                base['mana_restore'] = r['mana_restore']
+            if r['stamina_restore'] is not None:
+                base['stamina_restore'] = r['stamina_restore']
 
         if cls == Ammunition:
             if r['damage'] is not None:
                 base['damage'] = r['damage']
             if r['destroy_on_use_probability'] is not None:
                 base['destroy_on_use_probability'] = r['destroy_on_use_probability']
+            if r['recoverable'] is not None:
+                base['recoverable'] = bool(r['recoverable'])
+            if r['status_effect'] is not None:
+                base['status_effect'] = r['status_effect']
+            if r['status_dc'] is not None:
+                base['status_dc'] = r['status_dc']
 
         if cls in (Equippable, Weapon, Wearable):
             base['slots']              = slots_by_key.get(key, [])
@@ -615,6 +640,22 @@ def _load_items(con: sqlite3.Connection) -> None:
                 base['range'] = r['range']
             if r['ammunition_type'] is not None:
                 base['ammunition_type'] = r['ammunition_type']
+            if r['hit_dice'] is not None:
+                base['hit_dice'] = r['hit_dice']
+            if r['hit_dice_count'] is not None:
+                base['hit_dice_count'] = r['hit_dice_count']
+            if r['crit_chance_mod'] is not None:
+                base['crit_chance_mod'] = r['crit_chance_mod']
+            if r['crit_damage_mod'] is not None:
+                base['crit_damage_mod'] = r['crit_damage_mod']
+            if r['stagger_dc'] is not None:
+                base['stagger_dc'] = r['stagger_dc']
+            if r['stamina_cost'] is not None:
+                base['stamina_cost'] = r['stamina_cost']
+            if r['status_effect'] is not None:
+                base['status_effect'] = r['status_effect']
+            if r['status_dc'] is not None:
+                base['status_dc'] = r['status_dc']
 
         if cls == Structure:
             if r['footprint'] is not None:

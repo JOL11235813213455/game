@@ -199,19 +199,27 @@ class Stackable(Item):
 
 class Consumable(Stackable):
 
-    def __init__(self, *args, duration: float = 0.0, **kwargs):
+    def __init__(self, *args, duration: float = 0.0,
+                 heal_amount: int = 0, mana_restore: int = 0,
+                 stamina_restore: int = 0, **kwargs):
         super().__init__(*args, **kwargs)
-        self.duration = duration
+        self.duration         = duration
+        self.heal_amount      = heal_amount       # direct HP heal
+        self.mana_restore     = mana_restore      # direct mana restore
+        self.stamina_restore  = stamina_restore   # direct stamina restore
 
 
 class Ammunition(Stackable):
 
     def __init__(self, *args, damage: float = 0, destroy_on_use_probability: float = 1.0,
-                 recoverable: bool = True, **kwargs):
+                 recoverable: bool = True, status_effect: str = None,
+                 status_dc: int = 0, **kwargs):
         super().__init__(*args, **kwargs)
         self.damage                    = damage
         self.destroy_on_use_probability = destroy_on_use_probability
         self.recoverable               = recoverable
+        self.status_effect             = status_effect  # e.g. 'poison'
+        self.status_dc                 = status_dc      # DC for status resist
 
 
 class Equippable(Item):
@@ -244,6 +252,14 @@ class Weapon(Equippable):
         ,directions: list[str] = None
         ,range: int = 1
         ,ammunition_type: str = None
+        ,hit_dice: int = 0
+        ,hit_dice_count: int = 0
+        ,crit_chance_mod: int = 0
+        ,crit_damage_mod: float = 0
+        ,stagger_dc: int = 0
+        ,stamina_cost: int = 0
+        ,status_effect: str = None
+        ,status_dc: int = 0
         ,**kwargs
         ):
         super().__init__(*args, **kwargs)
@@ -252,6 +268,14 @@ class Weapon(Equippable):
         self.directions       = directions or ['front']
         self.range            = range
         self.ammunition_type  = ammunition_type
+        self.hit_dice         = hit_dice          # e.g. 6 for d6
+        self.hit_dice_count   = hit_dice_count    # e.g. 2 for 2d6
+        self.crit_chance_mod  = crit_chance_mod   # +/- to crit chance %
+        self.crit_damage_mod  = crit_damage_mod   # +/- to crit damage multiplier
+        self.stagger_dc       = stagger_dc or int(damage)  # DC for stagger check
+        self.stamina_cost     = stamina_cost      # 0 = use default formula
+        self.status_effect    = status_effect      # e.g. 'poison', 'bleed'
+        self.status_dc        = status_dc          # DC for status resist
 
 class Wearable(Equippable):
     pass
