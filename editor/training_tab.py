@@ -98,6 +98,15 @@ class TrainingTab(ttk.Frame):
         self.btn_tb.pack(side=tk.LEFT, padx=4)
         add_tooltip(self.btn_tb, 'Launch TensorBoard in browser (http://localhost:6006)')
 
+        self.btn_viewer = ttk.Button(btn_row, text='👁 Watch Live', command=self._open_viewer)
+        self.btn_viewer.pack(side=tk.LEFT, padx=4)
+        add_tooltip(self.btn_viewer, 'Open pygame viewer to watch simulation live')
+
+        # Viewer scenario
+        self.v_scenario = tk.StringVar(value='arena')
+        ttk.Radiobutton(btn_row, text='Arena', variable=self.v_scenario, value='arena').pack(side=tk.LEFT, padx=2)
+        ttk.Radiobutton(btn_row, text='Trade', variable=self.v_scenario, value='trade').pack(side=tk.LEFT, padx=2)
+
         # Run name + resume
         name_row = ttk.Frame(ctrl)
         name_row.pack(fill=tk.X, pady=2)
@@ -232,6 +241,18 @@ class TrainingTab(ttk.Frame):
         self._log('TensorBoard started at http://localhost:6006\n')
         # Open browser after short delay
         self.after(2000, lambda: __import__('webbrowser').open('http://localhost:6006'))
+
+    def _open_viewer(self):
+        """Launch the pygame simulation viewer in a separate process."""
+        scenario = self.v_scenario.get()
+        cmd = [
+            'python', '-m', 'editor.simulation.viewer',
+            '--scenario', scenario,
+            '--cols', '25', '--rows', '25',
+            '--creatures', '12', '--cell', '20',
+        ]
+        self._log(f'Launching viewer: {scenario}\n')
+        subprocess.Popen(cmd, cwd=str(EDITOR_DIR.parent))
 
     def _refresh_models(self):
         self.models_list.delete(0, tk.END)
