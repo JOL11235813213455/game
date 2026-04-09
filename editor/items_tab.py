@@ -14,10 +14,14 @@ class ItemsTab(ttk.Frame):
     _ALL_FIELDS = [
         'key', 'name', 'description', 'action_word', 'weight', 'value',
         'inventoriable', 'collision', 'tile_scale',
-        'max_stack_size', 'quantity', 'duration', 'destroy_on_use_probability',
+        'max_stack_size', 'quantity',
+        'duration', 'heal_amount', 'mana_restore', 'stamina_restore',
+        'destroy_on_use_probability', 'recoverable', 'ammo_status', 'ammo_status_dc',
         'damage', 'slots', 'slot_count', 'durability_max', 'durability_current',
-        'render_on_creature', 'requirements', 'attack_time_ms', 'directions',
-        'range', 'ammunition_type',
+        'render_on_creature', 'requirements',
+        'attack_time_ms', 'directions', 'range', 'ammunition_type',
+        'hit_dice', 'hit_dice_count', 'crit_chance_mod', 'crit_damage_mod',
+        'stagger_dc', 'stamina_cost', 'status_effect', 'status_dc',
         'footprint', 'collision_mask', 'entry_points', 'nested_map',
         'sprite',
     ]
@@ -182,6 +186,54 @@ class ItemsTab(ttk.Frame):
         add_row('ammunition_type','Ammo Type',      lambda p: ttk.Entry(p, textvariable=self.v_ammo_type, width=20).pack(anchor='w'),
                 'Name of required ammunition item (blank for no ammo)')
 
+        # New weapon fields
+        self.v_hit_dice = tk.StringVar(value='0')
+        self.v_hit_dice_count = tk.StringVar(value='0')
+        self.v_crit_chance_mod = tk.StringVar(value='0')
+        self.v_crit_damage_mod = tk.StringVar(value='0')
+        self.v_stagger_dc = tk.StringVar(value='0')
+        self.v_stamina_cost_w = tk.StringVar(value='0')
+        self.v_status_effect = tk.StringVar()
+        self.v_status_dc = tk.StringVar(value='0')
+        add_row('hit_dice',       'Hit Dice (sides)',  lambda p: ttk.Entry(p, textvariable=self.v_hit_dice, width=10).pack(anchor='w'),
+                'Damage die sides (e.g. 6 for d6). 0 = flat damage only')
+        add_row('hit_dice_count', 'Hit Dice Count',    lambda p: ttk.Entry(p, textvariable=self.v_hit_dice_count, width=10).pack(anchor='w'),
+                'Number of dice to roll (e.g. 2 for 2d6)')
+        add_row('crit_chance_mod','Crit Chance Mod',   lambda p: ttk.Entry(p, textvariable=self.v_crit_chance_mod, width=10).pack(anchor='w'),
+                'Modifier to critical hit chance % (e.g. +5)')
+        add_row('crit_damage_mod','Crit Damage Mod',   lambda p: ttk.Entry(p, textvariable=self.v_crit_damage_mod, width=10).pack(anchor='w'),
+                'Modifier to critical damage multiplier (e.g. 0.5 for +50%)')
+        add_row('stagger_dc',    'Stagger DC',        lambda p: ttk.Entry(p, textvariable=self.v_stagger_dc, width=10).pack(anchor='w'),
+                'Difficulty class for stagger check (0 = use base damage)')
+        add_row('stamina_cost',  'Stamina Cost',      lambda p: ttk.Entry(p, textvariable=self.v_stamina_cost_w, width=10).pack(anchor='w'),
+                'Per-swing stamina cost (0 = use default STR formula)')
+        add_row('status_effect', 'Status Effect',     lambda p: ttk.Entry(p, textvariable=self.v_status_effect, width=20).pack(anchor='w'),
+                'Status to apply on hit (e.g. poison, bleed, stun)')
+        add_row('status_dc',    'Status DC',          lambda p: ttk.Entry(p, textvariable=self.v_status_dc, width=10).pack(anchor='w'),
+                'DC for the status effect resist check')
+
+        # Consumable extra fields
+        self.v_heal_amount = tk.StringVar(value='0')
+        self.v_mana_restore = tk.StringVar(value='0')
+        self.v_stamina_restore = tk.StringVar(value='0')
+        add_row('heal_amount',    'Heal Amount',       lambda p: ttk.Entry(p, textvariable=self.v_heal_amount, width=10).pack(anchor='w'),
+                'Direct HP healed on use')
+        add_row('mana_restore',   'Mana Restore',      lambda p: ttk.Entry(p, textvariable=self.v_mana_restore, width=10).pack(anchor='w'),
+                'Direct mana restored on use')
+        add_row('stamina_restore','Stamina Restore',   lambda p: ttk.Entry(p, textvariable=self.v_stamina_restore, width=10).pack(anchor='w'),
+                'Direct stamina restored on use')
+
+        # Ammunition extra fields
+        self.v_recoverable = tk.BooleanVar(value=True)
+        self.v_ammo_status = tk.StringVar()
+        self.v_ammo_status_dc = tk.StringVar(value='0')
+        add_row('recoverable',    'Recoverable',       lambda p: ttk.Checkbutton(p, variable=self.v_recoverable).pack(anchor='w'),
+                'Ammo lands on tile on miss (arrows yes, bullets no)')
+        add_row('ammo_status',    'Ammo Status Effect', lambda p: ttk.Entry(p, textvariable=self.v_ammo_status, width=20).pack(anchor='w'),
+                'Status effect on hit (e.g. poison arrow)')
+        add_row('ammo_status_dc', 'Ammo Status DC',    lambda p: ttk.Entry(p, textvariable=self.v_ammo_status_dc, width=10).pack(anchor='w'),
+                'DC for ammo status resist check')
+
         self.v_footprint      = tk.StringVar(value='[[0,0]]')
         self.v_collision_mask = tk.StringVar(value='[[0,0]]')
         self.v_entry_points   = tk.StringVar(value='{}')
@@ -289,6 +341,20 @@ class ItemsTab(ttk.Frame):
         self.v_directions.set('["front"]')
         self.v_range.set('1')
         self.v_ammo_type.set('')
+        self.v_hit_dice.set('0')
+        self.v_hit_dice_count.set('0')
+        self.v_crit_chance_mod.set('0')
+        self.v_crit_damage_mod.set('0')
+        self.v_stagger_dc.set('0')
+        self.v_stamina_cost_w.set('0')
+        self.v_status_effect.set('')
+        self.v_status_dc.set('0')
+        self.v_heal_amount.set('0')
+        self.v_mana_restore.set('0')
+        self.v_stamina_restore.set('0')
+        self.v_recoverable.set(True)
+        self.v_ammo_status.set('')
+        self.v_ammo_status_dc.set('0')
         self.v_footprint.set('[[0,0]]')
         self.v_collision_mask.set('[[0,0]]')
         self.v_entry_points.set('{}')
@@ -334,6 +400,20 @@ class ItemsTab(ttk.Frame):
         self.v_directions.set(row['directions'] or '["front"]')
         self.v_range.set(str(row['range'] or 1))
         self.v_ammo_type.set(row['ammunition_type'] or '')
+        self.v_hit_dice.set(str(row['hit_dice'] or 0))
+        self.v_hit_dice_count.set(str(row['hit_dice_count'] or 0))
+        self.v_crit_chance_mod.set(str(row['crit_chance_mod'] or 0))
+        self.v_crit_damage_mod.set(str(row['crit_damage_mod'] or 0))
+        self.v_stagger_dc.set(str(row['stagger_dc'] or 0))
+        self.v_stamina_cost_w.set(str(row['stamina_cost'] or 0))
+        self.v_status_effect.set(row['status_effect'] or '')
+        self.v_status_dc.set(str(row['status_dc'] or 0))
+        self.v_heal_amount.set(str(row['heal_amount'] or 0))
+        self.v_mana_restore.set(str(row['mana_restore'] or 0))
+        self.v_stamina_restore.set(str(row['stamina_restore'] or 0))
+        self.v_recoverable.set(bool(row['recoverable']) if row['recoverable'] is not None else True)
+        self.v_ammo_status.set(row['status_effect'] or '')
+        self.v_ammo_status_dc.set(str(row['status_dc'] or 0))
         self.v_footprint.set(row['footprint'] or '[[0,0]]')
         self.v_collision_mask.set(row['collision_mask'] or '[[0,0]]')
         self.v_entry_points.set(row['entry_points'] or '{}')
@@ -365,64 +445,66 @@ class ItemsTab(ttk.Frame):
         cls = self.v_class.get()
         con = get_con()
         try:
-            con.execute(
-                '''INSERT INTO items
-                   (class, key, name, description, weight, value, sprite_name, inventoriable,
-                    collision, tile_scale, action_word, requirements,
-                    max_stack_size, quantity, duration, destroy_on_use_probability,
-                    slot_count, durability_max, durability_current, render_on_creature,
-                    damage, attack_time_ms, directions, range, ammunition_type,
-                    footprint, collision_mask, entry_points, nested_map)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                   ON CONFLICT(key) DO UPDATE SET
-                   class=excluded.class, name=excluded.name, description=excluded.description,
-                   weight=excluded.weight, value=excluded.value, sprite_name=excluded.sprite_name,
-                   inventoriable=excluded.inventoriable, collision=excluded.collision,
-                   tile_scale=excluded.tile_scale,
-                   action_word=excluded.action_word, requirements=excluded.requirements,
-                   max_stack_size=excluded.max_stack_size, quantity=excluded.quantity,
-                   duration=excluded.duration,
-                   destroy_on_use_probability=excluded.destroy_on_use_probability,
-                   slot_count=excluded.slot_count, durability_max=excluded.durability_max,
-                   durability_current=excluded.durability_current,
-                   render_on_creature=excluded.render_on_creature,
-                   damage=excluded.damage, attack_time_ms=excluded.attack_time_ms,
-                   directions=excluded.directions, range=excluded.range,
-                   ammunition_type=excluded.ammunition_type,
-                   footprint=excluded.footprint, collision_mask=excluded.collision_mask,
-                   entry_points=excluded.entry_points, nested_map=excluded.nested_map
-                ''',
-                (
-                    cls, key,
-                    self.v_name.get().strip(),
-                    self.v_description.get().strip(),
-                    self._float(self.v_weight),
-                    self._float(self.v_value),
-                    sprite,
-                    int(self.v_inventoriable.get()),
-                    int(self.v_collision.get()),
-                    self._float(self.v_tile_scale, 1.0),
-                    self.v_action_word.get().strip(),
-                    self.v_requirements.get().strip() if cls in ('Weapon','Wearable') else '{}',
-                    self._int(self.v_max_stack, 99) if cls in ('Stackable','Consumable','Ammunition') else None,
-                    self._int(self.v_quantity, 1)   if cls in ('Stackable','Consumable','Ammunition') else None,
-                    self._float(self.v_duration)    if cls == 'Consumable' else None,
-                    self._float(self.v_destroy_prob, 1.0) if cls == 'Ammunition' else None,
-                    self._int(self.v_slot_count, 1) if cls in ('Weapon','Wearable') else None,
-                    self._int(self.v_durability_max, 100) if cls in ('Weapon','Wearable') else None,
-                    self._int(self.v_durability_cur, 100) if cls in ('Weapon','Wearable') else None,
-                    int(self.v_render_on_creature.get()) if cls in ('Weapon','Wearable') else None,
-                    self._float(self.v_damage)      if cls in ('Weapon','Ammunition') else None,
-                    self._int(self.v_attack_time, 500) if cls == 'Weapon' else None,
-                    self.v_directions.get().strip() if cls == 'Weapon' else None,
-                    self._int(self.v_range, 1)      if cls == 'Weapon' else None,
-                    self.v_ammo_type.get().strip() or None if cls == 'Weapon' else None,
-                    self.v_footprint.get().strip() if cls == 'Structure' else None,
-                    self.v_collision_mask.get().strip() if cls == 'Structure' else None,
-                    self.v_entry_points.get().strip() if cls == 'Structure' else None,
-                    self.v_nested_map.get().strip() or None if cls == 'Structure' else None,
-                )
-            )
+            # Build column values dict — only include non-None for this class
+            vals = {
+                'class': cls, 'key': key,
+                'name': self.v_name.get().strip(),
+                'description': self.v_description.get().strip(),
+                'weight': self._float(self.v_weight),
+                'value': self._float(self.v_value),
+                'sprite_name': sprite,
+                'inventoriable': int(self.v_inventoriable.get()),
+                'collision': int(self.v_collision.get()),
+                'tile_scale': self._float(self.v_tile_scale, 1.0),
+                'action_word': self.v_action_word.get().strip(),
+                'requirements': self.v_requirements.get().strip() if cls in ('Weapon','Wearable') else '{}',
+            }
+            if cls in ('Stackable', 'Consumable', 'Ammunition'):
+                vals['max_stack_size'] = self._int(self.v_max_stack, 99)
+                vals['quantity'] = self._int(self.v_quantity, 1)
+            if cls == 'Consumable':
+                vals['duration'] = self._float(self.v_duration)
+                vals['heal_amount'] = self._int(self.v_heal_amount)
+                vals['mana_restore'] = self._int(self.v_mana_restore)
+                vals['stamina_restore'] = self._int(self.v_stamina_restore)
+            if cls == 'Ammunition':
+                vals['damage'] = self._float(self.v_damage)
+                vals['destroy_on_use_probability'] = self._float(self.v_destroy_prob, 1.0)
+                vals['recoverable'] = int(self.v_recoverable.get())
+                vals['status_effect'] = self.v_ammo_status.get().strip() or None
+                vals['status_dc'] = self._int(self.v_ammo_status_dc)
+            if cls in ('Weapon', 'Wearable'):
+                vals['slot_count'] = self._int(self.v_slot_count, 1)
+                vals['durability_max'] = self._int(self.v_durability_max, 100)
+                vals['durability_current'] = self._int(self.v_durability_cur, 100)
+                vals['render_on_creature'] = int(self.v_render_on_creature.get())
+            if cls == 'Weapon':
+                vals['damage'] = self._float(self.v_damage)
+                vals['attack_time_ms'] = self._int(self.v_attack_time, 500)
+                vals['directions'] = self.v_directions.get().strip()
+                vals['range'] = self._int(self.v_range, 1)
+                vals['ammunition_type'] = self.v_ammo_type.get().strip() or None
+                vals['hit_dice'] = self._int(self.v_hit_dice)
+                vals['hit_dice_count'] = self._int(self.v_hit_dice_count)
+                vals['crit_chance_mod'] = self._int(self.v_crit_chance_mod)
+                vals['crit_damage_mod'] = self._float(self.v_crit_damage_mod)
+                vals['stagger_dc'] = self._int(self.v_stagger_dc)
+                vals['stamina_cost'] = self._int(self.v_stamina_cost_w)
+                vals['status_effect'] = self.v_status_effect.get().strip() or None
+                vals['status_dc'] = self._int(self.v_status_dc)
+            if cls == 'Structure':
+                vals['footprint'] = self.v_footprint.get().strip()
+                vals['collision_mask'] = self.v_collision_mask.get().strip()
+                vals['entry_points'] = self.v_entry_points.get().strip()
+                vals['nested_map'] = self.v_nested_map.get().strip() or None
+
+            # Build dynamic SQL
+            cols = list(vals.keys())
+            placeholders = ','.join(['?'] * len(cols))
+            updates = ','.join(f'{c}=excluded.{c}' for c in cols if c != 'key')
+            sql = (f"INSERT INTO items ({','.join(cols)}) VALUES ({placeholders}) "
+                   f"ON CONFLICT(key) DO UPDATE SET {updates}")
+            con.execute(sql, tuple(vals.values()))
             con.execute('DELETE FROM item_slots WHERE item_key=?', (key,))
             for slot in selected_slots:
                 con.execute('INSERT INTO item_slots VALUES (?, ?)', (key, slot))
