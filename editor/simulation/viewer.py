@@ -276,14 +276,179 @@ def run_viewer(scenario: str = 'arena', cols: int = 25, rows: int = 25,
     pygame.quit()
 
 
+def run_training_viewer(cell_size: int = 20):
+    """Watch live training — reads state from training process."""
+    from editor.simulation.train_state import read_state
+
+    pygame.init()
+    # Start with a default size, resize when we get data
+    screen = pygame.display.set_mode((800, 600), pygame.RESIZABLE)
+    pygame.display.set_caption('Training Viewer (LIVE)')
+    font = pygame.font.SysFont('monospace', 12)
+    font_sm = pygame.font.SysFont('monospace', 10)
+    font_lg = pygame.font.SysFont('monospace', 16)
+    clock = pygame.time.Clock()
+
+    selected_uid = None
+    cols = rows = 25  # default until we get data
+
+    running = True
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                mx, my = event.pos
+                tx = mx // cell_size
+                ty = my // cell_size
+                state = read_state()
+                if state:
+                    selected_uid = None
+                    for c in state['creatures']:
+                        if c['x'] == tx and c['y'] == ty and c['alive']:
+                            selected_uid = c['uid']
+                            break
+
+        state = read_state()
+
+        screen.fill(C_BLACK)
+
+        if state is None:
+            surf = font_lg.render('Waiting for training to start...', True, C_YELLOW)
+            screen.blit(surf, (50, 50))
+            surf2 = font.render('Start training from the Training tab', True, C_GRAY)
+            screen.blit(surf2, (50, 80))
+            pygame.display.flip()
+            clock.tick(5)
+            continue
+
+        cols = state['cols']
+        rows = state['rows']
+        panel_w = 300
+        need_w = cols * cell_size + panel_w
+        need_h = rows * cell_size
+        if screen.get_width() != need_w or screen.get_height() != need_h:
+            screen = pygame.display.set_mode((need_w, need_h))
+
+        # Draw tiles (base color only — no per-tile template from state for perf)
+        for x in range(cols):
+            for y in range(rows):
+                color = C_GRASS
+                pygame.draw.rect(screen, color,
+                                 (x * cell_size, y * cell_size, cell_size, cell_size))
+
+        # Draw tile gold/items from state
+        for ti in state.get('tile_info', []):
+            tx, ty = ti['x'], ti['y']
+            tmpl = ti.get('template', 'grass')
+            color = TILE_COLORS.get(tmpl, C_GRASS)
+            pygame.draw.rect(screen, color,
+                             (tx * cell_size, ty * cell_size, cell_size, cell_size))
+            if ti['gold'] > 0:
+                pygame.draw.circle(screen, C_YELLOW,
+                                   (tx * cell_size + cell_size // 2,
+                                    ty * cell_size + cell_size // 2), 3)
+            if ti['items'] > 0:
+                pygame.draw.rect(screen, C_ORANGE,
+                                 (tx * cell_size + 1, ty * cell_size + 1, 4, 4))
+
+        # Draw creatures
+        selected_data = None
+        for c in state['creatures']:
+            if not c['alive']:
+                continue
+            cx = c['x'] * cell_size + cell_size // 2
+            cy = c['y'] * cell_size + cell_size // 2
+
+            color = SPECIES_COLORS.get(c['species'], C_WHITE)
+            if c['sex'] == 'female':
+                r, g, b = color
+                color = (min(255, r + 40), min(255, g + 40), min(255, b + 40))
+
+            sizes = {'tiny': 3, 'small': 4, 'medium': 5, 'large': 7, 'huge': 9, 'colossal': 12}
+            radius = sizes.get(c['size'], 5)
+            pygame.draw.circle(screen, color, (cx, cy), radius)
+
+            # HP bar
+            hp_ratio = c['hp'] / max(1, c['hp_max'])
+            bar_w = cell_size - 4
+            bar_x = c['x'] * cell_size + 2
+            bar_y = c['y'] * cell_size - 3
+            pygame.draw.rect(screen, C_RED, (bar_x, bar_y, bar_w, 2))
+            pygame.draw.rect(screen, C_GREEN, (bar_x, bar_y, int(bar_w * hp_ratio), 2))
+
+            # Selection
+            if c['uid'] == selected_uid:
+                pygame.draw.circle(screen, C_YELLOW, (cx, cy), radius + 3, 1)
+                selected_data = c
+
+            # Name
+            if c['name']:
+                label = font_sm.render(c['name'][:8], True, C_WHITE)
+                screen.blit(label, (cx - label.get_width() // 2, cy + radius + 1))
+
+        # Info panel
+        panel_x = cols * cell_size + 10
+        y = 10
+
+        def text(s, color=C_WHITE):
+            nonlocal y
+            screen.blit(font.render(s, True, color), (panel_x, y))
+            y += 15
+
+        stale = state.get('stale', False)
+        phase = state.get('phase', '?')
+        text(f'Phase: {phase}', C_YELLOW if not stale else C_RED)
+        text(f'Step: {state["step"]}')
+        text(f'Tick: {state["tick"]}')
+        text(f'Alive: {state["alive"]} / {state["total"]}')
+        if stale:
+            text('STALE — training may have stopped', C_RED)
+        y += 10
+
+        # Selected creature
+        if selected_data:
+            c = selected_data
+            text(f'--- {c["name"]} ---', C_YELLOW)
+            text(f'Species: {c["species"]}  Sex: {c["sex"]}')
+            text(f'HP: {c["hp"]}/{c["hp_max"]}')
+            text(f'Gold: {c["gold"]}')
+            text(f'Items: {c["items"]}  Equip: {c["equip"]}')
+            if c.get('deity'):
+                text(f'Deity: {c["deity"]}')
+            if c.get('mask'):
+                text(f'Mask: {c["mask"]}', C_ORANGE)
+
+        # Population
+        y = need_h - 80
+        text('--- Population ---', C_GRAY)
+        sp_count = {}
+        total_gold = 0
+        for c in state['creatures']:
+            if c['alive']:
+                sp_count[c['species']] = sp_count.get(c['species'], 0) + 1
+                total_gold += c['gold']
+        for sp, n in sorted(sp_count.items()):
+            text(f'  {sp}: {n}', SPECIES_COLORS.get(sp, C_WHITE))
+        text(f'Gold in pockets: {total_gold}')
+
+        pygame.display.flip()
+        clock.tick(15)  # 15 FPS for viewer — training writes every 10 ticks
+
+    pygame.quit()
+
+
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--scenario', default='arena', choices=['arena', 'trade'])
+    parser.add_argument('--scenario', default='arena', choices=['arena', 'trade', 'training'])
     parser.add_argument('--cols', type=int, default=25)
     parser.add_argument('--rows', type=int, default=25)
     parser.add_argument('--creatures', type=int, default=12)
     parser.add_argument('--cell', type=int, default=20)
     args = parser.parse_args()
-    run_viewer(scenario=args.scenario, cols=args.cols, rows=args.rows,
-               num_creatures=args.creatures, cell_size=args.cell)
+    if args.scenario == 'training':
+        run_training_viewer(cell_size=args.cell)
+    else:
+        run_viewer(scenario=args.scenario, cols=args.cols, rows=args.rows,
+                   num_creatures=args.creatures, cell_size=args.cell)

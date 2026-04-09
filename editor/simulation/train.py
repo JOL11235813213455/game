@@ -145,6 +145,11 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             _log('mappo/value_loss', info['value_loss'], step)
             _log('mappo/entropy', info['entropy'], step)
 
+        # Write state for live viewer (every 10 steps to avoid IO spam)
+        if step % 10 == 0:
+            from editor.simulation.train_state import write_state
+            write_state(sim, phase='MAPPO', step=step)
+
         # Random mask injection: occasionally swap a creature's mask mid-episode
         # This trains robustness to sudden sensory changes
         if step % 500 == 0:
@@ -344,6 +349,11 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             _log('ppo/policy_loss', info['policy_loss'], step)
             _log('ppo/value_loss', info['value_loss'], step)
             _log('ppo/entropy', info['entropy'], step)
+
+        # Write state for live viewer
+        if step % 10 == 0:
+            from editor.simulation.train_state import write_state
+            write_state(sim, phase='PPO', step=step)
 
         # Reset
         if step % 5000 == 4999 or not agent.is_alive or sim.alive_count <= 1:
