@@ -36,7 +36,7 @@ SAVE_DIR.mkdir(exist_ok=True)
 # ---------------------------------------------------------------------------
 
 def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
-              arena_kwargs: dict = None, rollout_len: int = 2048) -> TorchCreatureNet:
+              arena_kwargs: dict = None, rollout_len: int = 4096) -> TorchCreatureNet:
     """Phase 1: Multi-agent PPO — all creatures share weights."""
     print(f'\n=== MAPPO Phase ({steps} steps) ===')
     arena_kwargs = arena_kwargs or {
@@ -51,16 +51,30 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
     arena = generate_arena(**arena_kwargs)
     sim = Simulation(arena)
 
+    # Disable built-in behavior — training loop controls all actions
+    for c in sim.creatures:
+        c.behavior = None
+        c.unregister_tick('behavior')
+
     total_reward = 0.0
     ep_steps = 0
 
+    from classes.observation import build_observation, make_snapshot
+    from classes.actions import dispatch
+    from classes.world_object import WorldObject
+    from classes.creature import Creature
+    from classes.reward import compute_reward, make_reward_snapshot
+    from classes.temporal import make_history_snapshot
+
     for step in range(steps):
+        # Store per-creature action data for this tick
+        tick_data = {}  # uid → (obs_arr, action, log_prob, value)
+
         # Each creature acts using the shared net
         for c in sim.creatures:
             if not c.is_alive:
                 continue
 
-            from classes.observation import build_observation, make_snapshot
             obs = build_observation(c, sim.cols, sim.rows,
                                     world_data=sim.world_data)
             if c.observation_mask:
@@ -69,10 +83,10 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             obs_arr = np.array(obs, dtype=np.float32)
             action, log_prob, value = net.get_action(obs_arr)
 
+            # Store for later collection
+            tick_data[c.uid] = (obs_arr, action, log_prob, value)
+
             # Dispatch action
-            from classes.actions import dispatch
-            from classes.world_object import WorldObject
-            from classes.creature import Creature
             target = None
             for obj in WorldObject.on_map(c.current_map):
                 if isinstance(obj, Creature) and obj is not c and obj.is_alive and c.can_see(obj):
@@ -89,21 +103,12 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             if c.is_alive:
                 c.process_ticks(sim.now)
 
-        # Collect rewards and store experience
-        from classes.reward import compute_reward, make_reward_snapshot
-        from classes.temporal import make_history_snapshot
-
+        # Collect rewards using STORED action data
         for c in sim.creatures:
-            if not c.is_alive:
+            if c.uid not in tick_data:
                 continue
 
-            obs = build_observation(c, sim.cols, sim.rows,
-                                    world_data=sim.world_data)
-            if c.observation_mask:
-                apply_preset_mask(obs, c.observation_mask)
-            obs_arr = np.array(obs, dtype=np.float32)
-
-            action, log_prob, value = net.get_action(obs_arr)
+            obs_arr, action, log_prob, value = tick_data[c.uid]
 
             prev_rew = sim._reward_snapshots.get(c.uid)
             curr_rew = make_reward_snapshot(c)
@@ -141,10 +146,13 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             ep_steps = 0
             arena = generate_arena(**arena_kwargs)
             sim = Simulation(arena)
+            for c in sim.creatures:
+                c.behavior = None
+                c.unregister_tick('behavior')
 
         if step % 10000 == 9999:
             avg = np.mean(episode_rewards[-10:]) if episode_rewards else 0
-            print(f'  Step {step+1}: avg_reward={avg:.4f}, alive={sim.alive_count}')
+            print(f'  Step {step+1}: avg_reward={avg:.6f}, alive={sim.alive_count}')
 
     print(f'  MAPPO complete. Episodes: {len(episode_rewards)}')
     return net

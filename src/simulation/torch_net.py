@@ -109,7 +109,7 @@ class PPO:
     def __init__(self, net: TorchCreatureNet, lr: float = 3e-4,
                  gamma: float = 0.995, gae_lambda: float = 0.95,
                  clip_eps: float = 0.2, epochs: int = 4,
-                 batch_size: int = 512, ent_coef: float = 0.01,
+                 batch_size: int = 256, ent_coef: float = 0.01,
                  vf_coef: float = 0.5, max_grad_norm: float = 0.5):
         self.net = net
         self.gamma = gamma
