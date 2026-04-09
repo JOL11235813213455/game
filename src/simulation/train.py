@@ -39,7 +39,12 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
               arena_kwargs: dict = None, rollout_len: int = 2048) -> TorchCreatureNet:
     """Phase 1: Multi-agent PPO — all creatures share weights."""
     print(f'\n=== MAPPO Phase ({steps} steps) ===')
-    arena_kwargs = arena_kwargs or {'cols': 20, 'rows': 20, 'num_creatures': 8}
+    arena_kwargs = arena_kwargs or {
+        'cols': 25, 'rows': 25, 'num_creatures': 16,
+        'mask_probability': 0.1,
+        'mask_pool': ['socially_deaf', 'blind', 'deaf', 'fearless',
+                      'feral', 'impulsive', 'nearsighted', 'paranoid'],
+    }
     buffer = RolloutBuffer()
 
     episode_rewards = []
@@ -118,6 +123,16 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             info = ppo.update(*buffer.get())
             buffer.clear()
 
+        # Random mask injection: occasionally swap a creature's mask mid-episode
+        # This trains robustness to sudden sensory changes
+        if step % 500 == 0:
+            mask_pool = arena_kwargs.get('mask_pool', [])
+            if mask_pool:
+                for c in sim.creatures:
+                    if c.is_alive and random.random() < 0.02:
+                        c.observation_mask = random.choice(mask_pool + [None, None, None])
+                        # None = remove mask (3/N+3 chance of being normal)
+
         # Reset episode periodically
         if step % 5000 == 4999 or sim.alive_count <= 1:
             avg = total_reward / max(1, ep_steps)
@@ -140,7 +155,13 @@ def run_es(net: TorchCreatureNet, generations: int = 50,
            noise_scale: float = 0.02, arena_kwargs: dict = None) -> TorchCreatureNet:
     """Phase 2: Evolutionary Strategies — diversify weights."""
     print(f'\n=== ES Phase ({generations} gens × {variants} variants) ===')
-    arena_kwargs = arena_kwargs or {'cols': 15, 'rows': 15, 'num_creatures': 6}
+    arena_kwargs = arena_kwargs or {
+        'cols': 15, 'rows': 15, 'num_creatures': 10,
+        'mask_probability': 0.15,
+        'mask_pool': ['socially_deaf', 'blind', 'deaf', 'fearless',
+                      'feral', 'impulsive', 'nearsighted', 'paranoid',
+                      'amnesiac', 'greedy', 'zealot'],
+    }
 
     # Flatten weights for ES
     base_params = torch.nn.utils.parameters_to_vector(net.parameters()).detach().clone()
@@ -205,7 +226,12 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             arena_kwargs: dict = None, rollout_len: int = 2048) -> TorchCreatureNet:
     """Phase 3: Single-agent PPO against diverse opponents."""
     print(f'\n=== PPO Phase ({steps} steps) ===')
-    arena_kwargs = arena_kwargs or {'cols': 20, 'rows': 20, 'num_creatures': 8}
+    arena_kwargs = arena_kwargs or {
+        'cols': 25, 'rows': 25, 'num_creatures': 16,
+        'mask_probability': 0.1,
+        'mask_pool': ['socially_deaf', 'blind', 'deaf', 'fearless',
+                      'feral', 'impulsive', 'nearsighted', 'paranoid'],
+    }
     buffer = RolloutBuffer()
 
     # Load opponent checkpoints
