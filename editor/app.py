@@ -38,38 +38,11 @@ class EditorApp(tk.Tk):
         notebook = ttk.Notebook(self)
         notebook.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
 
-        # Graphics group — loaded eagerly (small, frequently used)
-        from editor.sprites_tab import SpritesTab
-        from editor.animations_tab import AnimationsTab
-        from editor.composites_tab import CompositesTab
-
-        graphics_frame = ttk.Frame(notebook)
-        notebook.add(graphics_frame, text='  Graphics  ')
-        gfx_notebook = ttk.Notebook(graphics_frame)
-        gfx_notebook.pack(fill=tk.BOTH, expand=True)
-
-        self.sprites_tab    = SpritesTab(gfx_notebook, on_sprites_changed=self._on_sprites_changed)
-        self.anims_tab      = AnimationsTab(gfx_notebook)
-        self.composites_tab = CompositesTab(gfx_notebook)
-        gfx_notebook.add(self.sprites_tab,    text='  Sprites  ')
-        gfx_notebook.add(self.anims_tab,      text='  Simple  ')
-        gfx_notebook.add(self.composites_tab, text='  Composite  ')
-
-        # Maps group — loaded eagerly
-        from editor.map_editor_tab import MapEditorTab
-        from editor.tiles_tab import TilesTab
-
-        maps_frame = ttk.Frame(notebook)
-        notebook.add(maps_frame, text='  Maps  ')
-        maps_notebook = ttk.Notebook(maps_frame)
-        maps_notebook.pack(fill=tk.BOTH, expand=True)
-
-        self.map_editor_tab = MapEditorTab(maps_notebook)
-        self.tiles_tab     = TilesTab(maps_notebook)
-        maps_notebook.add(self.map_editor_tab, text='  Map Editor  ')
-        maps_notebook.add(self.tiles_tab,     text='  Tile Templates  ')
-
-        # Heavy tabs — lazy loaded
+        # ALL tabs lazy loaded for fast startup
+        self._gfx_lazy = _LazyTab(notebook, self._make_graphics)
+        self._maps_lazy = _LazyTab(notebook, self._make_maps)
+        notebook.add(self._gfx_lazy, text='  Graphics  ')
+        notebook.add(self._maps_lazy, text='  Maps  ')
         self._creatures_lazy = _LazyTab(notebook, self._make_creatures)
         self._items_lazy = _LazyTab(notebook, self._make_items)
         self._spells_lazy = _LazyTab(notebook, self._make_spells)
@@ -88,11 +61,34 @@ class EditorApp(tk.Tk):
         notebook.add(self._training_lazy,  text='  Training  ')
         notebook.add(self._sql_lazy,       text='  SQL  ')
 
-        gfx_notebook.bind('<<NotebookTabChanged>>', self._on_tab_changed)
-        maps_notebook.bind('<<NotebookTabChanged>>', self._on_tab_changed)
         notebook.bind('<<NotebookTabChanged>>', self._on_tab_changed)
 
     # -- Lazy factories --
+    def _make_graphics(self, parent):
+        from editor.sprites_tab import SpritesTab
+        from editor.animations_tab import AnimationsTab
+        from editor.composites_tab import CompositesTab
+        nb = ttk.Notebook(parent)
+        nb.pack(fill=tk.BOTH, expand=True)
+        self.sprites_tab = SpritesTab(nb, on_sprites_changed=self._on_sprites_changed)
+        self.anims_tab = AnimationsTab(nb)
+        self.composites_tab = CompositesTab(nb)
+        nb.add(self.sprites_tab, text='  Sprites  ')
+        nb.add(self.anims_tab, text='  Simple  ')
+        nb.add(self.composites_tab, text='  Composite  ')
+        return nb
+
+    def _make_maps(self, parent):
+        from editor.map_editor_tab import MapEditorTab
+        from editor.tiles_tab import TilesTab
+        nb = ttk.Notebook(parent)
+        nb.pack(fill=tk.BOTH, expand=True)
+        self.map_editor_tab = MapEditorTab(nb)
+        self.tiles_tab = TilesTab(nb)
+        nb.add(self.map_editor_tab, text='  Map Editor  ')
+        nb.add(self.tiles_tab, text='  Tile Templates  ')
+        return nb
+
     def _make_creatures(self, parent):
         from editor.creatures_master_tab import CreaturesMasterTab
         return CreaturesMasterTab(parent)
@@ -126,8 +122,8 @@ class EditorApp(tk.Tk):
         return SqlTab(parent)
 
     def _on_sprites_changed(self):
-        self.tiles_tab.refresh_sprite_dropdown()
-        # Refresh lazy tabs only if built
+        if hasattr(self, 'tiles_tab'):
+            self.tiles_tab.refresh_sprite_dropdown()
         for lazy in [self._creatures_lazy, self._items_lazy, self._spells_lazy]:
             if lazy._real and hasattr(lazy._real, 'refresh_sprite_dropdown'):
                 lazy._real.refresh_sprite_dropdown()
@@ -136,7 +132,8 @@ class EditorApp(tk.Tk):
         tab = event.widget.tab(event.widget.select(), 'text').strip()
 
         # Build lazy tab on first visit
-        for lazy in [self._creatures_lazy, self._items_lazy, self._spells_lazy,
+        for lazy in [self._gfx_lazy, self._maps_lazy,
+                     self._creatures_lazy, self._items_lazy, self._spells_lazy,
                      self._quests_lazy, self._gods_lazy, self._dialogue_lazy,
                      self._training_lazy, self._sql_lazy]:
             # Check if this lazy tab is the currently selected one
@@ -147,18 +144,19 @@ class EditorApp(tk.Tk):
                 pass
 
         if tab in ('Items', 'Creatures', 'Tile Templates', 'Maps'):
-            self.tiles_tab.refresh_sprite_dropdown()
+            if hasattr(self, 'tiles_tab'):
+                self.tiles_tab.refresh_sprite_dropdown()
             for lazy in [self._creatures_lazy, self._items_lazy]:
                 if lazy._real and hasattr(lazy._real, 'refresh_sprite_dropdown'):
                     lazy._real.refresh_sprite_dropdown()
         if tab == 'Creatures' and self._creatures_lazy._real:
             if hasattr(self._creatures_lazy._real, 'refresh_species_dropdown'):
                 self._creatures_lazy._real.refresh_species_dropdown()
-        if tab in ('Map Editor', 'Maps'):
+        if tab in ('Map Editor', 'Maps') and hasattr(self, 'map_editor_tab'):
             self.map_editor_tab.refresh_dropdowns()
-        if tab in ('Simple', 'Animations'):
+        if tab in ('Simple', 'Animations') and hasattr(self, 'anims_tab'):
             self.anims_tab.refresh_dropdowns()
-        if tab in ('Composite', 'Composites'):
+        if tab in ('Composite', 'Composites') and hasattr(self, 'composites_tab'):
             self.composites_tab.refresh_dropdowns()
         if tab == 'Dialogue' and self._dialogue_lazy._real:
             if hasattr(self._dialogue_lazy._real, 'refresh_dropdowns'):
