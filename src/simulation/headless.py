@@ -29,7 +29,7 @@ class Simulation:
     4. Return per-creature results
     """
 
-    def __init__(self, arena: dict, tick_ms: int = 100):
+    def __init__(self, arena: dict, tick_ms: int = 500):
         """Initialize simulation from an arena dict.
 
         Args:
