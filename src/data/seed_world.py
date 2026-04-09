@@ -47,15 +47,25 @@ def seed():
     # Composite sprite: body as root
     ins(con, 'composite_sprites', name='z_ball_man', root_layer='body')
 
-    # Layers (using actual column names)
+    # Layers: parent (body) first, then child (ball)
     con.execute('INSERT OR REPLACE INTO composite_layers (composite_name, layer_name, z_layer, default_sprite) VALUES (?,?,?,?)',
                 ('z_ball_man', 'body', 0, 'z_body'))
     con.execute('INSERT OR REPLACE INTO composite_layers (composite_name, layer_name, z_layer, default_sprite) VALUES (?,?,?,?)',
                 ('z_ball_man', 'ball', 1, 'z_ball'))
 
+    # Connection: ball is child of body, anchored at body center
+    con.execute('''INSERT OR REPLACE INTO layer_connections
+                   (composite_name, parent_layer, child_layer,
+                    parent_socket_x, parent_socket_y, child_anchor_x, child_anchor_y)
+                   VALUES (?,?,?,?,?,?,?)''',
+                ('z_ball_man', 'body', 'ball', 4, 3, 2, 2))
+
     # Animation: ball orbiting the body (total duration = 8 * 150ms = 1200ms)
     con.execute('INSERT OR REPLACE INTO composite_animations (name, composite_name, loop, duration_ms) VALUES (?,?,?,?)',
                 ('orbit', 'z_ball_man', 1, 1200))
+
+    # Clear old keyframes before inserting
+    con.execute("DELETE FROM composite_anim_keyframes WHERE animation_name='orbit'")
 
     # 8 keyframes: ball moves in a circle around the body
     positions = [
