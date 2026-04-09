@@ -120,7 +120,16 @@ Every new feature must touch ALL of these layers. Do not skip any.
 - [ ] Update `docs/incomplete_features.txt` — add if incomplete, move to completed
 - [ ] update `CLAUDE.md` to reflect any critical architectural knowledge incremented
 
-### 7.5 Review for loose ends again - incomplete features, features implied but not existing
+### 7.5 Neural Net / RL (if feature adds observable state or actions)
+- [ ] Update `docs/nn_inputs.txt` if new variables should be visible to the creature model
+- [ ] Update `src/classes/observation.py` `build_observation()` to include new inputs
+- [ ] Update `OBSERVATION_SIZE` constant and net input dimensions if size changed
+- [ ] Update `src/classes/actions.py` if new actions added (renumber, update NUM_ACTIONS)
+- [ ] Update `src/classes/reward.py` if new reward signals or snapshot fields needed
+- [ ] Update `src/simulation/net.py` layer sizes if input/output dimensions changed
+- [ ] Retrain model after significant observation/action changes
+
+### 7.6 Review for loose ends again - incomplete features, features implied but not existing
 
 ### 8. Headless Tests
 - [ ] Add or extend tests in `src/tests/test_mechanics.py` for the new feature

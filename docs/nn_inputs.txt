@@ -289,7 +289,29 @@ delta_piety                     float   piety now - last tick
 delta_equipment_kpi             float   sign(change) * ln(|change| + 1) / 5
 
 ================================================================================
-SECTION 20: REWARD SIGNAL CURRENT VALUES (17 values)
+SECTION 20: WORLD / TIME (12 values)
+================================================================================
+
+# Day/night cycle (from GameClock)
+world_hour_sin                  float   sin(hour / 24 * 2π) — circular encoding
+world_hour_cos                  float   cos(hour / 24 * 2π) — circular encoding
+world_is_day                    bool    1.0 if between sunrise and sunset
+world_sun_elevation             float   0-1 (0 = horizon, 1 = zenith)
+world_moon_elevation            float   0-1
+world_moon_brightness           float   0-1 (0 = new moon, 1 = full moon)
+world_moon_phase                float   0-1 (0 = full, 0.5 = new, 1 = full again)
+world_game_day                  float   day count / 365 (normalized)
+
+# Light level affects sight range and stealth effectiveness
+world_light_level               float   sun_elevation if day, moon_brightness * moon_elevation if night
+
+# God world balances (all 4 axes)
+world_balance_order_chaos       float   -1 to 1
+world_balance_compassion_wrath  float   -1 to 1
+world_balance_truth_lies        float   -1 to 1
+
+================================================================================
+SECTION 21: REWARD SIGNAL CURRENT VALUES (17 values)
 ================================================================================
 
 # Every reward signal's current state — lets the model anticipate
@@ -339,11 +361,12 @@ Section 16: Census visible              23
 Section 17: Census audible               3
 Section 18: Per-engaged creature       168  (28 × 6)
 Section 19: Temporal deltas              7
-Section 20: Reward signal values        17
+Section 20: World / time               12
+Section 21: Reward signal values        17
 ─────────────────────────────────────────
-TOTAL (with 1 species):               ~338
-TOTAL (with 10 species):              ~347
-TOTAL (with 20 species):              ~357
+TOTAL (with 1 species):               ~350
+TOTAL (with 10 species):              ~359
+TOTAL (with 20 species):              ~369
 
 ================================================================================
 OUTPUTS: 49 action probabilities (softmax)
