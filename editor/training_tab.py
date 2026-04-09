@@ -148,7 +148,8 @@ class TrainingTab(ttk.Frame):
         if MODELS_DIR.exists():
             for f in sorted(MODELS_DIR.glob('*.pt')):
                 self._checkpoint_list.append(f.name)
-        self.resume_cb['values'] = self._checkpoint_list
+        if hasattr(self, 'resume_cb'):
+            self.resume_cb['values'] = self._checkpoint_list
 
     def _log(self, text):
         self.log_text.configure(state='normal')
