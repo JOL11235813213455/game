@@ -17,15 +17,18 @@ import numpy as np
 import torch
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+_EDITOR_DIR = Path(__file__).parent.parent
+_SRC_DIR = _EDITOR_DIR.parent / 'src'
+sys.path.insert(0, str(_SRC_DIR))
+sys.path.insert(0, str(_EDITOR_DIR))
 
-from simulation.torch_net import TorchCreatureNet, PPO, RolloutBuffer
-from simulation.arena import generate_arena
-from simulation.headless import Simulation
+from editor.simulation.torch_net import TorchCreatureNet, PPO, RolloutBuffer
+from editor.simulation.arena import generate_arena
+from editor.simulation.headless import Simulation
 from classes.observation import OBSERVATION_SIZE, apply_preset_mask
 from classes.actions import NUM_ACTIONS
 from classes.creature import NeuralBehavior, StatWeightedBehavior
-from simulation.net import CreatureNet
+from editor.simulation.net import CreatureNet
 
 SAVE_DIR = Path(__file__).parent.parent / 'models'
 SAVE_DIR.mkdir(exist_ok=True)

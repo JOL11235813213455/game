@@ -14,9 +14,9 @@ from pathlib import Path
 
 from editor.tooltip import add_tooltip
 
-SRC_DIR = Path(__file__).parent.parent / 'src'
-MODELS_DIR = SRC_DIR / 'models'
-RUNS_DIR = SRC_DIR / 'runs'
+EDITOR_DIR = Path(__file__).parent
+MODELS_DIR = EDITOR_DIR / 'models'
+RUNS_DIR = EDITOR_DIR / 'runs'
 
 
 class TrainingTab(ttk.Frame):
@@ -162,7 +162,7 @@ class TrainingTab(ttk.Frame):
             return
 
         cmd = [
-            'python', '-u', '-m', 'simulation.train',
+            'python', '-u', '-m', 'editor.simulation.train',
             '--cycles', self.v_cycles.get(),
             '--mappo-steps', self.v_mappo.get(),
             '--ppo-steps', self.v_ppo.get(),
@@ -180,7 +180,7 @@ class TrainingTab(ttk.Frame):
 
         self._log(f'Starting: {" ".join(cmd)}\n\n')
         self._process = subprocess.Popen(
-            cmd, cwd=str(SRC_DIR),
+            cmd, cwd=str(EDITOR_DIR.parent),
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, bufsize=1,
         )

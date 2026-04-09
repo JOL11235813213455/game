@@ -8,6 +8,9 @@ Supports batched inference for all creatures in one forward pass.
 Weights are loaded from a file (trained externally via RL harness).
 """
 from __future__ import annotations
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 import numpy as np
 from pathlib import Path
 from classes.actions import NUM_ACTIONS

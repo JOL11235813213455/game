@@ -1,11 +1,12 @@
 """
 Headless smoke tests for core creature mechanics.
-Run from src/:  python -m tests.test_mechanics
+Run from project root:  python -m tests.test_mechanics
 """
 import sys
 from pathlib import Path
 
-# Ensure src/ is on the path
+# Ensure src/ and editor/ are on the path
+sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from classes.maps import Map, MapKey, Tile
@@ -1521,7 +1522,7 @@ check(f"Fatigue penalty: {r7:.2f} (negative)", r7 < 0)
 
 # ==========================================================================
 print("\n=== Arena Generator ===")
-from simulation.arena import generate_arena, random_stats
+from editor.simulation.arena import generate_arena, random_stats
 
 stats_b = random_stats('balanced')
 check("Balanced stats: all 7 base stats present", len(stats_b) == 7)
@@ -1544,7 +1545,7 @@ for c in arena['creatures']:
 
 # ==========================================================================
 print("\n=== Headless Simulation ===")
-from simulation.headless import Simulation
+from editor.simulation.headless import Simulation
 from classes.observation import OBSERVATION_SIZE
 
 sim_arena = generate_arena(cols=10, rows=10, num_creatures=4, obstacle_density=0.05)
@@ -1617,7 +1618,7 @@ check("Unknown action fails", not r['success'])
 
 # ==========================================================================
 print("\n=== Neural Net ===")
-from simulation.net import CreatureNet
+from editor.simulation.net import CreatureNet
 
 net = CreatureNet(h1_size=64, h2_size=32)
 check(f"Net param count: {net.param_count()}", net.param_count() > 0)
@@ -1703,7 +1704,7 @@ check("NeuralBehavior: 50 cycles without crash", True)
 
 # ==========================================================================
 print("\n=== Simulation with StatWeightedBehavior ===")
-from simulation.arena import generate_arena
+from editor.simulation.arena import generate_arena
 
 sw_arena = generate_arena(cols=15, rows=15, num_creatures=6, obstacle_density=0.05)
 # Replace all behaviors with StatWeightedBehavior
@@ -2958,7 +2959,7 @@ for name, preset in PRESET_MASKS.items():
 
 # ==========================================================================
 print("\n=== Gym Single-Agent Environment ===")
-from simulation.env import CreatureEnv, MultiAgentCreatureEnv
+from editor.simulation.env import CreatureEnv, MultiAgentCreatureEnv
 
 env = CreatureEnv(arena_kwargs={'cols': 10, 'rows': 10, 'num_creatures': 4,
                                 'obstacle_density': 0.05},

@@ -5,6 +5,9 @@ Generates varied maps with obstacles, spawns creatures with full
 genetics, sex, species, age, deity, equipment, and gold.
 """
 from __future__ import annotations
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 import random
 from classes.maps import Map, MapKey, Tile
 from classes.creature import Creature, RandomWanderBehavior

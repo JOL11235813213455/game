@@ -15,6 +15,9 @@ Usage:
         # results: list of {creature, observation, reward, alive}
 """
 from __future__ import annotations
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 from classes.observation import build_observation, make_snapshot, OBSERVATION_SIZE
 from classes.reward import compute_reward, make_reward_snapshot
 

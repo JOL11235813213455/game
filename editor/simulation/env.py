@@ -10,9 +10,12 @@ Compatible with gymnasium (OpenAI Gym successor) API:
     env.step(action) → observation, reward, terminated, truncated, info
 """
 from __future__ import annotations
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 import numpy as np
-from simulation.arena import generate_arena
-from simulation.headless import Simulation
+from editor.simulation.arena import generate_arena
+from editor.simulation.headless import Simulation
 from classes.observation import build_observation, make_snapshot, OBSERVATION_SIZE
 from classes.reward import compute_reward, make_reward_snapshot
 from classes.actions import NUM_ACTIONS, dispatch
