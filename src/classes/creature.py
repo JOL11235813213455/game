@@ -455,40 +455,51 @@ class Creature(WorldObject):
         (-1,  1): 'walk_south', (1,  1): 'walk_south',
     }
 
-    def _tile_blocked(self, game_map, x: int, y: int) -> bool:
-        """Return True if this creature cannot fit on tile (x, y).
+    def _get_footprint_tiles(self, x: int, y: int) -> list[tuple[int, int]]:
+        """Return list of (x, y) tiles this creature would occupy at position (x, y)."""
+        tiles = [(x, y)]
+        for ox, oy in SIZE_FOOTPRINT.get(self.size, []):
+            tiles.append((x + ox, y + oy))
+        return tiles
 
-        Uses size-based capacity: each tile holds TILE_CAPACITY units.
-        Tiny creatures take 0 units (always fit).
-        Children pass through parents. Small creatures can attempt
-        stealth to share with large creatures.
+    def _tile_blocked(self, game_map, x: int, y: int) -> bool:
+        """Return True if this creature cannot fit at anchor (x, y).
+
+        Checks ALL footprint tiles for walkability, structure collision,
+        and size-based capacity. Tiny creatures always fit.
         """
         from classes.world_object import WorldObject
         from classes.inventory import Structure
 
         my_units = SIZE_UNITS.get(self.size, 4)
-        used_units = 0
 
-        for obj in WorldObject.colliders_on_map(game_map):
-            if isinstance(obj, Structure):
-                ox, oy = obj.location.x, obj.location.y
-                if (x - ox, y - oy) in obj.collision_mask:
-                    return True
-            elif obj.location.x == x and obj.location.y == y:
-                if not isinstance(obj, Creature):
-                    return True  # non-creature collider blocks
-                # Parent-child passthrough
-                if self._is_family_passthrough(obj):
-                    continue
-                # Tiny creatures never block
-                obj_units = SIZE_UNITS.get(obj.size, 4)
-                used_units += obj_units
-
-        # Tiny creatures always fit
+        # Tiny always fits
         if my_units == 0:
             return False
 
-        return (used_units + my_units) > TILE_CAPACITY
+        # Check every tile in footprint
+        for fx, fy in self._get_footprint_tiles(x, y):
+            tile = game_map.tiles.get(MapKey(fx, fy, self.location.z))
+            if not tile or not tile.walkable:
+                return True  # footprint tile doesn't exist or unwalkable
+
+            used_units = 0
+            for obj in WorldObject.colliders_on_map(game_map):
+                if isinstance(obj, Structure):
+                    ox, oy = obj.location.x, obj.location.y
+                    if (fx - ox, fy - oy) in obj.collision_mask:
+                        return True
+                elif isinstance(obj, Creature) and obj is not self:
+                    obj_tiles = obj._get_footprint_tiles(obj.location.x, obj.location.y)
+                    if (fx, fy) in obj_tiles:
+                        if self._is_family_passthrough(obj):
+                            continue
+                        used_units += SIZE_UNITS.get(obj.size, 4)
+
+            if (used_units + my_units) > TILE_CAPACITY:
+                return True
+
+        return False
 
     def _is_family_passthrough(self, other: 'Creature') -> bool:
         """Return True if self and other are parent-child and child is not adult."""
@@ -502,8 +513,12 @@ class Creature(WorldObject):
         return False
 
     def move(self, dx: int, dy: int, cols: int, rows: int):
-        nx = max(0, min(cols - 1, self.location.x + dx))
-        ny = max(0, min(rows - 1, self.location.y + dy))
+        # Clamp so entire footprint stays in bounds
+        foot = SIZE_FOOTPRINT.get(self.size, [])
+        max_ox = max((ox for ox, _ in foot), default=0)
+        max_oy = max((oy for _, oy in foot), default=0)
+        nx = max(0, min(cols - 1 - max_ox, self.location.x + dx))
+        ny = max(0, min(rows - 1 - max_oy, self.location.y + dy))
         current_tile = self.current_map.tiles.get(self.location)
         target = self.current_map.tiles.get(MapKey(nx, ny, self.location.z))
         if not (target and target.walkable):
