@@ -2696,6 +2696,24 @@ class NeuralBehavior:
         self.temperature = temperature
         self._prev_snapshot = None
 
+    @staticmethod
+    def _int_temperature(base_temp: float, int_val: int) -> float:
+        """INT → decision quality. Graduated: every point matters.
+        INT 3→1.7, 6→1.4, 10→1.0, 14→0.6, 18→0.4, 20→0.3"""
+        return max(0.3, base_temp * (2.0 - int_val / 10.0))
+
+    @staticmethod
+    def _per_noise(per_val: int) -> float:
+        """PER → observation noise magnitude. Graduated.
+        PER 3→0.3, 6→0.2, 10→0.1, 14→0.05, 18→0.01, 20→0.0"""
+        return max(0.0, 0.35 - per_val * 0.0175)
+
+    @staticmethod
+    def _lck_reroll_chance(lck_val: int) -> float:
+        """LCK → chance of lucky reroll on failed action. Graduated.
+        LCK 3→0%, 6→5%, 10→15%, 14→25%, 18→40%, 20→50%"""
+        return max(0.0, min(0.5, (lck_val - 3) * 0.03))
+
     def think(self, creature: Creature, cols: int, rows: int):
         from classes.observation import build_observation, make_snapshot, apply_preset_mask
         from classes.actions import dispatch, Action
@@ -2710,16 +2728,30 @@ class NeuralBehavior:
         if creature.observation_mask:
             apply_preset_mask(obs, creature.observation_mask)
 
-        # Scale temperature by INT — smarter creatures make more optimal choices
-        # INT 6 → temp 1.5 (impulsive), INT 10 → 1.0, INT 18 → 0.5 (calculated)
-        int_val = creature.stats.active[Stat.INT]()
-        int_temp = max(0.3, self.temperature * (2.0 - int_val / 10.0))
-
-        # Select action
         obs_arr = np.array(obs, dtype=np.float32)
+
+        # --- PER: observation noise (graduated) ---
+        # Low PER creatures get fuzzy inputs — misread distances, HP ratios, etc.
+        per_val = creature.stats.active[Stat.PER]()
+        noise_mag = self._per_noise(per_val)
+        if noise_mag > 0:
+            noise = np.random.normal(0, noise_mag, size=obs_arr.shape).astype(np.float32)
+            obs_arr = obs_arr + noise
+
+        # --- INT: temperature scaling (graduated) ---
+        int_val = creature.stats.active[Stat.INT]()
+        int_temp = self._int_temperature(self.temperature, int_val)
+
+        # Select action from net
         action_idx = self.net.select_action(obs_arr, int_temp)
 
-        # Build context — find nearest visible creature as target
+        # --- LCK: lucky reroll on failure (graduated) ---
+        # If the chosen action would fail, LCK gives a chance to pick
+        # the second-best action instead
+        lck_val = creature.stats.active[Stat.LCK]()
+        reroll_chance = self._lck_reroll_chance(lck_val)
+
+        # Build context first (needed for failure check)
         target = None
         nearest_dist = 999
         for obj in WorldObject.on_map(creature.current_map):
@@ -2736,7 +2768,22 @@ class NeuralBehavior:
             'target': target, 'now': now,
         }
 
-        dispatch(creature, action_idx, context)
+        # Execute action — with LCK reroll on failure
+        result = dispatch(creature, action_idx, context)
+
+        if not result.get('success', result.get('hit', False)):
+            # Action failed — LCK reroll?
+            if reroll_chance > 0 and random.random() < reroll_chance:
+                # Get full probability distribution and pick second-best
+                import numpy as _np
+                probs = self.net.forward(obs_arr)
+                # Zero out the failed action and pick from remaining
+                probs[action_idx] = 0.0
+                remaining_sum = probs.sum()
+                if remaining_sum > 0:
+                    probs = probs / remaining_sum
+                    reroll_idx = int(_np.random.choice(len(probs), p=probs))
+                    dispatch(creature, reroll_idx, context)
 
 
 class StatWeightedBehavior:
