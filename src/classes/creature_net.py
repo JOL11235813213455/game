@@ -139,11 +139,32 @@ class CreatureNet:
         np.savez(str(path), **self.weights)
 
     def load(self, path: str | Path):
-        """Load weights from a .npz file."""
+        """Load weights from a .npz file.
+
+        Handles observation size changes: if saved w1 has fewer input rows
+        than current input_size, extra rows are zero-padded (new inputs
+        start inert and get learned incrementally on next training).
+        """
         data = np.load(str(path))
         for key in self.weights:
-            if key in data:
-                self.weights[key] = data[key].astype(np.float32)
+            if key not in data:
+                continue
+            saved = data[key].astype(np.float32)
+            target = self.weights[key]
+            if saved.shape == target.shape:
+                self.weights[key] = saved
+            elif key == 'w1' and saved.ndim == 2:
+                # Input layer — pad rows if observation grew
+                old_in, h = saved.shape
+                new_in = target.shape[0]
+                if new_in > old_in and h == target.shape[1]:
+                    padded = np.zeros(target.shape, dtype=np.float32)
+                    padded[:old_in, :] = saved
+                    self.weights[key] = padded
+                else:
+                    self.weights[key] = saved  # best effort
+            else:
+                self.weights[key] = saved  # shape mismatch — best effort
 
     def param_count(self) -> int:
         """Total number of trainable parameters."""

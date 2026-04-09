@@ -118,6 +118,11 @@ def compute_reward(creature, prev: dict, curr: dict) -> float:
     if fatigue_delta > 0:
         reward -= fatigue_delta * 1.5
 
+    # Overcrowding — penalty when 5+ creatures within 3 tiles
+    nearby = curr.get('nearby_count', 0)
+    if nearby >= 5:
+        reward -= (nearby - 4) * 0.3  # -0.3 per creature above threshold
+
     return reward
 
 
@@ -160,6 +165,20 @@ def make_reward_snapshot(creature) -> dict:
                 world_balance = obj.get_balance(deity)
                 break
 
+    # Nearby creature count (within 3 tiles) for crowding penalty
+    nearby_count = 0
+    try:
+        from classes.world_object import WorldObject
+        from classes.creature import Creature as _Creature
+        for obj in WorldObject.on_map(creature.current_map):
+            if isinstance(obj, _Creature) and obj is not creature and obj.is_alive:
+                dx = abs(obj.location.x - creature.location.x)
+                dy = abs(obj.location.y - creature.location.y)
+                if dx + dy <= 3:
+                    nearby_count += 1
+    except Exception:
+        pass
+
     return {
         'alive': creature.is_alive,
         'hp_ratio': stats.active[Stat.HP_CURR]() / hp_max,
@@ -182,4 +201,5 @@ def make_reward_snapshot(creature) -> dict:
         'exp': stats.base.get(Stat.EXP, 0),
         'failed_actions': getattr(creature, 'failed_actions', 0),
         'fatigue': getattr(creature, '_fatigue_level', 0),
+        'nearby_count': nearby_count,
     }

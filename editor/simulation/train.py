@@ -461,13 +461,17 @@ def train(cycles: int = 3, mappo_steps: int = 100000,
           ppo_steps: int = 100000, lr: float = 3e-4,
           run_name: str = None, resume_from: str = None):
     """Run the full MAPPO → ES → PPO training pipeline."""
-    global _writer
+    global _writer, SAVE_DIR
     from torch.utils.tensorboard import SummaryWriter
     if not run_name:
         run_name = f'train_{time.strftime("%Y%m%d_%H%M%S")}'
+    # Save models to run-specific subfolder
+    SAVE_DIR = Path(__file__).parent.parent / 'models' / run_name
+    SAVE_DIR.mkdir(parents=True, exist_ok=True)
     _writer = SummaryWriter(log_dir=LOG_DIR / run_name)
     print(f'TensorBoard: tensorboard --logdir {LOG_DIR}')
     print(f'Run name: {run_name}')
+    print(f'Models dir: {SAVE_DIR}')
     print(f'Training pipeline: {cycles} cycles')
     print(f'  MAPPO: {mappo_steps} steps per cycle')
     print(f'  ES: {es_generations} generations × {es_variants} variants')
@@ -479,7 +483,18 @@ def train(cycles: int = 3, mappo_steps: int = 100000,
     net = TorchCreatureNet()
     if resume_from:
         print(f'  Resuming from: {resume_from}')
-        net.load_state_dict(torch.load(resume_from, weights_only=True))
+        saved_state = torch.load(resume_from, weights_only=True)
+        # Handle observation size change — pad fc1 weights if needed
+        saved_w1 = saved_state.get('fc1.weight')
+        curr_w1 = net.state_dict()['fc1.weight']
+        if saved_w1 is not None and saved_w1.shape != curr_w1.shape:
+            old_in = saved_w1.shape[1]
+            new_in = curr_w1.shape[1]
+            print(f'  Observation size changed: {old_in} → {new_in}, padding fc1')
+            padded = torch.zeros_like(curr_w1)
+            padded[:, :old_in] = saved_w1
+            saved_state['fc1.weight'] = padded
+        net.load_state_dict(saved_state, strict=False)
     ppo = PPO(net, lr=lr)
     print(f'  Net params: {net.param_count():,}')
     print()
@@ -513,8 +528,15 @@ def train(cycles: int = 3, mappo_steps: int = 100000,
     # Save final
     net.export_to_numpy(SAVE_DIR / 'final.npz')
     torch.save(net.state_dict(), SAVE_DIR / 'final.pt')
+    # Also save to root models/ for easy resume
+    root_models = Path(__file__).parent.parent / 'models'
+    net.export_to_numpy(root_models / 'final.npz')
+    torch.save(net.state_dict(), root_models / 'final.pt')
     if _writer:
         _writer.close()
+    # Clear live state so viewer knows training is done
+    from editor.simulation.train_state import clear_state
+    clear_state()
     print(f'\nTraining complete. Models saved to {SAVE_DIR}/')
     print(f'  NumPy weights: final.npz (load with CreatureNet)')
     print(f'  PyTorch state: final.pt (resume training)')

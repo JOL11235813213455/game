@@ -175,7 +175,7 @@ def build_observation(creature, cols: int, rows: int,
     for st in _DERIVED_ORDER:
         obs.append(s[st]() / _norms.get(st, 20))
 
-    # ==== SECTION 3: SELF CURRENT RESOURCES (6) ====
+    # ==== SECTION 3: SELF CURRENT RESOURCES (10) ====
     hp_max = max(1, s[Stat.HP_MAX]())
     hp_cur = s[Stat.HP_CURR]()
     stam_max = max(1, s[Stat.MAX_STAMINA]())
@@ -188,6 +188,11 @@ def build_observation(creature, cols: int, rows: int,
     obs.append(stam_cur / 100.0)
     obs.append(_ratio(mana_cur, mana_max))
     obs.append(mana_cur / 100.0)
+    # Regen state booleans
+    obs.append(1.0 if creature.is_regenerating_hp else 0.0)
+    obs.append(1.0 if creature.hp_regen_ready else 0.0)
+    obs.append(1.0 if creature.is_regenerating_stamina else 0.0)
+    obs.append(1.0 if creature.is_regenerating_mana else 0.0)
 
     # ==== SECTION 4: SELF COMBAT READINESS (17) ====
     weapon = creature.equipment.get(Slot.HAND_R) or creature.equipment.get(Slot.HAND_L)
@@ -582,6 +587,25 @@ def build_observation(creature, cols: int, rows: int,
     obs.append(0.0)  # tiles_with_items
     obs.append(len(visible) / 10.0)  # tiles_with_creatures (approx)
 
+    # Crowding metrics — local density within 3-tile radius
+    crowd_radius = 3
+    nearby_count = sum(1 for d, c in visible if d <= crowd_radius)
+    obs.append(nearby_count / 8.0)  # normalized local density
+    obs.append(1.0 if nearby_count >= 5 else 0.0)  # overcrowded flag
+    # Direction AWAY from crowd center (flee vector)
+    if nearby_count > 0:
+        nearby = [(c.location.x, c.location.y) for d, c in visible if d <= crowd_radius]
+        crowd_cx = sum(nx for nx, ny in nearby) / len(nearby)
+        crowd_cy = sum(ny for nx, ny in nearby) / len(nearby)
+        flee_dx = cx - crowd_cx
+        flee_dy = cy - crowd_cy
+        flee_mag = max(1.0, abs(flee_dx) + abs(flee_dy))
+        obs.append(flee_dx / flee_mag)
+        obs.append(flee_dy / flee_mag)
+    else:
+        obs.append(0.0)
+        obs.append(0.0)
+
     # ==== SECTION 19: TILE ITEMS TOP 3 (27) ====
     sorted_items = sorted(tile_items, key=lambda i: getattr(i, 'value', 0), reverse=True)
     for idx in range(MAX_TILE_ITEMS):
@@ -959,32 +983,32 @@ except Exception:
 SECTION_RANGES = {
     'self_base':        (0, 14),
     'self_derived':     (14, 50),
-    'self_resources':   (50, 56),
-    'self_combat':      (56, 73),
-    'self_economy':     (73, 93),
-    'self_slots':       (93, 107),
-    'self_weapon':      (107, 122),
-    'self_inv_texture': (122, 135),
-    'self_social':      (135, 145),
-    'self_status':      (145, 161),
-    'self_quest':       (161, 171),
-    'self_movement':    (171, 179),
-    'self_genetics':    (179, 186),
-    'self_identity':    (186, 211),
-    'self_reputation':  (211, 217),
-    'tile_deep':        (217, 235),
-    'spatial_walls':    (235, 260),
-    'spatial_features': (260, 272),
-    'tile_items':       (272, 299),
-    'census_visible':   (299, 344),
-    'census_audible':   (344, 347),
-    'per_engaged':      (347, 617),
-    'world_time':       (617, 630),
-    'temporal':         (630, 644),
-    'trends':           (644, 655),
-    'time_since':       (655, 667),
-    'reward_signals':   (667, 684),
-    'transforms':       (684, OBSERVATION_SIZE),
+    'self_resources':   (50, 60),       # +4 regen booleans
+    'self_combat':      (60, 77),
+    'self_economy':     (77, 97),
+    'self_slots':       (97, 111),
+    'self_weapon':      (111, 126),
+    'self_inv_texture': (126, 139),
+    'self_social':      (139, 149),
+    'self_status':      (149, 165),
+    'self_quest':       (165, 175),
+    'self_movement':    (175, 183),
+    'self_genetics':    (183, 190),
+    'self_identity':    (190, 215),
+    'self_reputation':  (215, 221),
+    'tile_deep':        (221, 239),
+    'spatial_walls':    (239, 264),
+    'spatial_features': (264, 280),     # +4 crowding metrics
+    'tile_items':       (280, 307),
+    'census_visible':   (307, 352),
+    'census_audible':   (352, 355),
+    'per_engaged':      (355, 625),
+    'world_time':       (625, 638),
+    'temporal':         (638, 652),
+    'trends':           (652, 663),
+    'time_since':       (663, 675),
+    'reward_signals':   (675, 692),
+    'transforms':       (692, OBSERVATION_SIZE),
 }
 
 # Semantic groups for easy mask building

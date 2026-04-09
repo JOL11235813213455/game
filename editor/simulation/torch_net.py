@@ -89,10 +89,25 @@ class TorchCreatureNet(nn.Module):
         np.savez(str(path), **np_weights)
 
     def import_from_numpy(self, path: str | Path):
-        """Load weights from .npz (NumPy CreatureNet format)."""
+        """Load weights from .npz (NumPy CreatureNet format).
+
+        Handles observation size changes: if saved w1 has fewer input
+        columns than current fc1 expects, pads with zeros.
+        """
         data = np.load(str(path))
         state = self.state_dict()
-        state['fc1.weight'] = torch.FloatTensor(data['w1'].T)
+
+        # Handle input size change on w1 (stored transposed: in×h → h×in)
+        w1_saved = data['w1']  # shape (old_input, h1)
+        w1_target = state['fc1.weight']  # shape (h1, new_input)
+        if w1_saved.shape[0] != w1_target.shape[1]:
+            old_in, h1 = w1_saved.shape
+            new_in = w1_target.shape[1]
+            if new_in > old_in:
+                padded = np.zeros((new_in, h1), dtype=np.float32)
+                padded[:old_in, :] = w1_saved
+                w1_saved = padded
+        state['fc1.weight'] = torch.FloatTensor(w1_saved.T)
         state['fc1.bias'] = torch.FloatTensor(data['b1'])
         state['fc2.weight'] = torch.FloatTensor(data['w2'].T)
         state['fc2.bias'] = torch.FloatTensor(data['b2'])

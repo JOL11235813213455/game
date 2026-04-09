@@ -159,8 +159,14 @@ class TrainingTab(ttk.Frame):
     def _refresh_checkpoints(self):
         self._checkpoint_list = ['(new)']
         if MODELS_DIR.exists():
+            # Root-level .pt files
             for f in sorted(MODELS_DIR.glob('*.pt')):
                 self._checkpoint_list.append(f.name)
+            # Run-specific subdirectories
+            for d in sorted(MODELS_DIR.iterdir()):
+                if d.is_dir() and not d.name.startswith('_'):
+                    for f in sorted(d.glob('*.pt')):
+                        self._checkpoint_list.append(f'{d.name}/{f.name}')
         if hasattr(self, 'resume_cb'):
             self.resume_cb['values'] = self._checkpoint_list
 
@@ -273,9 +279,18 @@ class TrainingTab(ttk.Frame):
     def _refresh_models(self):
         self.models_list.delete(0, tk.END)
         if MODELS_DIR.exists():
+            # Root-level .npz files
             for f in sorted(MODELS_DIR.glob('*.npz')):
                 if f.name.startswith('_'):
                     continue
                 size_mb = f.stat().st_size / (1024 * 1024)
                 mtime = time.strftime('%Y-%m-%d %H:%M', time.localtime(f.stat().st_mtime))
                 self.models_list.insert(tk.END, f'{f.name:30s} {size_mb:.1f}MB  {mtime}')
+            # Run-specific subdirectories
+            for d in sorted(MODELS_DIR.iterdir()):
+                if d.is_dir() and not d.name.startswith('_'):
+                    for f in sorted(d.glob('*.npz')):
+                        label = f'{d.name}/{f.name}'
+                        size_mb = f.stat().st_size / (1024 * 1024)
+                        mtime = time.strftime('%Y-%m-%d %H:%M', time.localtime(f.stat().st_mtime))
+                        self.models_list.insert(tk.END, f'{label:40s} {size_mb:.1f}MB  {mtime}')

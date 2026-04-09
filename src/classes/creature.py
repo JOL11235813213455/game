@@ -406,6 +406,7 @@ class Creature(WorldObject):
 
     def update(self, now: int, cols: int, rows: int):
         """Called each frame for non-player creatures."""
+        self._last_update_time = now
         self._cols = cols
         self._rows = rows
         self.process_ticks(now)
@@ -455,6 +456,32 @@ class Creature(WorldObject):
             return
         regen = self.stats.active[Stat.MANA_REGEN]()
         self.stats.base[Stat.CUR_MANA] = min(mx, cur + regen)
+
+    # -- Regen state checks ------------------------------------------------
+
+    @property
+    def is_regenerating_hp(self) -> bool:
+        """True if HP regen cooldown has passed and HP is below max."""
+        now = getattr(self, '_last_update_time', 0)
+        if now < self._regen_start:
+            return False
+        return self.stats.active[Stat.HP_CURR]() < self.stats.active[Stat.HP_MAX]()
+
+    @property
+    def is_regenerating_mana(self) -> bool:
+        """True if mana is below max (mana regens continuously)."""
+        return self.stats.active[Stat.CUR_MANA]() < self.stats.active[Stat.MAX_MANA]()
+
+    @property
+    def is_regenerating_stamina(self) -> bool:
+        """True if stamina is below max (stamina regens continuously)."""
+        return self.stats.active[Stat.CUR_STAMINA]() < self.stats.active[Stat.MAX_STAMINA]()
+
+    @property
+    def hp_regen_ready(self) -> bool:
+        """True if HP regen cooldown has passed (regardless of current HP)."""
+        now = getattr(self, '_last_update_time', 0)
+        return now >= self._regen_start
 
     # -- Movement -----------------------------------------------------------
 
