@@ -175,7 +175,10 @@ class TrainingTab(ttk.Frame):
             messagebox.showwarning('Training', 'Training is already running.')
             return
 
+        # Wrap in systemd-inhibit to prevent sleep during training
         cmd = [
+            'systemd-inhibit', '--what=idle:sleep', '--who=RPG Training',
+            '--reason=AI model training in progress',
             'python', '-u', '-m', 'editor.simulation.train',
             '--cycles', self.v_cycles.get(),
             '--mappo-steps', self.v_mappo.get(),
