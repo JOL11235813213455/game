@@ -1,0 +1,331 @@
+NEURAL NET INPUT VARIABLES — COMPLETE SPECIFICATION
+====================================================
+Generated: 2026-04-08
+
+Every variable fed into the creature behavior neural network.
+All values are floats. Booleans are 0.0 or 1.0.
+Continuous values are normalized to roughly [0,1] or [-1,1].
+
+================================================================================
+SECTION 1: SELF — IDENTITY (13 + N_species + 9 = ~32 values)
+================================================================================
+
+# Base stats (normalized /20)
+self_STR                        float   creature.stats.active[Stat.STR]() / 20
+self_VIT                        float   creature.stats.active[Stat.VIT]() / 20
+self_AGL                        float   creature.stats.active[Stat.AGL]() / 20
+self_PER                        float   creature.stats.active[Stat.PER]() / 20
+self_INT                        float   creature.stats.active[Stat.INT]() / 20
+self_CHR                        float   creature.stats.active[Stat.CHR]() / 20
+self_LCK                        float   creature.stats.active[Stat.LCK]() / 20
+
+# Identity flags
+self_is_male                    bool    1.0 if sex == 'male'
+self_is_female                  bool    1.0 if sex == 'female'
+self_is_child                   bool    1.0 if age < 18
+self_is_adult                   bool    1.0 if age >= 18
+self_is_abomination             bool    1.0 if is_abomination
+self_age_normalized             float   age / OLD_MIN (0-1 scale)
+
+# Species one-hot (one per species in game)
+self_is_species_human           bool    1.0 if species == 'human'
+self_is_species_X               bool    ... repeat for each species
+# (N_species values total)
+
+# Deity one-hot (8 gods + none = 9)
+self_deity_none                 bool    1.0 if deity is None
+self_deity_aelora               bool    1.0 if deity == 'Aelora'
+self_deity_xarith               bool    1.0 if deity == 'Xarith'
+self_deity_solmara              bool    1.0 if deity == 'Solmara'
+self_deity_vaelkor              bool    1.0 if deity == 'Vaelkor'
+self_deity_verithan             bool    1.0 if deity == 'Verithan'
+self_deity_nyssara              bool    1.0 if deity == 'Nyssara'
+self_deity_sylvaine             bool    1.0 if deity == 'Sylvaine'
+self_deity_mortheus             bool    1.0 if deity == 'Mortheus'
+
+================================================================================
+SECTION 2: SELF — DERIVED COMBAT STATS (11 values)
+================================================================================
+
+self_HP_MAX                     float   stats.active[Stat.HP_MAX]() / 50
+self_MELEE_DMG                  float   stats.active[Stat.MELEE_DMG]() / 20
+self_RANGED_DMG                 float   stats.active[Stat.RANGED_DMG]() / 20
+self_MAGIC_DMG                  float   stats.active[Stat.MAGIC_DMG]() / 20
+self_ACCURACY                   float   stats.active[Stat.ACCURACY]() / 20
+self_CRIT_CHANCE                float   stats.active[Stat.CRIT_CHANCE]() / 100
+self_CRIT_DMG                   float   stats.active[Stat.CRIT_DMG]() / 20
+self_DODGE                      float   stats.active[Stat.DODGE]() / 20
+self_ARMOR                      float   stats.active[Stat.ARMOR]() / 20
+self_BLOCK                      float   stats.active[Stat.BLOCK]() / 20
+self_max_hit_taken              float   _max_hit_taken / max(1, HP_MAX)
+
+================================================================================
+SECTION 3: SELF — DERIVED MOVEMENT/UTILITY STATS (6 values)
+================================================================================
+
+self_MOVE_SPEED                 float   stats.active[Stat.MOVE_SPEED]() / 10
+self_SIGHT_RANGE                float   stats.active[Stat.SIGHT_RANGE]() / 15
+self_HEARING_RANGE              float   stats.active[Stat.HEARING_RANGE]() / 10
+self_STEALTH                    float   stats.active[Stat.STEALTH]() / 20
+self_DETECTION                  float   stats.active[Stat.DETECTION]() / 20
+self_CARRY_WEIGHT               float   stats.active[Stat.CARRY_WEIGHT]() / 200
+
+================================================================================
+SECTION 4: SELF — DERIVED RESOURCE STATS (6 values)
+================================================================================
+
+self_MAX_STAMINA                float   stats.active[Stat.MAX_STAMINA]() / 100
+self_MAX_MANA                   float   stats.active[Stat.MAX_MANA]() / 100
+self_MANA_REGEN                 float   stats.active[Stat.MANA_REGEN]() / 10
+self_STAM_REGEN                 float   stats.active[Stat.STAM_REGEN]() / 10
+self_HP_REGEN_DELAY             float   stats.active[Stat.HP_REGEN_DELAY]() / 10
+self_CARRY_WEIGHT_RATIO         float   carried_weight / max(1, CARRY_WEIGHT)
+
+================================================================================
+SECTION 5: SELF — DERIVED RESISTANCE STATS (5 values)
+================================================================================
+
+self_POISON_RESIST              float   stats.active[Stat.POISON_RESIST]() / 20
+self_DISEASE_RESIST             float   stats.active[Stat.DISEASE_RESIST]() / 20
+self_MAGIC_RESIST               float   stats.active[Stat.MAGIC_RESIST]() / 20
+self_STAGGER_RESIST             float   stats.active[Stat.STAGGER_RESIST]() / 20
+self_FEAR_RESIST                float   stats.active[Stat.FEAR_RESIST]() / 20
+
+================================================================================
+SECTION 6: SELF — DERIVED SOCIAL STATS (5 values)
+================================================================================
+
+self_PERSUASION                 float   stats.active[Stat.PERSUASION]() / 20
+self_INTIMIDATION               float   stats.active[Stat.INTIMIDATION]() / 20
+self_DECEPTION                  float   stats.active[Stat.DECEPTION]() / 20
+self_COMPANION_LIMIT            float   stats.active[Stat.COMPANION_LIMIT]() / 5
+self_CRAFT_QUALITY              float   stats.active[Stat.CRAFT_QUALITY]() / 10
+
+================================================================================
+SECTION 7: SELF — DERIVED LOOT/PROGRESSION STATS (3 values)
+================================================================================
+
+self_LOOT_GINI                  float   stats.active[Stat.LOOT_GINI]() (already 0-1)
+self_XP_MOD                     float   stats.active[Stat.XP_MOD]() (already 0-1)
+self_DURABILITY_USE             float   stats.active[Stat.DURABILITY_USE]() / 20
+
+================================================================================
+SECTION 8: SELF — CURRENT RESOURCES (3 values)
+================================================================================
+
+self_hp_ratio                   float   HP_CURR / HP_MAX (0-1)
+self_stamina_ratio              float   CUR_STAMINA / MAX_STAMINA (0-1)
+self_mana_ratio                 float   CUR_MANA / MAX_MANA (0-1)
+
+================================================================================
+SECTION 9: SELF — ECONOMY (5 values)
+================================================================================
+
+self_gold_ln                    float   ln(gold + 1) / 10
+self_total_debt_ln              float   ln(total_debt(now) + 1) / 10
+self_disposable_wealth_ln       float   sign(dw) * ln(abs(dw) + 1) / 10
+self_inventory_value_ln         float   ln(inv_value + 1) / 10
+self_equipment_kpi_ln           float   ln(total_equip_kpi + 1) / 10
+
+================================================================================
+SECTION 10: SELF — STATUS FLAGS (10 values)
+================================================================================
+
+self_is_sleeping                bool    1.0 if is_sleeping
+self_is_guarding                bool    1.0 if is_guarding
+self_is_blocking                bool    1.0 if is_blocking
+self_is_pregnant                bool    1.0 if is_pregnant
+self_has_partner                bool    1.0 if partner_uid is not None
+self_is_mother                  bool    1.0 if _has_hatched_child
+self_is_fertile                 bool    1.0 if is_fertile
+self_fatigue_level              float   _fatigue_level / 4 (0-1)
+self_sleep_debt                 float   sleep_debt / 4 (0-1 capped)
+self_piety                      float   piety (already 0-1)
+
+================================================================================
+SECTION 11: SELF — QUEST/PROGRESSION (5 values)
+================================================================================
+
+self_active_quests              float   len(quest_log.get_active_quests()) / 5
+self_level                      float   stats.base[Stat.LVL] / 20
+self_unspent_stat_points        float   stats.unspent_stat_points / 10
+self_life_goal_attainment       float   life_goal_attainment / 10
+self_failed_actions_recent      float   failed_actions / 10 (or recent count)
+
+================================================================================
+SECTION 12: SELF — SIZE (6 values, one-hot)
+================================================================================
+
+self_size_tiny                  bool    1.0 if size == 'tiny'
+self_size_small                 bool    1.0 if size == 'small'
+self_size_medium                bool    1.0 if size == 'medium'
+self_size_large                 bool    1.0 if size == 'large'
+self_size_huge                  bool    1.0 if size == 'huge'
+self_size_colossal              bool    1.0 if size == 'colossal'
+
+================================================================================
+SECTION 13: SELF — REPUTATION SUMMARY (3 values)
+================================================================================
+
+self_reputation_utility         float   sumproduct(sentiment,depth)/sum(depth) / 20
+self_total_relationships        float   len(relationships) / 20
+self_kills_total                float   _kills / 10
+
+================================================================================
+SECTION 14: SPATIAL — DISTANCE TO WALLS (8 values)
+================================================================================
+
+dist_wall_N                     float   tiles to nearest unwalkable going north / sight_range
+dist_wall_S                     float   tiles to nearest unwalkable going south / sight_range
+dist_wall_E                     float   tiles to nearest unwalkable going east / sight_range
+dist_wall_W                     float   tiles to nearest unwalkable going west / sight_range
+dist_wall_NE                    float   tiles to nearest unwalkable NE / sight_range
+dist_wall_NW                    float   tiles to nearest unwalkable NW / sight_range
+dist_wall_SE                    float   tiles to nearest unwalkable SE / sight_range
+dist_wall_SW                    float   tiles to nearest unwalkable SW / sight_range
+
+================================================================================
+SECTION 15: SPATIAL — IMMEDIATE SURROUNDINGS (12 values)
+================================================================================
+
+tile_walkable_N                 bool    1.0 if tile at (x, y-1) is walkable
+tile_walkable_S                 bool    1.0 if tile at (x, y+1) is walkable
+tile_walkable_E                 bool    1.0 if tile at (x+1, y) is walkable
+tile_walkable_W                 bool    1.0 if tile at (x-1, y) is walkable
+tile_walkable_NE                bool    1.0 if tile at (x+1, y-1) is walkable
+tile_walkable_NW                bool    1.0 if tile at (x-1, y-1) is walkable
+tile_walkable_SE                bool    1.0 if tile at (x+1, y+1) is walkable
+tile_walkable_SW                bool    1.0 if tile at (x-1, y+1) is walkable
+tile_has_items                  bool    1.0 if current tile has inventory items
+tile_has_trap_detected          bool    1.0 if current tile has detected trap
+tile_speed_modifier             float   current tile speed_modifier (1.0 = normal)
+tile_capacity_remaining         float   (TILE_CAPACITY - used_units) / TILE_CAPACITY
+
+================================================================================
+SECTION 16: CREATURE CENSUS — VISIBLE (23 values)
+================================================================================
+
+census_total_visible            float   count / 20
+census_same_species             float   count / 20
+census_different_species        float   count / 20
+census_male                     float   count / 20
+census_female                   float   count / 20
+census_male_same_species        float   count / 20
+census_female_same_species      float   count / 20
+census_children                 float   count / 20
+census_adults                   float   count / 20
+census_allies                   float   count of sentiment > 5 / 10
+census_enemies                  float   count of sentiment < -5 / 10
+census_neutral                  float   count of |sentiment| <= 5 / 10
+census_same_deity               float   count / 10
+census_opposed_deity            float   count / 10
+census_armed                    float   count with weapon equipped / 10
+census_pregnant                 float   count / 10
+census_avg_hp_ratio             float   mean HP ratio of visible (0-1)
+census_avg_distance             float   mean distance / sight_range
+census_closest_distance         float   min distance / sight_range (0 = adjacent)
+census_closest_ally_distance    float   min ally distance / sight_range (1 if none)
+census_closest_enemy_distance   float   min enemy distance / sight_range (1 if none)
+census_closest_same_species     float   min same-species distance / sight_range
+census_closest_opposite_sex     float   min opposite-sex distance / sight_range
+
+================================================================================
+SECTION 17: CREATURE CENSUS — AUDIBLE ONLY (3 values)
+================================================================================
+
+census_heard_not_seen           float   count within hearing range but not sight / 10
+census_heard_direction_x        float   avg dx to heard creatures (normalized)
+census_heard_direction_y        float   avg dy to heard creatures (normalized)
+
+================================================================================
+SECTION 18: PER-ENGAGED CREATURE (× 6 slots, ~28 per slot = 168 values)
+================================================================================
+
+For each of 6 engaged creatures (padded with 0 if fewer):
+
+engaged_N_distance              float   manhattan distance / sight_range
+engaged_N_direction_x           float   dx / max(1, |dx|+|dy|)
+engaged_N_direction_y           float   dy / max(1, |dx|+|dy|)
+engaged_N_sentiment_toward      float   my sentiment toward them / 20 (clamped -1 to 1)
+engaged_N_sentiment_from        float   their sentiment toward me / 20 (estimated, 0 if unknown)
+engaged_N_confidence            float   count / (count + 5) (0-1)
+engaged_N_curiosity             float   1 / (1 + count) (0-1)
+engaged_N_rumor_opinion         float   rumor_opinion / 10 (clamped -1 to 1)
+engaged_N_hp_ratio              float   their visible HP ratio (0-1)
+engaged_N_is_armed              bool    1.0 if they have weapon equipped
+engaged_N_same_species          bool    1.0 if same species
+engaged_N_same_deity            bool    1.0 if same deity
+engaged_N_opposed_deity         bool    1.0 if opposing deity
+engaged_N_is_male               bool    1.0 if male
+engaged_N_is_female             bool    1.0 if female
+engaged_N_is_child              bool    1.0 if age < 18
+engaged_N_is_parent             bool    1.0 if this is my mother/father
+engaged_N_is_child_of_mine      bool    1.0 if this is my offspring
+engaged_N_is_partner            bool    1.0 if this is my partner
+engaged_N_debt_i_owe_them       float   ln(debt_owed_to(uid) + 1) / 5
+engaged_N_debt_they_owe_me      float   ln(their debt to me + 1) / 5
+engaged_N_size_tiny             bool    1.0 if tiny
+engaged_N_size_small            bool    1.0 if small
+engaged_N_size_medium           bool    1.0 if medium
+engaged_N_size_large            bool    1.0 if large
+engaged_N_size_huge             bool    1.0 if huge
+engaged_N_size_colossal         bool    1.0 if colossal
+engaged_N_is_sleeping           bool    1.0 if sleeping
+# (species one-hot omitted here — use same_species flag + census instead
+#  to keep per-creature size manageable. Species detail is in census.)
+
+× 6 slots = 168 values (28 per creature)
+
+================================================================================
+SECTION 19: TEMPORAL DELTAS (7 values)
+================================================================================
+
+delta_hp_ratio                  float   hp_ratio now - hp_ratio last tick
+delta_stamina_ratio             float   stamina_ratio now - last tick
+delta_gold                      float   sign(change) * ln(|change| + 1) / 5
+delta_reputation                float   reputation now - last tick / 10
+delta_closest_threat_distance   float   (closest_enemy_dist now - last) / sight_range
+delta_piety                     float   piety now - last tick
+delta_equipment_kpi             float   sign(change) * ln(|change| + 1) / 5
+
+================================================================================
+SECTION 20: REWARD FUNCTION TRANSFORMS (4 values)
+================================================================================
+
+current_reputation_utility      float   sumproduct(sentiment,depth)/sum(depth) / 20
+current_equipment_kpi_total     float   ln(sum of equipped KPI + 1) / 10
+current_inventory_value         float   ln(sum of item values + 1) / 10
+current_wealth_total            float   ln(gold + inv_value + 1) / 10
+
+================================================================================
+SUMMARY
+================================================================================
+
+Section  1: Self identity              ~32  (13 + N_species + 9)
+Section  2: Self combat derived         11
+Section  3: Self movement/utility        6
+Section  4: Self resource derived        6
+Section  5: Self resistances             5
+Section  6: Self social derived          5
+Section  7: Self loot/progression        3
+Section  8: Self current resources       3
+Section  9: Self economy                 5
+Section 10: Self status flags           10
+Section 11: Self quests/progression      5
+Section 12: Self size one-hot            6
+Section 13: Self reputation summary      3
+Section 14: Spatial wall distances       8
+Section 15: Spatial immediate           12
+Section 16: Census visible              23
+Section 17: Census audible               3
+Section 18: Per-engaged creature       168  (28 × 6)
+Section 19: Temporal deltas              7
+Section 20: Reward transforms            4
+─────────────────────────────────────────
+TOTAL (with 1 species):               ~325
+TOTAL (with 10 species):              ~334
+TOTAL (with 20 species):              ~344
+
+================================================================================
+OUTPUTS: 49 action probabilities (softmax)
+================================================================================
