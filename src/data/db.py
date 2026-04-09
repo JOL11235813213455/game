@@ -194,6 +194,14 @@ def _migrate(con: sqlite3.Connection) -> None:
         "ALTER TABLE creatures ADD COLUMN model_version INTEGER",
         "ALTER TABLE nn_models ADD COLUMN obs_schema_id INTEGER",
         "ALTER TABLE nn_models ADD COLUMN act_schema_id INTEGER",
+        "ALTER TABLE tile_templates ADD COLUMN liquid INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE tile_templates ADD COLUMN flow_direction TEXT",
+        "ALTER TABLE tile_templates ADD COLUMN flow_speed REAL NOT NULL DEFAULT 0.0",
+        "ALTER TABLE tile_templates ADD COLUMN depth INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE tile_sets ADD COLUMN liquid INTEGER",
+        "ALTER TABLE tile_sets ADD COLUMN flow_direction TEXT",
+        "ALTER TABLE tile_sets ADD COLUMN flow_speed REAL",
+        "ALTER TABLE tile_sets ADD COLUMN depth INTEGER",
     ]:
         try:
             con.execute(stmt)
@@ -739,6 +747,10 @@ def _load_tile_templates(con: sqlite3.Connection) -> None:
             'stat_mods':   json.loads(r['stat_mods']) if r['stat_mods'] else {},
             'speed_modifier': r['speed_modifier'] if r['speed_modifier'] is not None else 1.0,
             'bg_color': r['bg_color'],
+            'liquid': bool(r['liquid']) if r['liquid'] is not None else False,
+            'flow_direction': r['flow_direction'],
+            'flow_speed': r['flow_speed'] if r['flow_speed'] is not None else 0.0,
+            'depth': r['depth'] if r['depth'] is not None else 0,
         }
 
 
@@ -799,6 +811,10 @@ def _load_maps(con: sqlite3.Connection) -> None:
                 stat_mods      = json.loads(te['stat_mods']) if te['stat_mods'] else None,
                 speed_modifier = float(te['speed_modifier']) if te['speed_modifier'] is not None else None,
                 bg_color       = te['bg_color'] or None,
+                liquid         = bool(te['liquid']) if te['liquid'] is not None else None,
+                flow_direction = te['flow_direction'] or None,
+                flow_speed     = float(te['flow_speed']) if te['flow_speed'] is not None else None,
+                depth          = int(te['depth']) if te['depth'] is not None else None,
             )
 
     # Fill remaining coords with default tile

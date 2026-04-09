@@ -451,6 +451,14 @@ def migrate_db():
             "ALTER TABLE creatures ADD COLUMN model_version INTEGER",
             "ALTER TABLE nn_models ADD COLUMN obs_schema_id INTEGER",
             "ALTER TABLE nn_models ADD COLUMN act_schema_id INTEGER",
+            "ALTER TABLE tile_templates ADD COLUMN liquid INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE tile_templates ADD COLUMN flow_direction TEXT",
+            "ALTER TABLE tile_templates ADD COLUMN flow_speed REAL NOT NULL DEFAULT 0.0",
+            "ALTER TABLE tile_templates ADD COLUMN depth INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE tile_sets ADD COLUMN liquid INTEGER",
+            "ALTER TABLE tile_sets ADD COLUMN flow_direction TEXT",
+            "ALTER TABLE tile_sets ADD COLUMN flow_speed REAL",
+            "ALTER TABLE tile_sets ADD COLUMN depth INTEGER",
         ]:
             try:
                 con.execute(stmt)

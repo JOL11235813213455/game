@@ -39,6 +39,10 @@ class Tile(Trackable):
         ,stat_mods:dict=None
         ,speed_modifier:float=None
         ,bg_color:str=None
+        ,liquid:bool=None
+        ,flow_direction:str=None    # 'N', 'S', 'E', 'W' or None
+        ,flow_speed:float=None      # tiles per second
+        ,depth:int=None             # depth in tiles (0 = shallow, 1+ = deep)
         ):
         super().__init__()
         tmpl = template or {}
@@ -50,8 +54,13 @@ class Tile(Trackable):
         self.animation_name = animation_name if animation_name is not None else tmpl.get('animation_name', None)
         self.speed_modifier = speed_modifier if speed_modifier is not None else tmpl.get('speed_modifier', 1.0)
         self.bg_color       = bg_color     if bg_color     is not None else tmpl.get('bg_color',     None)
+        self.liquid         = liquid         if liquid         is not None else tmpl.get('liquid',         False)
+        self.flow_direction = flow_direction if flow_direction is not None else tmpl.get('flow_direction', None)
+        self.flow_speed     = flow_speed     if flow_speed     is not None else tmpl.get('flow_speed',     0.0)
+        self.depth          = depth          if depth          is not None else tmpl.get('depth',          0)
         self.nested_map: Map = map
         self.inventory = Inventory(items=items or [])
+        self.buried_inventory = Inventory()  # requires DIG action + shovel to access
         self.gold: int = 0  # gold on the ground
         self.tile_template = tile_template
         self.linked_map    = linked_map
