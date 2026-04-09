@@ -76,6 +76,7 @@ class EditorApp(tk.Tk):
         self._quests_lazy = _LazyTab(notebook, self._make_quests)
         self._gods_lazy = _LazyTab(notebook, self._make_gods)
         self._dialogue_lazy = _LazyTab(notebook, self._make_dialogue)
+        self._training_lazy = _LazyTab(notebook, self._make_training)
         self._sql_lazy = _LazyTab(notebook, self._make_sql)
 
         notebook.add(self._creatures_lazy, text='  Creatures  ')
@@ -84,6 +85,7 @@ class EditorApp(tk.Tk):
         notebook.add(self._quests_lazy,    text='  Quests  ')
         notebook.add(self._gods_lazy,      text='  Gods  ')
         notebook.add(self._dialogue_lazy,  text='  Dialogue  ')
+        notebook.add(self._training_lazy,  text='  Training  ')
         notebook.add(self._sql_lazy,       text='  SQL  ')
 
         gfx_notebook.bind('<<NotebookTabChanged>>', self._on_tab_changed)
@@ -115,6 +117,10 @@ class EditorApp(tk.Tk):
         from editor.dialogue_tab import DialogueTab
         return DialogueTab(parent)
 
+    def _make_training(self, parent):
+        from editor.training_tab import TrainingTab
+        return TrainingTab(parent)
+
     def _make_sql(self, parent):
         from editor.sql_tab import SqlTab
         return SqlTab(parent)
@@ -132,7 +138,7 @@ class EditorApp(tk.Tk):
         # Build lazy tab on first visit
         for lazy in [self._creatures_lazy, self._items_lazy, self._spells_lazy,
                      self._quests_lazy, self._gods_lazy, self._dialogue_lazy,
-                     self._sql_lazy]:
+                     self._training_lazy, self._sql_lazy]:
             # Check if this lazy tab is the currently selected one
             try:
                 if event.widget.select() == str(lazy):

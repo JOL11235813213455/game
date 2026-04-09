@@ -30,6 +30,17 @@ from simulation.net import CreatureNet
 SAVE_DIR = Path(__file__).parent.parent / 'models'
 SAVE_DIR.mkdir(exist_ok=True)
 
+LOG_DIR = Path(__file__).parent.parent / 'runs'
+LOG_DIR.mkdir(exist_ok=True)
+
+# TensorBoard writer — initialized in train()
+_writer = None
+
+def _log(tag: str, value: float, step: int):
+    """Log a scalar to TensorBoard if writer is available."""
+    if _writer is not None:
+        _writer.add_scalar(tag, value, step)
+
 
 # ---------------------------------------------------------------------------
 # Training Phases
@@ -127,6 +138,9 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
         if len(buffer) >= rollout_len:
             info = ppo.update(*buffer.get())
             buffer.clear()
+            _log('mappo/policy_loss', info['policy_loss'], step)
+            _log('mappo/value_loss', info['value_loss'], step)
+            _log('mappo/entropy', info['entropy'], step)
 
         # Random mask injection: occasionally swap a creature's mask mid-episode
         # This trains robustness to sudden sensory changes
@@ -142,6 +156,8 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
         if step % 5000 == 4999 or sim.alive_count <= 1:
             avg = total_reward / max(1, ep_steps)
             episode_rewards.append(avg)
+            _log('mappo/episode_reward', avg, step)
+            _log('mappo/alive_count', sim.alive_count, step)
             total_reward = 0.0
             ep_steps = 0
             arena = generate_arena(**arena_kwargs)
@@ -219,6 +235,8 @@ def run_es(net: TorchCreatureNet, generations: int = 50,
             avg_top = np.mean(rewards[order[:top_n]])
             avg_all = np.mean(rewards)
             print(f'  Gen {gen+1}: top_20%={avg_top:.1f}, avg={avg_all:.1f}')
+            _log('es/top_20_reward', avg_top, gen)
+            _log('es/avg_reward', avg_all, gen)
 
     # Cleanup
     tmp_path = SAVE_DIR / '_es_tmp.npz'
@@ -320,10 +338,15 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
         if len(buffer) >= rollout_len:
             info = ppo.update(*buffer.get())
             buffer.clear()
+            _log('ppo/policy_loss', info['policy_loss'], step)
+            _log('ppo/value_loss', info['value_loss'], step)
+            _log('ppo/entropy', info['entropy'], step)
 
         # Reset
         if step % 5000 == 4999 or not agent.is_alive or sim.alive_count <= 1:
             episode_rewards.append(total_reward)
+            _log('ppo/episode_reward', total_reward, step)
+            _log('ppo/alive_count', sim.alive_count, step)
             total_reward = 0.0
             arena = generate_arena(**arena_kwargs)
             sim = Simulation(arena)
@@ -353,6 +376,11 @@ def train(cycles: int = 3, mappo_steps: int = 100000,
           es_generations: int = 50, es_variants: int = 50,
           ppo_steps: int = 100000, lr: float = 3e-4):
     """Run the full MAPPO → ES → PPO training pipeline."""
+    global _writer
+    from torch.utils.tensorboard import SummaryWriter
+    run_name = f'train_{time.strftime("%Y%m%d_%H%M%S")}'
+    _writer = SummaryWriter(log_dir=LOG_DIR / run_name)
+    print(f'TensorBoard: tensorboard --logdir {LOG_DIR}')
     print(f'Training pipeline: {cycles} cycles')
     print(f'  MAPPO: {mappo_steps} steps per cycle')
     print(f'  ES: {es_generations} generations × {es_variants} variants')
@@ -395,9 +423,12 @@ def train(cycles: int = 3, mappo_steps: int = 100000,
     # Save final
     net.export_to_numpy(SAVE_DIR / 'final.npz')
     torch.save(net.state_dict(), SAVE_DIR / 'final.pt')
+    if _writer:
+        _writer.close()
     print(f'\nTraining complete. Models saved to {SAVE_DIR}/')
     print(f'  NumPy weights: final.npz (load with CreatureNet)')
     print(f'  PyTorch state: final.pt (resume training)')
+    print(f'  TensorBoard: tensorboard --logdir {LOG_DIR}')
 
 
 if __name__ == '__main__':
