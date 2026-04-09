@@ -1,0 +1,492 @@
+from __future__ import annotations
+import random
+from classes.stats import Stat
+from classes.inventory import Weapon, Ammunition, Slot
+
+
+class CombatMixin:
+    """Combat methods for Creature."""
+
+    def _sight_distance(self, other) -> int:
+        """Manhattan distance between self and other."""
+        return abs(self.location.x - other.location.x) + abs(self.location.y - other.location.y)
+
+    def can_see(self, other) -> bool:
+        """Return True if other is within effective sight range."""
+        effective_range = self.stats.active[Stat.SIGHT_RANGE]() - other.stats.active[Stat.STEALTH]()
+        return self._sight_distance(other) <= effective_range
+
+    def melee_attack(self, target, now: int) -> dict:
+        """Execute a melee attack against an adjacent creature.
+
+        Returns a result dict with keys:
+            hit: bool, damage: int, crit: bool, staggered: bool,
+            reason: str (if miss/fail)
+        """
+        result = {'hit': False, 'damage': 0, 'crit': False,
+                  'staggered': False, 'betrayal': False, 'reason': ''}
+
+        # Must be adjacent (Manhattan distance 1)
+        if self._sight_distance(target) > 1:
+            result['reason'] = 'not_adjacent'
+            return result
+
+        # Weapon check — get equipped weapon or use unarmed defaults
+        weapon = self.equipment.get(Slot.HAND_R) or self.equipment.get(Slot.HAND_L)
+        if weapon and isinstance(weapon, Weapon):
+            weapon_dmg = weapon.damage
+            weapon_dc = getattr(weapon, 'damage', 5)  # armor DC
+            weapon_impact = weapon_dmg  # stagger force scales with damage
+            stamina_cost = max(5, 10 - (self.stats.active[Stat.STR]() - 10) // 2)
+        else:
+            # Unarmed
+            weapon_dmg = 0
+            weapon_dc = 3
+            weapon_impact = 2
+            stamina_cost = 5
+
+        # Stamina check
+        cur_stam = self.stats.active[Stat.CUR_STAMINA]()
+        if cur_stam < stamina_cost:
+            result['reason'] = 'no_stamina'
+            return result
+        self.stats.base[Stat.CUR_STAMINA] = cur_stam - stamina_cost
+
+        # Betrayal check: the ACT of attacking someone with positive history
+        # triggers regardless of whether the attack hits
+        rel = self.get_relationship(target)
+        if rel and rel[0] > 0:
+            self.record_interaction(target, -10.0)
+            target.record_interaction(self, -10.0)
+            result['betrayal'] = True
+
+        # Can defender see attacker? If not, auto-hit (ambush)
+        ambush = not target.can_see(self)
+        if not ambush:
+            # Defender picks dodge (default active defense)
+            hit_won, _ = self.stats.contest(target.stats, 'accuracy_vs_dodge')
+            if not hit_won:
+                result['reason'] = 'dodged'
+                target.record_interaction(self, -1.0)
+                return result
+
+        # Hit lands — armor resist check
+        armor_blocked = target.stats.resist_check(weapon_dc, Stat.ARMOR)
+        if armor_blocked:
+            result['reason'] = 'armor_absorbed'
+            result['hit'] = True
+            result['damage'] = 0
+            target.on_hit(now)
+            target.record_interaction(self, -2.0)
+            return result
+
+        # Damage calculation
+        str_mod = (self.stats.active[Stat.STR]() - 10) // 2
+        base_dmg = str_mod + weapon_dmg
+        # Lucky STR bonus: (LCK+1)/(LCK+2) chance of adding STR mod again
+        lck = self.stats.active[Stat.LCK]()
+        lucky_chance = (lck + 1) / (lck + 2) if lck + 2 > 0 else 0
+        if random.random() < lucky_chance:
+            base_dmg += max(0, str_mod)
+
+        # Crit check
+        crit_chance = self.stats.active[Stat.CRIT_CHANCE]()
+        crit = random.randint(1, 100) <= crit_chance
+        if crit:
+            result['crit'] = True
+            base_dmg = base_dmg * 2 + str_mod
+
+        damage = max(1, base_dmg)
+        result['hit'] = True
+        result['damage'] = damage
+
+        # Apply damage
+        hp = target.stats.active[Stat.HP_CURR]()
+        target.stats.base[Stat.HP_CURR] = max(0, hp - damage)
+
+        # Stagger check
+        staggered = not target.stats.resist_check(weapon_impact, Stat.STAGGER_RESIST)
+        result['staggered'] = staggered
+
+        # Reset defender's HP regen
+        target.on_hit(now)
+
+        # Record combat interaction
+        target.record_interaction(self, -5.0)
+
+        return result
+
+    def ranged_attack(self, target, now: int) -> dict:
+        """Execute a ranged attack against a creature within weapon range.
+
+        Requires a ranged weapon equipped and matching ammunition in inventory.
+        Returns result dict: hit, damage, crit, reason.
+        """
+        result = {'hit': False, 'damage': 0, 'crit': False, 'reason': ''}
+
+        # Weapon check — need a ranged weapon (range > 1)
+        weapon = self.equipment.get(Slot.HAND_R) or self.equipment.get(Slot.HAND_L)
+        if not weapon or not isinstance(weapon, Weapon) or weapon.range <= 1:
+            result['reason'] = 'no_ranged_weapon'
+            return result
+
+        # Range check
+        dist = self._sight_distance(target)
+        if dist > weapon.range:
+            result['reason'] = 'out_of_range'
+            return result
+        if dist < 1:
+            result['reason'] = 'too_close'
+            return result
+
+        # Ammo check
+        ammo = None
+        if weapon.ammunition_type:
+            for item in self.inventory.items:
+                if isinstance(item, Ammunition) and item.name == weapon.ammunition_type and item.quantity > 0:
+                    ammo = item
+                    break
+            if ammo is None:
+                result['reason'] = 'no_ammo'
+                return result
+
+        # Stamina cost
+        stamina_cost = max(3, 8 - (self.stats.active[Stat.STR]() - 10) // 2)
+        cur_stam = self.stats.active[Stat.CUR_STAMINA]()
+        if cur_stam < stamina_cost:
+            result['reason'] = 'no_stamina'
+            return result
+        self.stats.base[Stat.CUR_STAMINA] = cur_stam - stamina_cost
+
+        # Betrayal check
+        rel = self.get_relationship(target)
+        if rel and rel[0] > 0:
+            self.record_interaction(target, -10.0)
+            target.record_interaction(self, -10.0)
+            result['betrayal'] = True
+
+        # Consume one ammo unit up front
+        ammo_dmg = 0
+        if ammo:
+            ammo_dmg = ammo.damage
+            ammo.quantity -= 1
+            if ammo.quantity <= 0:
+                self.inventory.items.remove(ammo)
+
+        def _drop_ammo_on_tile():
+            """Recoverable ammo lands on the target's tile on miss."""
+            if ammo and ammo.recoverable:
+                tile = target.current_map.tiles.get(target.location)
+                if tile is not None:
+                    # Create a single recovered projectile on the tile
+                    recovered = Ammunition(
+                        name=ammo.name, weight=ammo.weight, quantity=1,
+                        damage=ammo.damage,
+                        destroy_on_use_probability=ammo.destroy_on_use_probability,
+                        recoverable=ammo.recoverable,
+                    )
+                    tile.inventory.items.append(recovered)
+
+        # Accuracy at distance
+        hit_prob = self.stats.accuracy_at_distance(dist)
+        if random.random() > hit_prob:
+            result['reason'] = 'missed'
+            _drop_ammo_on_tile()
+            if target.can_see(self):
+                target.record_interaction(self, -1.0)
+            return result
+
+        # Dodge contest if defender can see attacker
+        if target.can_see(self):
+            hit_won, _ = self.stats.contest(target.stats, 'accuracy_vs_dodge')
+            if not hit_won:
+                result['reason'] = 'dodged'
+                _drop_ammo_on_tile()
+                target.record_interaction(self, -1.0)
+                return result
+
+        # Armor resist
+        weapon_dc = weapon.damage
+        armor_blocked = target.stats.resist_check(weapon_dc, Stat.ARMOR)
+        if armor_blocked:
+            result['hit'] = True
+            result['damage'] = 0
+            result['reason'] = 'armor_absorbed'
+            target.on_hit(now)
+            target.record_interaction(self, -2.0)
+            return result
+
+        # Damage: weapon + ammo + STR if weapon requires it (bows)
+        base_dmg = weapon.damage + ammo_dmg
+
+        # Crit check
+        crit_chance = self.stats.active[Stat.CRIT_CHANCE]()
+        crit = random.randint(1, 100) <= crit_chance
+        if crit:
+            result['crit'] = True
+            base_dmg *= 2
+
+        damage = max(1, base_dmg)
+        result['hit'] = True
+        result['damage'] = damage
+
+        # Apply damage
+        hp = target.stats.active[Stat.HP_CURR]()
+        target.stats.base[Stat.HP_CURR] = max(0, hp - damage)
+        target.on_hit(now)
+
+        # Record interaction
+        if target.can_see(self):
+            target.record_interaction(self, -5.0)
+
+        return result
+
+    def cast_spell(self, spell: dict, target, now: int) -> dict:
+        """Cast a spell.
+
+        Args:
+            spell: spell definition dict (from SPELLS)
+            target: target creature (None for self-targeted spells)
+            now: current timestamp
+
+        Returns result dict: hit, damage, effect_applied, reason.
+        """
+        result = {'hit': False, 'damage': 0, 'effect_applied': False,
+                  'secondary_applied': False, 'reason': ''}
+
+        # Self-targeted spells target self
+        if spell['target_type'] == 'self':
+            target = self
+        elif target is None:
+            result['reason'] = 'no_target'
+            return result
+
+        # Requirements check
+        for stat, min_val in spell['requirements'].items():
+            if self.stats.active[stat]() < min_val:
+                result['reason'] = 'requirements_not_met'
+                return result
+
+        # Mana check
+        cur_mana = self.stats.active[Stat.CUR_MANA]()
+        if cur_mana < spell['mana_cost']:
+            result['reason'] = 'no_mana'
+            return result
+
+        # Stamina check
+        cur_stam = self.stats.active[Stat.CUR_STAMINA]()
+        if cur_stam < spell['stamina_cost']:
+            result['reason'] = 'no_stamina'
+            return result
+
+        # Range check (not for self-targeted)
+        if target is not self:
+            dist = self._sight_distance(target)
+            if dist > spell['range']:
+                result['reason'] = 'out_of_range'
+                return result
+
+        # Consume resources
+        self.stats.base[Stat.CUR_MANA] = cur_mana - spell['mana_cost']
+        self.stats.base[Stat.CUR_STAMINA] = cur_stam - spell['stamina_cost']
+
+        # Dodge contest (if dodgeable and target can see caster)
+        if spell['dodgeable'] and target is not self:
+            if target.can_see(self):
+                hit_won, _ = self.stats.contest(target.stats, 'accuracy_vs_dodge')
+                if not hit_won:
+                    result['reason'] = 'dodged'
+                    target.record_interaction(self, -1.0)
+                    return result
+
+        # Magic resist check — only for hostile spells (damage/debuff)
+        if target is not self and spell['effect_type'] in ('damage', 'debuff'):
+            resisted = target.stats.resist_check(spell['spell_dc'], Stat.MAGIC_RESIST)
+            if resisted:
+                result['reason'] = 'resisted'
+                result['hit'] = True
+                target.record_interaction(self, -1.0)
+                return result
+
+        result['hit'] = True
+
+        # Apply effect based on type
+        effect = spell['effect_type']
+
+        if effect == 'damage':
+            magic_dmg = self.stats.active[Stat.MAGIC_DMG]()
+            damage = max(1, int(spell['damage'] + magic_dmg))
+            result['damage'] = damage
+            hp = target.stats.active[Stat.HP_CURR]()
+            target.stats.base[Stat.HP_CURR] = max(0, hp - damage)
+            target.on_hit(now)
+            result['effect_applied'] = True
+            if target is not self:
+                target.record_interaction(self, -5.0)
+
+        elif effect == 'heal':
+            heal = max(1, int(spell['damage'] + self.stats.active[Stat.MAGIC_DMG]()))
+            hp = target.stats.active[Stat.HP_CURR]()
+            hp_max = target.stats.active[Stat.HP_MAX]()
+            target.stats.base[Stat.HP_CURR] = min(hp_max, hp + heal)
+            result['damage'] = -heal  # negative = healing
+            result['effect_applied'] = True
+            if target is not self:
+                target.record_interaction(self, 4.0)
+
+        elif effect in ('buff', 'debuff'):
+            if spell['buffs']:
+                from classes.creature import Creature
+                Creature._next_consumable_id += 1
+                source = f'spell_{Creature._next_consumable_id}'
+                for stat, amount in spell['buffs'].items():
+                    self.stats.add_mod(source, stat, amount) if target is self \
+                        else target.stats.add_mod(source, stat, amount)
+
+                # Schedule expiry if duration > 0
+                if spell['duration'] > 0:
+                    tick_name = f'expire_{source}'
+                    interval_ms = int(spell['duration'] * 1000)
+                    t = target
+                    def _expire(_now, s=source, tn=tick_name, tgt=t):
+                        tgt.stats.remove_mods_by_source(s)
+                        tgt.unregister_tick(tn)
+                    target.register_tick(tick_name, interval_ms, _expire)
+
+                result['effect_applied'] = True
+                if target is not self:
+                    sentiment = 3.0 if effect == 'buff' else -4.0
+                    target.record_interaction(self, sentiment)
+
+        # Secondary resist check (e.g. poison from a spell)
+        if spell['secondary_resist'] and spell['secondary_dc']:
+            from classes.stats import Stat as S
+            resist_stat_name = spell['secondary_resist']
+            # Look up the Stat enum by value string
+            resist_stat = None
+            for s in S:
+                if s.value == resist_stat_name:
+                    resist_stat = s
+                    break
+            if resist_stat and target is not self:
+                blocked = target.stats.resist_check(spell['secondary_dc'], resist_stat)
+                if not blocked:
+                    result['secondary_applied'] = True
+
+        return result
+
+    def get_known_spells(self) -> list[str]:
+        """Return spell keys this creature knows (from species + creature lists)."""
+        from data.db import SPELL_LISTS
+        spells = []
+        # Species spells
+        if self.species:
+            spells.extend(SPELL_LISTS.get(self.species, []))
+        # Creature-specific spells
+        spells.extend(SPELL_LISTS.get(self.name, []))
+        return list(dict.fromkeys(spells))  # dedupe preserving order
+
+    def grapple(self, target) -> dict:
+        """Initiate a grapple with an adjacent creature.
+
+        Contest: d20 + max(STR, AGL) vs d20 + max(STR, AGL-1).
+        High stamina cost. Loser takes social/dominance hit.
+        Returns dict: success, margin, reason.
+        """
+        result = {'success': False, 'margin': 0, 'reason': ''}
+
+        if self._sight_distance(target) > 1:
+            result['reason'] = 'not_adjacent'
+            return result
+
+        # High stamina cost
+        stamina_cost = 15
+        cur_stam = self.stats.active[Stat.CUR_STAMINA]()
+        if cur_stam < stamina_cost:
+            result['reason'] = 'no_stamina'
+            return result
+        self.stats.base[Stat.CUR_STAMINA] = cur_stam - stamina_cost
+
+        # Attacker: max(STR, AGL)
+        atk_str = self.stats.active[Stat.STR]()
+        atk_agl = self.stats.active[Stat.AGL]()
+        atk_val = max(atk_str, atk_agl) + random.randint(1, 20)
+
+        # Defender: max(STR, AGL-1) — slight agility disadvantage
+        def_str = target.stats.active[Stat.STR]()
+        def_agl = target.stats.active[Stat.AGL]() - 1
+        def_val = max(def_str, def_agl) + random.randint(1, 20)
+
+        margin = atk_val - def_val
+        result['margin'] = margin
+
+        if margin > 0:
+            result['success'] = True
+            # Winner dominance: positive for self, negative for loser
+            self.record_interaction(target, 2.0)
+            target.record_interaction(self, -5.0)
+        else:
+            result['reason'] = 'escaped'
+            # Loser takes social hit, both negative
+            self.record_interaction(target, -3.0)
+            target.record_interaction(self, -2.0)
+
+        return result
+
+    def _check_trap(self, tile):
+        """Check if a tile has a trap and resolve it against this creature."""
+        trap_dc = tile.stat_mods.get('trap_dc')
+        if trap_dc is None:
+            return
+
+        # Detection check: d20 + DETECTION vs trap_dc
+        detection = self.stats.active[Stat.DETECTION]()
+        roll = random.randint(1, 20) + detection
+        if roll >= trap_dc:
+            # Detected — trap is revealed but not triggered
+            return
+
+        # Trap triggered — find trap item on tile
+        trap_name = tile.stat_mods.get('trap_item', '')
+        trap_item = None
+        for item in tile.inventory.items:
+            if item.name == trap_name:
+                trap_item = item
+                break
+
+        # Apply trap damage (trap_dc as rough damage proxy)
+        damage = max(1, trap_dc // 2)
+        hp = self.stats.active[Stat.HP_CURR]()
+        self.stats.base[Stat.HP_CURR] = max(0, hp - damage)
+        self.on_hit(0)
+
+        # Remove trap after triggering
+        if trap_item:
+            tile.inventory.items.remove(trap_item)
+        tile.stat_mods.pop('trap_dc', None)
+        tile.stat_mods.pop('trap_item', None)
+
+    def die(self):
+        """Handle creature death: drop inventory + gold on tile, remove from map."""
+        tile = self.current_map.tiles.get(self.location)
+        if tile:
+            # Drop gold
+            tile.gold += self.gold
+            self.gold = 0
+
+            # Drop all inventory items
+            for item in list(self.inventory.items):
+                tile.inventory.items.append(item)
+            self.inventory.items.clear()
+
+            # Drop equipped items
+            for item in set(self.equipment.values()):
+                tile.inventory.items.append(item)
+                self.stats.remove_mods_by_source(f'equip_{item.uid}')
+            self.equipment.clear()
+
+        self.play_animation('death')
+
+    @property
+    def is_alive(self) -> bool:
+        return self.stats.active[Stat.HP_CURR]() > 0
