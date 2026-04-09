@@ -71,6 +71,20 @@ class Creature(WorldObject):
         from classes.quest import QuestLog
         self.quest_log = QuestLog()
 
+        # Economy
+        self.gold: int = 0
+        self.liabilities: float = 0.0  # debts/obligations driving resource need
+
+        # RL tracking counters
+        self.life_goal_attainment: int = 0  # pairing, hatch, child milestones
+        self.failed_actions: int = 0        # actions failed due to resources
+        self._kills: int = 0
+        self._tiles_explored: int = 0
+        self._quests_completed: int = 0
+        self._quest_steps_completed: int = 0
+        self._max_hit_taken: int = 0        # worst single hit for survival anchor
+        self._item_prices: dict = {}        # item id → gold paid
+
         # Build Stats from species defaults + overrides
         species_stats = {k: v for k, v in species_data.items() if isinstance(k, Stat)}
         merged = {**species_stats, **(stats or {})}
@@ -230,11 +244,13 @@ class Creature(WorldObject):
         else:
             self.play_animation('idle')
 
-    def on_hit(self, now: int):
+    def on_hit(self, now: int, damage: int = 0):
         """Call when this creature takes damage. Resets HP regen timer."""
         delay_s = self.stats.active[Stat.HP_REGEN_DELAY]()
         self._regen_start = now + delay_s * 1000
         self._regen_fib = (1, 1)
+        if damage > self._max_hit_taken:
+            self._max_hit_taken = damage
 
     def _do_hp_regen(self, now: int):
         """Fibonacci HP regen, capped at 15% of HP_MAX per second."""

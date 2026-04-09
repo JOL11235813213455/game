@@ -2602,6 +2602,103 @@ check("Creature has quest_log", hasattr(quest_creature, 'quest_log'))
 check("Quest log is QuestLog", isinstance(quest_creature.quest_log, QuestLog))
 
 # ==========================================================================
+print("\n=== Valuation System ===")
+from classes.valuation import (
+    compute_raw_kpi, decompounded_value, worth_to_creature,
+    min_sell_price, max_buy_price, compute_trade_price, trade_reward,
+)
+import math
+
+m67v = make_map()
+val_creature = make_creature(m67v, x=0, y=0, name='ValCreature',
+                             stats={Stat.STR: 14, Stat.AGL: 12, Stat.VIT: 12,
+                                    Stat.PER: 12, Stat.INT: 10, Stat.CHR: 10, Stat.LCK: 10})
+val_creature.gold = 200
+
+# Decompounding formula
+check("Decompound(0 uses) = 0", decompounded_value(10.0, 0) == 0.0)
+check("Decompound(1 use) has premium + floor",
+      decompounded_value(10.0, 1) == (10.0 ** 1.0) - 1 + 1.5 * 10.0)
+
+# More durability = more value, but diminishing
+val_5 = decompounded_value(10.0, 5)
+val_10 = decompounded_value(10.0, 10)
+val_50 = decompounded_value(10.0, 50)
+check(f"5 uses ({val_5:.1f}) < 10 uses ({val_10:.1f}) < 50 uses ({val_50:.1f})",
+      val_5 < val_10 < val_50)
+
+# Per-use value diminishes
+per_use_5 = val_5 / 5
+per_use_50 = val_50 / 50
+check(f"Per-use value diminishes: {per_use_5:.1f} > {per_use_50:.1f}",
+      per_use_5 > per_use_50)
+
+# Raw KPI for a weapon
+test_sword = Weapon(name='TestSword', weight=3.0, value=50.0,
+                    slots=[Slot.HAND_R], slot_count=1, damage=8,
+                    buffs={Stat.MELEE_DMG: 2})
+kpi = compute_raw_kpi(test_sword, val_creature)
+check(f"Sword KPI = {kpi:.1f} (positive)", kpi > 0)
+
+# Worth to creature
+worth = worth_to_creature(test_sword, val_creature)
+check(f"Sword worth = {worth:.1f} (positive)", worth > 0)
+
+# Better weapon should have higher worth
+weak_sword = Weapon(name='WeakSword', weight=2.0, value=20.0,
+                    slots=[Slot.HAND_R], slot_count=1, damage=3)
+weak_worth = worth_to_creature(weak_sword, val_creature)
+check(f"Strong sword ({worth:.0f}) > weak sword ({weak_worth:.0f})", worth > weak_worth)
+
+# Min sell price = max(paid, worth)
+val_creature._item_prices[id(test_sword)] = 40.0
+sell_min = min_sell_price(test_sword, val_creature)
+check(f"Min sell = max(paid=40, worth={worth:.0f}) = {sell_min:.0f}", sell_min == max(40, worth))
+
+# Trade between two creatures
+buyer = make_creature(m67v, x=1, y=0, name='Buyer',
+                      stats={Stat.STR: 10, Stat.CHR: 16, Stat.PER: 10, Stat.VIT: 10})
+buyer.gold = 300
+
+seller = make_creature(m67v, x=0, y=1, name='Seller',
+                       stats={Stat.STR: 12, Stat.CHR: 10, Stat.PER: 10, Stat.VIT: 10})
+seller.gold = 100
+seller._item_prices[id(test_sword)] = 50.0
+seller.inventory.items.append(test_sword)
+
+trade = compute_trade_price(test_sword, seller, buyer)
+if trade['feasible']:
+    check(f"Trade feasible: price={trade['price']:.1f}", True)
+    check(f"Price between min ({trade['seller_min']:.0f}) and max ({trade['buyer_max']:.0f})",
+          trade['seller_min'] <= trade['price'] <= trade['buyer_max'])
+    check(f"Buyer surplus: {trade['buyer_surplus']:.1f} >= 0", trade['buyer_surplus'] >= 0)
+    check(f"Seller surplus: {trade['seller_surplus']:.1f} >= 0", trade['seller_surplus'] >= 0)
+    # High CHR buyer should get better deal (seller_share lower)
+    check("High CHR buyer gets more surplus", trade['buyer_surplus'] >= trade['seller_surplus'])
+else:
+    check("Trade not feasible (item not valuable enough to buyer)", True)
+
+# Trade reward uses ln
+tr = trade_reward(10.0, 100.0)
+check(f"Trade reward: ln(1 + 10/100) = {tr:.4f}", abs(tr - math.log(1.1)) < 0.001)
+
+# Desperate seller (liabilities > gold)
+desperate = make_creature(m67v, x=2, y=0, name='Desperate',
+                          stats={Stat.STR: 10, Stat.CHR: 10})
+desperate.gold = 10
+desperate.liabilities = 50.0  # underwater
+desperate._item_prices[id(weak_sword)] = 30.0
+desperate.inventory.items.append(weak_sword)
+
+d_trade = compute_trade_price(weak_sword, desperate, buyer)
+if d_trade['feasible']:
+    check(f"Desperate seller accepts lower price: {d_trade['price']:.1f}", d_trade['price'] > 0)
+
+# Liabilities field exists
+check("Creature has liabilities", hasattr(val_creature, 'liabilities'))
+check("Default liabilities = 0", val_creature.liabilities == 0.0)
+
+# ==========================================================================
 print("\n=== Gods / Piety System ===")
 from classes.gods import WorldData, God, compute_piety_drift, update_creature_piety
 

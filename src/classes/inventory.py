@@ -47,6 +47,103 @@ class Item(WorldObject):
         self.action_word  = action_word
         self.requirements = requirements or {}
 
+    # -- KPI Valuation ------------------------------------------------------
+
+    # Stat weights for KPI scoring — how valuable each derived stat point is
+    # in gold-equivalent terms. Tunable constants.
+    _STAT_WEIGHTS = None  # lazy-loaded to avoid circular imports
+
+    @classmethod
+    def _get_stat_weights(cls) -> dict:
+        if cls._STAT_WEIGHTS is None:
+            from classes.stats import Stat
+            cls._STAT_WEIGHTS = {
+                Stat.HP_MAX: 2.0, Stat.MELEE_DMG: 3.0, Stat.RANGED_DMG: 3.0,
+                Stat.MAGIC_DMG: 3.0, Stat.ACCURACY: 2.0, Stat.CRIT_CHANCE: 1.5,
+                Stat.CRIT_DMG: 1.5, Stat.DODGE: 2.5, Stat.ARMOR: 2.5,
+                Stat.BLOCK: 2.0, Stat.MOVE_SPEED: 1.5, Stat.SIGHT_RANGE: 1.0,
+                Stat.HEARING_RANGE: 0.5, Stat.STEALTH: 1.5, Stat.DETECTION: 1.5,
+                Stat.CARRY_WEIGHT: 0.5, Stat.MAX_STAMINA: 1.5, Stat.MAX_MANA: 1.5,
+                Stat.MANA_REGEN: 1.0, Stat.STAM_REGEN: 1.0,
+                Stat.POISON_RESIST: 1.0, Stat.DISEASE_RESIST: 1.0,
+                Stat.MAGIC_RESIST: 1.5, Stat.STAGGER_RESIST: 1.0,
+                Stat.FEAR_RESIST: 1.0, Stat.PERSUASION: 1.0,
+                Stat.INTIMIDATION: 1.0, Stat.DECEPTION: 1.0,
+                Stat.COMPANION_LIMIT: 0.5, Stat.CRAFT_QUALITY: 0.5,
+                Stat.LOOT_GINI: 0.5, Stat.XP_MOD: 1.0,
+            }
+            # Base stats — changes cascade through derived, so weight them higher
+            for s in (Stat.STR, Stat.VIT, Stat.AGL, Stat.PER,
+                      Stat.INT, Stat.CHR, Stat.LCK):
+                cls._STAT_WEIGHTS[s] = 4.0
+        return cls._STAT_WEIGHTS
+
+    def effective_kpi(self, creature) -> float:
+        """Compute this item's effective KPI for a specific creature.
+
+        Temporarily applies all buffs, snapshots the stat delta,
+        and scores the changes by stat weights.
+
+        Returns a gold-equivalent utility score.
+        """
+        if not self.buffs:
+            # Items with no buffs: use base value as KPI
+            return self.value
+
+        weights = self._get_stat_weights()
+
+        # Snapshot before
+        before = creature.stats.snapshot()
+
+        # Temporarily apply buffs
+        mods = []
+        source = '_kpi_eval'
+        for stat, amount in self.buffs.items():
+            mods.append(creature.stats.add_mod(source, stat, amount))
+
+        # Snapshot after
+        after = creature.stats.snapshot()
+
+        # Remove temp mods
+        for mod in mods:
+            creature.stats.remove_mod(mod)
+
+        # Score the deltas
+        score = 0.0
+        for stat in after:
+            delta = after[stat] - before.get(stat, 0)
+            if delta != 0:
+                w = weights.get(stat, 1.0)
+                score += delta * w
+
+        # Add primary item attributes
+        if hasattr(self, 'damage') and self.damage:
+            score += self.damage * 2.0
+
+        return max(0.0, score)
+
+    def lifetime_kpi(self, creature) -> float:
+        """Duration-weighted KPI: effective_kpi × durability × quality bonus.
+
+        Captures total remaining value over the item's lifespan.
+        """
+        eff = self.effective_kpi(creature)
+
+        # Durability ratio (if applicable)
+        dur_ratio = 1.0
+        if hasattr(self, 'durability_max') and self.durability_max > 0:
+            dur_cur = getattr(self, 'durability_current', self.durability_max)
+            dur_ratio = dur_cur / self.durability_max
+
+        # Craft quality bonus: each level adds 10%
+        craft_bonus = 1.0
+        if creature:
+            from classes.stats import Stat
+            cq = creature.stats.active[Stat.CRAFT_QUALITY]()
+            craft_bonus = 1.0 + max(0, cq) * 0.1
+
+        return eff * dur_ratio * craft_bonus
+
 class Stackable(Item):
 
     def __init__(self, *args, max_stack_size: int = 99, quantity: int = 1, **kwargs):
