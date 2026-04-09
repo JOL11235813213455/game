@@ -33,8 +33,8 @@ CLASS_FIELDS = {
     'Structure':  ['footprint', 'collision_mask', 'entry_points', 'nested_map'],
 }
 
-GRID_COLS    = 32
-GRID_ROWS    = 32
+GRID_COLS    = 16
+GRID_ROWS    = 16
 CELL_SIZE    = 20
 PREVIEW_SIZE = 64
 MAX_PALETTE  = 12
