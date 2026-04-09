@@ -52,6 +52,7 @@ class Tile(Trackable):
         self.bg_color       = bg_color     if bg_color     is not None else tmpl.get('bg_color',     None)
         self.nested_map: Map = map
         self.inventory = Inventory(items=items or [])
+        self.gold: int = 0  # gold on the ground
         self.tile_template = tile_template
         self.linked_map    = linked_map
         self.linked_location = (MapKey(linked_x, linked_y, linked_z or 0)

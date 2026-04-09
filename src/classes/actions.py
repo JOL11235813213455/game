@@ -243,14 +243,19 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
 
     # -- Utility --
     if action == Action.PICKUP:
+        # Always grab tile gold first
+        gold_picked = creature.pickup_gold()
         if item is None:
             # Auto-pickup: grab first item on tile
             tile = creature.current_map.tiles.get(creature.location)
             if tile and tile.inventory.items:
                 item = tile.inventory.items[0]
+            elif gold_picked > 0:
+                return {'success': True, 'gold_picked': gold_picked}
             else:
                 return {'success': False, 'reason': 'nothing_here'}
-        return {'success': creature.pickup(item)}
+        result = creature.pickup(item)
+        return {'success': result or gold_picked > 0, 'gold_picked': gold_picked}
 
     if action == Action.DROP:
         if item is None:

@@ -1,4 +1,4 @@
-ITEM_CLASSES = ['Item', 'Weapon', 'Wearable', 'Consumable', 'Ammunition', 'Structure']
+ITEM_CLASSES = ['Item', 'Stackable', 'Weapon', 'Wearable', 'Consumable', 'Ammunition', 'Structure']
 SLOTS        = ['head', 'neck', 'shoulders', 'chest', 'back', 'wrists', 'hands',
                 'waist', 'legs', 'feet', 'ring_l', 'ring_r', 'hand_l', 'hand_r']
 STATS        = ['strength', 'vitality', 'intelligence', 'agility',
@@ -16,6 +16,7 @@ STAT_LABELS  = {
 
 CLASS_FIELDS = {
     'Item':       ['action_word'],
+    'Stackable':  ['action_word', 'max_stack_size', 'quantity'],
     'Consumable': ['action_word', 'max_stack_size', 'quantity', 'duration'],
     'Ammunition': ['action_word', 'max_stack_size', 'quantity', 'damage', 'destroy_on_use_probability'],
     'Weapon':     ['action_word', 'slots', 'slot_count', 'durability_max', 'durability_current', 'render_on_creature',

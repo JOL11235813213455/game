@@ -395,6 +395,7 @@ class Egg(Item):
 
 CLASS_MAP: dict[str, type] = {
     'Item':       Item,
+    'Stackable':  Stackable,
     'Consumable': Consumable,
     'Ammunition': Ammunition,
     'Weapon':     Weapon,

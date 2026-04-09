@@ -1185,6 +1185,9 @@ doomed = make_creature(m38, x=0, y=0,
                        stats={Stat.STR: 12, Stat.VIT: 10, Stat.LVL: 3},
                        name='Doomed')
 
+# Give some gold
+doomed.gold = 75
+
 # Equip and add inventory
 death_sword = Weapon(name='DeathSword', weight=3.0,
                      slots=[Slot.HAND_R], slot_count=1, damage=5,
@@ -1209,6 +1212,20 @@ check("Sword dropped on tile", 'DeathSword' in items_on_tile)
 check("Pouch dropped on tile", 'Gold Pouch' in items_on_tile)
 check("Inventory cleared", len(doomed.inventory.items) == 0)
 check("Equipment cleared", len(doomed.equipment) == 0)
+check(f"Gold dropped on tile: {tile38.gold}", tile38.gold == 75)
+check("Creature gold zeroed", doomed.gold == 0)
+
+# Test pickup_gold
+looter = make_creature(m38, x=0, y=0, name='Looter')
+looter.gold = 10
+picked = looter.pickup_gold()
+check(f"Picked up {picked} gold", picked == 75)
+check(f"Looter gold: {looter.gold}", looter.gold == 85)
+check("Tile gold zeroed", tile38.gold == 0)
+
+# Pickup gold when none on tile
+picked2 = looter.pickup_gold()
+check("No gold to pickup", picked2 == 0)
 
 # Stat mods from equipment removed
 melee_after = doomed.stats.active[Stat.MELEE_DMG]()

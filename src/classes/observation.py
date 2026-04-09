@@ -484,6 +484,9 @@ def build_observation(creature, cols: int, rows: int,
     tile_items = tile.inventory.items if tile else []
     obs.append(len(tile_items) / 10.0)
     obs.append(_ln(sum(getattr(i, 'value', 0) for i in tile_items) + 1) / 10.0)
+    tile_gold = getattr(tile, 'gold', 0) if tile else 0
+    obs.append(_ln(tile_gold + 1) / 10.0)  # gold on ground
+    obs.append(1.0 if tile_gold > 0 else 0.0)  # has gold flag
     obs.append(1.0 if any(isinstance(i, Egg) for i in tile_items) else 0.0)
     obs.append(1.0 if any(isinstance(i, Weapon) for i in tile_items) else 0.0)
     obs.append(1.0 if any(isinstance(i, Consumable) for i in tile_items) else 0.0)

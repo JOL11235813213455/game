@@ -693,6 +693,16 @@ class Creature(WorldObject):
         self.inventory.items.append(item)
         return True
 
+    def pickup_gold(self) -> int:
+        """Pick up gold from the current tile. Returns amount picked up."""
+        tile = self.current_map.tiles.get(self.location)
+        if tile is None or tile.gold <= 0:
+            return 0
+        amount = tile.gold
+        self.gold += amount
+        tile.gold = 0
+        return amount
+
     def drop(self, item) -> bool:
         """Drop an item from inventory onto the current tile.
 
@@ -768,18 +778,21 @@ class Creature(WorldObject):
         return self.stats.active[Stat.HP_CURR]() > 0
 
     def die(self):
-        """Handle creature death: drop inventory on tile, remove from map."""
-        # Drop all inventory items on current tile
+        """Handle creature death: drop inventory + gold on tile, remove from map."""
         tile = self.current_map.tiles.get(self.location)
         if tile:
+            # Drop gold
+            tile.gold += self.gold
+            self.gold = 0
+
+            # Drop all inventory items
             for item in list(self.inventory.items):
                 tile.inventory.items.append(item)
             self.inventory.items.clear()
 
-            # Drop equipped items too
+            # Drop equipped items
             for item in set(self.equipment.values()):
                 tile.inventory.items.append(item)
-                # Remove stat mods
                 self.stats.remove_mods_by_source(f'equip_{item.uid}')
             self.equipment.clear()
 
