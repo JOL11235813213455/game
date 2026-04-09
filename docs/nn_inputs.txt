@@ -289,7 +289,7 @@ delta_piety                     float   piety now - last tick
 delta_equipment_kpi             float   sign(change) * ln(|change| + 1) / 5
 
 ================================================================================
-SECTION 20: WORLD / TIME (12 values)
+SECTION 20: WORLD / TIME (13 values)
 ================================================================================
 
 # Day/night cycle (from GameClock)
@@ -309,6 +309,7 @@ world_light_level               float   sun_elevation if day, moon_brightness * 
 world_balance_order_chaos       float   -1 to 1
 world_balance_compassion_wrath  float   -1 to 1
 world_balance_truth_lies        float   -1 to 1
+world_balance_life_death        float   -1 to 1
 
 ================================================================================
 SECTION 21: REWARD SIGNAL CURRENT VALUES (17 values)
@@ -361,7 +362,7 @@ Section 16: Census visible              23
 Section 17: Census audible               3
 Section 18: Per-engaged creature       168  (28 × 6)
 Section 19: Temporal deltas              7
-Section 20: World / time               12
+Section 20: World / time               13
 Section 21: Reward signal values        17
 ─────────────────────────────────────────
 TOTAL (with 1 species):               ~350
