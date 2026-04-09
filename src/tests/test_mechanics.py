@@ -2861,6 +2861,85 @@ update_creature_piety(neutral, 'melee_attack', world, [neutral, heretic])
 check("No deity = no piety change", neutral.piety == piety_n)
 
 # ==========================================================================
+print("\n=== Observation Masks ===")
+from classes.observation import (
+    apply_mask, apply_preset_mask, SECTION_RANGES, PRESET_MASKS,
+    OBSERVATION_SIZE as OBS_SIZE,
+)
+
+m_mask = make_map(cols=10, rows=10)
+masked_c = make_creature(m_mask, x=5, y=5, name='MaskedC',
+                         stats={Stat.STR: 14, Stat.CHR: 16, Stat.PER: 12})
+# Give them some social relationships
+other_c = make_creature(m_mask, x=6, y=5, name='OtherC')
+masked_c.record_interaction(other_c, 10.0)
+masked_c.record_interaction(other_c, 5.0)
+
+obs_normal = build_observation(masked_c, 10, 10)
+check(f"Normal obs size: {len(obs_normal)}", len(obs_normal) == OBS_SIZE)
+
+# Social section should have non-zero values (has relationships)
+social_start, social_end = SECTION_RANGES['self_social']
+social_vals = obs_normal[social_start:social_end]
+check("Social section has non-zero values", any(v != 0 for v in social_vals))
+
+# Apply socially_deaf mask
+obs_masked = list(obs_normal)  # copy
+apply_preset_mask(obs_masked, 'socially_deaf')
+
+# Social sections should be zeroed
+social_masked = obs_masked[social_start:social_end]
+check("Socially deaf: self_social zeroed", all(v == 0 for v in social_masked))
+
+# Reputation should also be zeroed (part of 'social' group)
+rep_start, rep_end = SECTION_RANGES['self_reputation']
+check("Socially deaf: reputation zeroed", all(v == 0 for v in obs_masked[rep_start:rep_end]))
+
+# Census should be zeroed (part of 'social' group)
+census_start, census_end = SECTION_RANGES['census_visible']
+check("Socially deaf: census zeroed", all(v == 0 for v in obs_masked[census_start:census_end]))
+
+# Non-social sections should be untouched
+base_start, base_end = SECTION_RANGES['self_base']
+check("Socially deaf: base stats untouched",
+      obs_masked[base_start:base_end] == obs_normal[base_start:base_end])
+
+# Blind mask
+obs_blind = list(obs_normal)
+apply_preset_mask(obs_blind, 'blind')
+spatial_start, spatial_end = SECTION_RANGES['spatial_walls']
+check("Blind: spatial zeroed", all(v == 0 for v in obs_blind[spatial_start:spatial_end]))
+check("Blind: economy untouched",
+      obs_blind[SECTION_RANGES['self_economy'][0]:SECTION_RANGES['self_economy'][1]] ==
+      obs_normal[SECTION_RANGES['self_economy'][0]:SECTION_RANGES['self_economy'][1]])
+
+# Paranoid mask (inverts social — scale -1.0)
+obs_paranoid = list(obs_normal)
+apply_preset_mask(obs_paranoid, 'paranoid')
+# Social values should be negated
+for i in range(social_start, social_end):
+    if obs_normal[i] != 0:
+        check(f"Paranoid: social val {i} inverted",
+              abs(obs_paranoid[i] + obs_normal[i]) < 0.001)
+        break  # just check first non-zero
+
+# Feral mask: social + economy + quest + religion all zeroed
+obs_feral = list(obs_normal)
+apply_preset_mask(obs_feral, 'feral')
+quest_start, quest_end = SECTION_RANGES['self_quest']
+check("Feral: quests zeroed", all(v == 0 for v in obs_feral[quest_start:quest_end]))
+
+# Creature mask field
+masked_c.observation_mask = 'blind'
+check("Creature has observation_mask", masked_c.observation_mask == 'blind')
+
+# Verify all presets are valid
+for name, preset in PRESET_MASKS.items():
+    test_obs = list(obs_normal)
+    apply_preset_mask(test_obs, name)
+    check(f"Preset '{name}' applies without error", len(test_obs) == OBS_SIZE)
+
+# ==========================================================================
 print("\n=== Gym Single-Agent Environment ===")
 from simulation.env import CreatureEnv, MultiAgentCreatureEnv
 

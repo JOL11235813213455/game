@@ -110,6 +110,10 @@ class Creature(WorldObject):
         # Loans given: {borrower_uid: same structure}
         self.loans_given: dict[int, dict] = {}
 
+        # Observation mask: preset name or None. Zeros out sections of NN input.
+        # See observation.py PRESET_MASKS for options (socially_deaf, blind, feral, etc.)
+        self.observation_mask: str | None = None
+
         # RL tracking counters
         self.life_goal_attainment: int = 0  # pairing, hatch, child milestones
         self.failed_actions: int = 0        # actions failed due to resources
@@ -2660,7 +2664,7 @@ class NeuralBehavior:
         self._prev_snapshot = None
 
     def think(self, creature: Creature, cols: int, rows: int):
-        from classes.observation import build_observation, make_snapshot
+        from classes.observation import build_observation, make_snapshot, apply_preset_mask
         from classes.actions import dispatch, Action
         from classes.world_object import WorldObject
         import numpy as np
@@ -2668,6 +2672,10 @@ class NeuralBehavior:
         # Build observation
         obs = build_observation(creature, cols, rows, prev_snapshot=self._prev_snapshot)
         self._prev_snapshot = make_snapshot(creature)
+
+        # Apply observation mask if creature has one
+        if creature.observation_mask:
+            apply_preset_mask(obs, creature.observation_mask)
 
         # Select action
         obs_arr = np.array(obs, dtype=np.float32)

@@ -145,10 +145,12 @@ def build_observation(creature, cols: int, rows: int,
     )
 
     obs = []
+    _section_starts = {}  # populated during build for mask system
     stats = creature.stats
     s = stats.active  # shorthand
 
     # ==== SECTION 1: SELF BASE STATS (14) ====
+    _section_starts['self_base'] = len(obs)
     for st in _BASE_ORDER:
         val = s[st]()
         obs.append(val / 20.0)
@@ -949,6 +951,185 @@ try:
     OBSERVATION_SIZE = _compute_observation_size()
 except Exception:
     OBSERVATION_SIZE = 800  # fallback
+
+
+# ---------------------------------------------------------------------------
+# Section index registry — for observation masking
+# ---------------------------------------------------------------------------
+
+SECTION_RANGES = {
+    'self_base':        (0, 14),
+    'self_derived':     (14, 50),
+    'self_resources':   (50, 56),
+    'self_combat':      (56, 73),
+    'self_economy':     (73, 93),
+    'self_slots':       (93, 107),
+    'self_weapon':      (107, 122),
+    'self_inv_texture': (122, 135),
+    'self_social':      (135, 145),
+    'self_status':      (145, 161),
+    'self_quest':       (161, 171),
+    'self_movement':    (171, 179),
+    'self_genetics':    (179, 186),
+    'self_identity':    (186, 211),
+    'self_reputation':  (211, 217),
+    'tile_deep':        (217, 235),
+    'spatial_walls':    (235, 260),
+    'spatial_features': (260, 272),
+    'tile_items':       (272, 299),
+    'census_visible':   (299, 344),
+    'census_audible':   (344, 347),
+    'per_engaged':      (347, 617),
+    'world_time':       (617, 630),
+    'temporal':         (630, 644),
+    'trends':           (644, 655),
+    'time_since':       (655, 667),
+    'reward_signals':   (667, 684),
+    'transforms':       (684, OBSERVATION_SIZE),
+}
+
+# Semantic groups for easy mask building
+SECTION_GROUPS = {
+    'social': ['self_social', 'self_reputation', 'census_visible',
+               'census_audible', 'per_engaged'],
+    'combat': ['self_combat', 'self_weapon'],
+    'vision': ['spatial_walls', 'spatial_features', 'tile_deep', 'tile_items',
+               'census_visible', 'per_engaged'],
+    'hearing': ['census_audible'],
+    'economy': ['self_economy', 'self_inv_texture', 'self_slots'],
+    'religion': ['world_time'],  # god balances are in world_time + transforms
+    'memory': ['temporal', 'trends', 'time_since'],
+    'quest': ['self_quest'],
+    'spatial': ['self_movement', 'spatial_walls', 'spatial_features', 'tile_deep'],
+    'reproduction': ['self_status', 'self_genetics'],
+}
+
+
+def apply_mask(obs: list[float], mask: set[str],
+               scale: float = 0.0) -> list[float]:
+    """Zero out (or scale) observation sections.
+
+    Args:
+        obs: the full observation vector
+        mask: set of section names or group names to zero
+        scale: what to multiply masked values by (0.0 = full zero, 0.5 = halved)
+
+    Returns:
+        modified observation (same list, mutated in place)
+    """
+    # Expand group names to section names
+    sections_to_mask = set()
+    for name in mask:
+        if name in SECTION_GROUPS:
+            sections_to_mask.update(SECTION_GROUPS[name])
+        elif name in SECTION_RANGES:
+            sections_to_mask.add(name)
+
+    for section in sections_to_mask:
+        rng = SECTION_RANGES.get(section)
+        if rng is None:
+            continue
+        start, end = rng
+        end = min(end, len(obs))
+        for i in range(start, end):
+            obs[i] *= scale
+
+    return obs
+
+
+# ---------------------------------------------------------------------------
+# Preset masks — neurodivergent / impaired creatures
+# ---------------------------------------------------------------------------
+
+PRESET_MASKS = {
+    # Social processing disorders
+    'socially_deaf': {
+        'sections': {'social'},
+        'scale': 0.0,
+        'description': 'Cannot read social landscape — no sentiment, reputation, or relationship awareness',
+    },
+    'socially_impaired': {
+        'sections': {'self_social', 'self_reputation'},
+        'scale': 0.5,
+        'description': 'Reduced social awareness — sentiment halved, relationships dim',
+    },
+    'antisocial': {
+        'sections': {'self_social', 'self_reputation', 'self_quest'},
+        'scale': 0.0,
+        'description': 'No social awareness or quest motivation',
+    },
+
+    # Sensory impairments
+    'blind': {
+        'sections': {'vision'},
+        'scale': 0.0,
+        'description': 'Cannot see — no spatial, tile, census, or per-creature visual info',
+    },
+    'deaf': {
+        'sections': {'hearing'},
+        'scale': 0.0,
+        'description': 'Cannot hear — no audible creature detection',
+    },
+    'blind_deaf': {
+        'sections': {'vision', 'hearing'},
+        'scale': 0.0,
+        'description': 'Cannot see or hear',
+    },
+
+    # Cognitive impairments
+    'amnesiac': {
+        'sections': {'memory'},
+        'scale': 0.0,
+        'description': 'No memory of past events — no trends, no time-since tracking',
+    },
+    'impulsive': {
+        'sections': {'trends', 'time_since', 'self_quest'},
+        'scale': 0.0,
+        'description': 'No long-term planning — no trends, no quest awareness',
+    },
+
+    # Emotional / behavioral
+    'fearless': {
+        'sections': {'self_combat'},
+        'scale': 0.0,
+        'description': 'Cannot assess threats — no combat readiness awareness',
+    },
+    'greedy': {
+        'sections': {'social', 'self_quest', 'reproduction'},
+        'scale': 0.0,
+        'description': 'Only sees economic signals — pure wealth accumulator',
+    },
+    'zealot': {
+        'sections': {'economy', 'self_quest', 'self_combat'},
+        'scale': 0.0,
+        'description': 'Only religion matters — ignores economy, quests, combat assessment',
+    },
+    'feral': {
+        'sections': {'social', 'economy', 'self_quest', 'religion'},
+        'scale': 0.0,
+        'description': 'Pure animal — no social, economic, quest, or religious awareness',
+    },
+
+    # Partial impairments
+    'nearsighted': {
+        'sections': {'spatial_walls', 'spatial_features'},
+        'scale': 0.3,
+        'description': 'Reduced spatial awareness — can see nearby but not far',
+    },
+    'paranoid': {
+        'sections': {'self_social'},
+        'scale': -1.0,  # inverts social signals!
+        'description': 'Social signals inverted — perceives friends as threats',
+    },
+}
+
+
+def apply_preset_mask(obs: list[float], preset_name: str) -> list[float]:
+    """Apply a named preset mask to an observation."""
+    preset = PRESET_MASKS.get(preset_name)
+    if preset is None:
+        return obs
+    return apply_mask(obs, preset['sections'], preset['scale'])
 
 
 def make_snapshot(creature, visible_enemies=None) -> dict:
