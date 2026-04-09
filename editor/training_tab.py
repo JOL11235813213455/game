@@ -177,8 +177,8 @@ class TrainingTab(ttk.Frame):
 
         # Wrap in systemd-inhibit to prevent sleep during training
         cmd = [
-            'systemd-inhibit', '--what=idle:sleep', '--who=RPG Training',
-            '--reason=AI model training in progress',
+            'systemd-inhibit', '--what=idle:sleep',
+            '--who=RPGTraining', '--reason=Training',
             'python', '-u', '-m', 'editor.simulation.train',
             '--cycles', self.v_cycles.get(),
             '--mappo-steps', self.v_mappo.get(),
