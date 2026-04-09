@@ -21,6 +21,16 @@ leaning towards apocalyptic
 - MapKey is a namedtuple `(x, y, z)` — hashable, used as dict keys for tile lookups. DB stores x/y/z as separate columns; classes assemble them into MapKey immediately on load.
 - 3/4 perspective: tile height = block_size * 0.75
 - Sprites are character grids + palette dicts, NOT image files
+- **Sprite naming convention** — rigid prefix-based naming:
+  - `t_` = tile (t_grass, t_water_01, t_dirt)
+  - `c_` = creature (c_human_m_idle, c_human_f_walk_south)
+  - `i_` = item/equippable (i_sword_short, i_helm_iron, i_shirt_cotton)
+  - `a_` = ammunition (a_arrow, a_arrow_poison)
+  - `s_` = structure (s_house_wood, s_wall_stone)
+  - `m_` = misc/stackable (m_gold_piece, m_potion_health)
+  - `e_` = egg (e_human, e_orc)
+  - Format: `{type}_{species/material}_{variant}_{detail}`
+  - Examples: c_human_f_head_down, i_boots_leather, t_water_anim_02
 - Composite sprites: hierarchical layers with connections, keyframe animations
 - All editor tooltips via `add_tooltip(widget, text)` from `editor/tooltip.py`
 - Editor uses `editor/db.py` helpers (fetch_*, get_con); game uses `src/data/db.py` loader
