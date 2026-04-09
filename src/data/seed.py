@@ -108,7 +108,9 @@ CREATE TABLE IF NOT EXISTS creatures (
     spawn_x          INTEGER,
     spawn_y          INTEGER,
     dialogue_tree    TEXT,
-    description      TEXT NOT NULL DEFAULT ''
+    description      TEXT NOT NULL DEFAULT '',
+    cumulative_limit INTEGER NOT NULL DEFAULT -1,
+    concurrent_limit INTEGER NOT NULL DEFAULT -1
 );
 CREATE TABLE IF NOT EXISTS creature_stats (
     creature_key TEXT NOT NULL REFERENCES creatures(key),

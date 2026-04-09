@@ -77,6 +77,9 @@ class WorldData(Trackable):
         self.dichotomies: dict[str, tuple[str, str]] = {}
         # Global quest/world state flags (for quest conditions)
         self.flags: dict[str, object] = {}
+        # Game statistics — tracks spawns, kills, etc. per creature key
+        self.game_stats: dict[str, dict] = {}
+        # Format: {creature_key: {'spawned': int, 'killed': int, 'alive': int}}
         self._init_default_pantheon()
 
     def _init_default_pantheon(self):
@@ -152,6 +155,42 @@ class WorldData(Trackable):
     def get_flag(self, key: str, default=None) -> object:
         """Get a world state flag."""
         return self.flags.get(key, default)
+
+    # -- Game Stats ---------------------------------------------------------
+
+    def _ensure_stats(self, creature_key: str):
+        if creature_key not in self.game_stats:
+            self.game_stats[creature_key] = {'spawned': 0, 'killed': 0, 'alive': 0}
+
+    def record_spawn(self, creature_key: str):
+        """Record that a creature of this type was spawned."""
+        self._ensure_stats(creature_key)
+        self.game_stats[creature_key]['spawned'] += 1
+        self.game_stats[creature_key]['alive'] += 1
+
+    def record_death(self, creature_key: str):
+        """Record that a creature of this type died."""
+        self._ensure_stats(creature_key)
+        self.game_stats[creature_key]['killed'] += 1
+        self.game_stats[creature_key]['alive'] = max(0,
+            self.game_stats[creature_key]['alive'] - 1)
+
+    def can_spawn(self, creature_key: str, cumulative_limit: int = -1,
+                  concurrent_limit: int = -1) -> bool:
+        """Check if a creature type can be spawned given its limits.
+
+        -1 = no limit.
+        """
+        stats = self.game_stats.get(creature_key, {'spawned': 0, 'alive': 0})
+        if cumulative_limit >= 0 and stats['spawned'] >= cumulative_limit:
+            return False
+        if concurrent_limit >= 0 and stats['alive'] >= concurrent_limit:
+            return False
+        return True
+
+    def get_stats(self, creature_key: str) -> dict:
+        """Get spawn/kill/alive stats for a creature type."""
+        return self.game_stats.get(creature_key, {'spawned': 0, 'killed': 0, 'alive': 0})
 
 
 # Piety constants

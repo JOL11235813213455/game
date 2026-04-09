@@ -405,6 +405,12 @@ class _NPCSubTab(ttk.Frame):
 
         self.v_unique = tk.BooleanVar(value=True)
         self._add('Unique', lambda p: ttk.Checkbutton(p, variable=self.v_unique).pack(anchor='w'), 'One-of-a-kind NPC')
+        self.v_cumulative_limit = tk.StringVar(value='-1')
+        self._add('Cumulative Limit', lambda p: ttk.Entry(p, textvariable=self.v_cumulative_limit, width=8).pack(anchor='w'),
+                  'Lifetime spawn limit (-1 = infinite, 1 = unique)')
+        self.v_concurrent_limit = tk.StringVar(value='-1')
+        self._add('Concurrent Limit', lambda p: ttk.Entry(p, textvariable=self.v_concurrent_limit, width=8).pack(anchor='w'),
+                  'Max alive at once (-1 = no limit)')
 
         self.v_dialogue = tk.StringVar()
         self._add('Dialogue Tree', lambda p: ttk.Entry(p, textvariable=self.v_dialogue, width=20).pack(anchor='w'), 'Default conversation name')
@@ -494,6 +500,7 @@ class _NPCSubTab(ttk.Frame):
         self.v_sex.set(''); self.v_age.set(''); self.v_prudishness.set('')
         self.v_gold.set(''); self.v_deity.set(''); self.v_piety.set('')
         self.v_behavior.set(''); self.v_mask.set(''); self.v_unique.set(True)
+        self.v_cumulative_limit.set('-1'); self.v_concurrent_limit.set('-1')
         self.v_dialogue.set(''); self.v_spawn_map.set('')
         self.v_spawn_x.set(''); self.v_spawn_y.set(''); self.v_items.set('[]')
         for var in self.stat_vars.values(): var.set('')
@@ -514,7 +521,10 @@ class _NPCSubTab(ttk.Frame):
         self.v_gold.set(str(row['gold']) if row['gold'] is not None else '')
         self.v_deity.set(row['deity'] or ''); self.v_piety.set(str(row['piety']) if row['piety'] is not None else '')
         self.v_behavior.set(row['behavior'] or ''); self.v_mask.set(row['observation_mask'] or '')
-        self.v_unique.set(bool(row['is_unique'])); self.v_dialogue.set(row['dialogue_tree'] or '')
+        self.v_unique.set(bool(row['is_unique']))
+        self.v_cumulative_limit.set(str(row['cumulative_limit'] if row['cumulative_limit'] is not None else -1))
+        self.v_concurrent_limit.set(str(row['concurrent_limit'] if row['concurrent_limit'] is not None else -1))
+        self.v_dialogue.set(row['dialogue_tree'] or '')
         self.v_spawn_map.set(row['spawn_map'] or '')
         self.v_spawn_x.set(str(row['spawn_x']) if row['spawn_x'] is not None else '')
         self.v_spawn_y.set(str(row['spawn_y']) if row['spawn_y'] is not None else '')
@@ -543,8 +553,9 @@ class _NPCSubTab(ttk.Frame):
             con.execute(
                 '''INSERT INTO creatures (key, name, title, species, level, sex, age,
                    prudishness, behavior, items, deity, piety, gold, observation_mask,
-                   is_unique, spawn_map, spawn_x, spawn_y, dialogue_tree, description)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                   is_unique, spawn_map, spawn_x, spawn_y, dialogue_tree, description,
+                   cumulative_limit, concurrent_limit)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                    ON CONFLICT(key) DO UPDATE SET
                    name=excluded.name, title=excluded.title, species=excluded.species,
                    level=excluded.level, sex=excluded.sex, age=excluded.age,
@@ -553,7 +564,9 @@ class _NPCSubTab(ttk.Frame):
                    gold=excluded.gold, observation_mask=excluded.observation_mask,
                    is_unique=excluded.is_unique, spawn_map=excluded.spawn_map,
                    spawn_x=excluded.spawn_x, spawn_y=excluded.spawn_y,
-                   dialogue_tree=excluded.dialogue_tree, description=excluded.description
+                   dialogue_tree=excluded.dialogue_tree, description=excluded.description,
+                   cumulative_limit=excluded.cumulative_limit,
+                   concurrent_limit=excluded.concurrent_limit
                 ''',
                 (key, self.v_name.get().strip(), self.v_title.get().strip(),
                  species, self._int(self.v_level), self.v_sex.get().strip() or None,
@@ -563,7 +576,9 @@ class _NPCSubTab(ttk.Frame):
                  self._int(self.v_gold), self.v_mask.get().strip() or None,
                  int(self.v_unique.get()), self.v_spawn_map.get().strip() or None,
                  self._int(self.v_spawn_x), self._int(self.v_spawn_y),
-                 self.v_dialogue.get().strip() or None, self.v_description.get().strip()))
+                 self.v_dialogue.get().strip() or None, self.v_description.get().strip(),
+                 self._int(self.v_cumulative_limit, -1),
+                 self._int(self.v_concurrent_limit, -1)))
             # Stats
             con.execute('DELETE FROM creature_stats WHERE creature_key=?', (key,))
             for stat, var in self.stat_vars.items():

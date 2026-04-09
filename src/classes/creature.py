@@ -2710,9 +2710,14 @@ class NeuralBehavior:
         if creature.observation_mask:
             apply_preset_mask(obs, creature.observation_mask)
 
+        # Scale temperature by INT — smarter creatures make more optimal choices
+        # INT 6 → temp 1.5 (impulsive), INT 10 → 1.0, INT 18 → 0.5 (calculated)
+        int_val = creature.stats.active[Stat.INT]()
+        int_temp = max(0.3, self.temperature * (2.0 - int_val / 10.0))
+
         # Select action
         obs_arr = np.array(obs, dtype=np.float32)
-        action_idx = self.net.select_action(obs_arr, self.temperature)
+        action_idx = self.net.select_action(obs_arr, int_temp)
 
         # Build context — find nearest visible creature as target
         target = None
