@@ -2477,13 +2477,21 @@ child_nc.move(0, 1, 5, 5)  # move south into parent's tile (2,2)
 check(f"Child walked onto parent tile: ({child_nc.location.x},{child_nc.location.y})",
       child_nc.location.x == 2 and child_nc.location.y == 2)
 
-# Adult creature should be BLOCKED by parent (collision=True)
+# With size-based capacity: medium=4 units, tile=16
+# Parent(4) + child(4) = 8, other adult(4) = 12 total ≤ 16 → fits
 other_adult = make_creature(m64, x=2, y=3, name='OtherAdult', age=30)
-old_other_loc = other_adult.location
-other_adult.move(0, -1, 5, 5)  # try to move into (2,2) which has parent + child
-# parent_nc has collision=True, so other_adult should be blocked
-check(f"Adult blocked by creature on tile: stayed at ({other_adult.location.x},{other_adult.location.y})",
-      other_adult.location == old_other_loc)
+other_adult.move(0, -1, 5, 5)  # move into (2,2) — should fit
+check(f"Medium adults can share tile (capacity): moved to ({other_adult.location.x},{other_adult.location.y})",
+      other_adult.location.x == 2 and other_adult.location.y == 2)
+
+# Fill tile to capacity: 4 medium creatures = 16 units, 5th blocked
+fill_creature = make_creature(m64, x=2, y=2, name='FillC', age=30)
+# Now tile has: parent(4) + child(4) + other(4) + fill(4) = 16 units
+blocked_adult = make_creature(m64, x=2, y=4, name='BlockedAdult', age=30)
+old_blocked = blocked_adult.location
+blocked_adult.move(0, -1, 5, 5)  # try to move to (2,3) first
+blocked_adult.move(0, -1, 5, 5)  # then try (2,2) — should be full
+check(f"5th medium creature blocked at full tile", blocked_adult.location.y != 2)
 
 # ==========================================================================
 print("\n=== Tent Spawn/Despawn ===")

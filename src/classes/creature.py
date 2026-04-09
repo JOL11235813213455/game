@@ -8,6 +8,32 @@ from classes.world_object import WorldObject
 from classes.stats import Stat, Stats
 
 
+# Size categories and tile capacity rules
+SIZE_CATEGORIES = ('tiny', 'small', 'medium', 'large', 'huge', 'colossal')
+
+# How many of each size fit in a tile (in "tile units", 1 tile = 16 units)
+SIZE_UNITS = {
+    'tiny': 0,        # unlimited — no space consumed
+    'small': 1,       # 16 per tile
+    'medium': 4,      # 4 per tile
+    'large': 8,       # 2 per tile
+    'huge': 16,       # 1 per tile
+    'colossal': 32,   # needs 2 tiles (footprint)
+}
+
+# Size footprints (tile offsets occupied beyond anchor tile)
+SIZE_FOOTPRINT = {
+    'tiny': [],
+    'small': [],
+    'medium': [],
+    'large': [],
+    'huge': [],
+    'colossal': [(1, 0), (0, 1), (1, 1)],  # 2×2
+}
+
+TILE_CAPACITY = 16  # total units per tile
+
+
 class Creature(WorldObject):
     """Single creature class for players, NPCs, and monsters.
 
@@ -35,6 +61,7 @@ class Creature(WorldObject):
         mother_uid: int = None,
         father_uid: int = None,
         is_abomination: bool = False,
+        size: str = None,
     ):
         super().__init__(current_map=current_map, location=location)
         self.name = name
@@ -45,6 +72,9 @@ class Creature(WorldObject):
         self.tile_scale     = species_data.get('tile_scale',     self.__class__.tile_scale)
         self.sprite_name    = species_data.get('sprite_name',    self.__class__.sprite_name)
         self.composite_name = species_data.get('composite_name', self.__class__.composite_name)
+
+        # Size: from species default or override
+        self.size = size or species_data.get('size', 'medium')
 
         # Sex: per-creature, randomly assigned if not specified
         self.sex = sex if sex is not None else random.choice(('male', 'female'))
@@ -417,23 +447,39 @@ class Creature(WorldObject):
     }
 
     def _tile_blocked(self, game_map, x: int, y: int) -> bool:
-        """Return True if any WorldObject with collision=True occupies (x, y).
+        """Return True if this creature cannot fit on tile (x, y).
 
-        Children can pass through their parents (and vice versa) until adult.
+        Uses size-based capacity: each tile holds TILE_CAPACITY units.
+        Tiny creatures take 0 units (always fit).
+        Children pass through parents. Small creatures can attempt
+        stealth to share with large creatures.
         """
         from classes.world_object import WorldObject
         from classes.inventory import Structure
+
+        my_units = SIZE_UNITS.get(self.size, 4)
+        used_units = 0
+
         for obj in WorldObject.colliders_on_map(game_map):
             if isinstance(obj, Structure):
                 ox, oy = obj.location.x, obj.location.y
                 if (x - ox, y - oy) in obj.collision_mask:
                     return True
             elif obj.location.x == x and obj.location.y == y:
-                # Skip parent-child collision if child is not yet adult
-                if isinstance(obj, Creature) and self._is_family_passthrough(obj):
+                if not isinstance(obj, Creature):
+                    return True  # non-creature collider blocks
+                # Parent-child passthrough
+                if self._is_family_passthrough(obj):
                     continue
-                return True
-        return False
+                # Tiny creatures never block
+                obj_units = SIZE_UNITS.get(obj.size, 4)
+                used_units += obj_units
+
+        # Tiny creatures always fit
+        if my_units == 0:
+            return False
+
+        return (used_units + my_units) > TILE_CAPACITY
 
     def _is_family_passthrough(self, other: 'Creature') -> bool:
         """Return True if self and other are parent-child and child is not adult."""

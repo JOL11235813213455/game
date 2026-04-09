@@ -17,7 +17,8 @@ CREATE TABLE IF NOT EXISTS species (
     playable    INTEGER NOT NULL,
     sprite_name TEXT REFERENCES sprites(name),
     tile_scale  REAL NOT NULL DEFAULT 1.0,
-    prudishness REAL
+    prudishness REAL,
+    size        TEXT NOT NULL DEFAULT 'medium'
 );
 CREATE TABLE IF NOT EXISTS species_stats (
     species_name TEXT NOT NULL REFERENCES species(name),

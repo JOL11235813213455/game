@@ -73,6 +73,7 @@ def _migrate(con: sqlite3.Connection) -> None:
         "ALTER TABLE items ADD COLUMN nested_map TEXT",
         "ALTER TABLE species ADD COLUMN composite_name TEXT",
         "ALTER TABLE sprites ADD COLUMN sprite_set TEXT",
+        "ALTER TABLE species ADD COLUMN size TEXT NOT NULL DEFAULT 'medium'",
         "ALTER TABLE items ADD COLUMN action_word TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE items ADD COLUMN requirements TEXT NOT NULL DEFAULT '{}'",
         "ALTER TABLE species ADD COLUMN sex TEXT",
@@ -365,7 +366,7 @@ def load(db_path: Path = _DB_PATH) -> None:
 
 
 def _load_species(con: sqlite3.Connection) -> None:
-    rows      = con.execute('SELECT name, playable, sprite_name, tile_scale, composite_name, prudishness FROM species').fetchall()
+    rows      = con.execute('SELECT name, playable, sprite_name, tile_scale, composite_name, prudishness, size FROM species').fetchall()
     stat_rows = con.execute('SELECT species_name, stat, value FROM species_stats').fetchall()
 
     stats_by_species: dict[str, dict] = {r['name']: {} for r in rows}
@@ -382,6 +383,7 @@ def _load_species(con: sqlite3.Connection) -> None:
         block['tile_scale'] = r['tile_scale'] if r['tile_scale'] is not None else 1.0
         if r['prudishness'] is not None:
             block['prudishness'] = r['prudishness']
+        block['size'] = r['size'] or 'medium'
         SPECIES[name] = block
         if r['playable']:
             PLAYABLE[name] = block

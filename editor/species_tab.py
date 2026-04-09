@@ -107,6 +107,15 @@ class SpeciesTab(ttk.Frame):
         add_tooltip(e_prud, 'Species default prudishness (0.0 = uninhibited, 1.0 = highly prudish). Blank = 0.5')
         row += 1
 
+        ttk.Label(f, text='Size').grid(row=row, column=0, sticky='w', padx=6, pady=4)
+        self.v_size = tk.StringVar(value='medium')
+        size_cb = ttk.Combobox(f, textvariable=self.v_size,
+                               values=['tiny', 'small', 'medium', 'large', 'huge', 'colossal'],
+                               state='readonly', width=10)
+        size_cb.grid(row=row, column=1, sticky='w', padx=6, pady=4)
+        add_tooltip(size_cb, 'Creature size: affects tile sharing capacity and collision')
+        row += 1
+
         ttk.Separator(f, orient=tk.HORIZONTAL).grid(
             row=row, column=0, columnspan=2, sticky='ew', padx=6, pady=6)
         row += 1
@@ -305,6 +314,7 @@ class SpeciesTab(ttk.Frame):
         self.sprite_preview.load(None)
         self.v_tile_scale.set('1.0')
         self.v_prudishness.set('')
+        self.v_size.set('medium')
         for var in self.stat_vars.values():
             var.set('')
         self._bindings = []
@@ -315,7 +325,7 @@ class SpeciesTab(ttk.Frame):
         con = get_con()
         try:
             row = con.execute(
-                'SELECT name, playable, sprite_name, tile_scale, composite_name, prudishness FROM species WHERE name=?', (name,)
+                'SELECT name, playable, sprite_name, tile_scale, composite_name, prudishness, size FROM species WHERE name=?', (name,)
             ).fetchone()
             if row is None:
                 return
@@ -333,6 +343,7 @@ class SpeciesTab(ttk.Frame):
         self.v_tile_scale.set(str(row['tile_scale'] if row['tile_scale'] is not None else 1.0))
         self.v_composite.set(row['composite_name'] or '')
         self.v_prudishness.set(str(row['prudishness']) if row['prudishness'] is not None else '')
+        self.v_size.set(row['size'] or 'medium')
 
         stats = {r['stat']: r['value'] for r in stat_rows}
         for stat, var in self.stat_vars.items():
@@ -383,17 +394,19 @@ class SpeciesTab(ttk.Frame):
                 tile_scale = float(self.v_tile_scale.get())
             except ValueError:
                 tile_scale = 1.0
+            size = self.v_size.get() or 'medium'
             con.execute(
-                '''INSERT INTO species (name, playable, sprite_name, tile_scale, composite_name, prudishness)
-                   VALUES (?, ?, ?, ?, ?, ?)
+                '''INSERT INTO species (name, playable, sprite_name, tile_scale, composite_name, prudishness, size)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(name) DO UPDATE SET
                    playable=excluded.playable,
                    sprite_name=excluded.sprite_name,
                    tile_scale=excluded.tile_scale,
                    composite_name=excluded.composite_name,
-                   prudishness=excluded.prudishness
+                   prudishness=excluded.prudishness,
+                   size=excluded.size
                 ''',
-                (name, playable, sprite, tile_scale, composite, prudishness)
+                (name, playable, sprite, tile_scale, composite, prudishness, size)
             )
             con.execute('DELETE FROM species_stats WHERE species_name=?', (name,))
             for stat, val in stats.items():
