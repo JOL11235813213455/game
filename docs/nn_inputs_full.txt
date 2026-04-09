@@ -1,0 +1,644 @@
+NEURAL NET INPUT VARIABLES — KITCHEN SINK SPECIFICATION
+========================================================
+Generated: 2026-04-08
+
+~715 input variables. All floats. Booleans are 0.0 or 1.0.
+Will grow as content is added. See CLAUDE.md step 7.5 for update process.
+
+Net architecture: 715 → 512 → 256 → 49 (action probabilities, softmax)
+~480K parameters. CPU trainable.
+
+================================================================================
+SECTION 1: SELF — BASE STATS (14 values)
+================================================================================
+
+self_STR_raw                    float   creature.stats.active[Stat.STR]() / 20
+self_STR_dmod                   float   (STR - 10) // 2 / 5
+self_VIT_raw                    float   / 20
+self_VIT_dmod                   float   / 5
+self_AGL_raw                    float   / 20
+self_AGL_dmod                   float   / 5
+self_PER_raw                    float   / 20
+self_PER_dmod                   float   / 5
+self_INT_raw                    float   / 20
+self_INT_dmod                   float   / 5
+self_CHR_raw                    float   / 20
+self_CHR_dmod                   float   / 5
+self_LCK_raw                    float   / 20
+self_LCK_dmod                   float   / 5
+
+================================================================================
+SECTION 2: SELF — ALL DERIVED STATS (36 values)
+================================================================================
+
+self_HP_MAX                     float   / 50
+self_MELEE_DMG                  float   / 20
+self_RANGED_DMG                 float   / 20
+self_MAGIC_DMG                  float   / 20
+self_ACCURACY                   float   / 20
+self_CRIT_CHANCE                float   / 100
+self_CRIT_DMG                   float   / 20
+self_DODGE                      float   / 20
+self_ARMOR                      float   / 20
+self_BLOCK                      float   / 20
+self_MOVE_SPEED                 float   / 10
+self_SIGHT_RANGE                float   / 15
+self_HEARING_RANGE              float   / 10
+self_STEALTH                    float   / 20
+self_DETECTION                  float   / 20
+self_CARRY_WEIGHT               float   / 200
+self_MAX_STAMINA                float   / 100
+self_MAX_MANA                   float   / 100
+self_MANA_REGEN                 float   / 10
+self_STAM_REGEN                 float   / 10
+self_HP_REGEN_DELAY             float   / 10
+self_POISON_RESIST              float   / 20
+self_DISEASE_RESIST             float   / 20
+self_MAGIC_RESIST               float   / 20
+self_STAGGER_RESIST             float   / 20
+self_FEAR_RESIST                float   / 20
+self_PERSUASION                 float   / 20
+self_INTIMIDATION               float   / 20
+self_DECEPTION                  float   / 20
+self_COMPANION_LIMIT            float   / 5
+self_CRAFT_QUALITY              float   / 10
+self_LOOT_GINI                  float   (already 0-1)
+self_XP_MOD                     float   (already 0-1)
+self_DURABILITY_USE             float   / 20
+self_BARTER_MOD                 float   / 10
+self_NPC_DISPOSITION            float   / 10
+
+================================================================================
+SECTION 3: SELF — CURRENT RESOURCES (6 values)
+================================================================================
+
+self_hp_ratio                   float   HP_CURR / HP_MAX
+self_hp_raw                     float   HP_CURR / 50
+self_stamina_ratio              float   CUR_STAMINA / MAX_STAMINA
+self_stamina_raw                float   CUR_STAMINA / 100
+self_mana_ratio                 float   CUR_MANA / MAX_MANA
+self_mana_raw                   float   CUR_MANA / 100
+
+================================================================================
+SECTION 4: SELF — COMBAT READINESS (17 values)
+================================================================================
+
+self_effective_melee_dps        float   burst_damage / time / 20
+self_effective_ranged_dps       float   (0 if no ranged)
+self_effective_spell_dps        float   (0 if no spells)
+self_swings_until_exhausted     float   CUR_STAMINA / cost_per_swing / 10
+self_casts_until_oom            float   CUR_MANA / spell_cost / 10
+self_can_melee_attack           bool    stamina >= melee cost
+self_can_ranged_attack          bool    stamina >= cost AND has ammo
+self_can_cast                   bool    mana >= cheapest spell cost
+self_can_grapple                bool    stamina >= 15
+self_can_flee                   bool    stamina >= 3
+self_can_run                    bool    stamina >= 3
+self_can_sneak                  bool    stamina >= 1
+self_can_guard                  bool    stamina >= 2
+self_effective_dodge_rate       float   approx P(dodge) vs avg attacker
+self_effective_armor_rate       float   approx P(armor absorb) vs avg weapon
+self_hits_until_dead            float   HP_CURR / max(1, _max_hit_taken)
+self_max_hit_taken_ratio        float   _max_hit_taken / max(1, HP_MAX)
+
+================================================================================
+SECTION 5: SELF — ECONOMY (20 values)
+================================================================================
+
+self_gold_raw                   float   gold / 100
+self_gold_ln                    float   ln(gold + 1) / 10
+self_total_debt_raw             float   total_debt / 100
+self_total_debt_ln              float   ln(total_debt + 1) / 10
+self_disposable_wealth          float   sign(dw) * ln(|dw| + 1) / 10
+self_disposable_ratio           float   disposable / max(1, gold)
+self_num_creditors              float   len(loans) / 5
+self_num_debtors                float   len(loans_given) / 5
+self_largest_debt               float   max single debt / 100
+self_largest_loan_out           float   max single loan given / 100
+self_avg_interest_rate          float   avg daily rate across loans
+self_inventory_value_ln         float   ln(sum values + 1) / 10
+self_inventory_count            float   len(items) / 20
+self_equipment_kpi_total        float   ln(sum KPI + 1) / 10
+self_equipment_value_total      float   ln(sum equipped value + 1) / 10
+self_empty_equipment_slots      float   (14 - len(equipment)) / 14
+self_inventory_weight_ratio     float   carried_weight / CARRY_WEIGHT
+self_can_pickup_more            bool    weight + 1 < CARRY_WEIGHT
+self_most_valuable_item         float   max item value / 50
+self_num_trade_goods            float   items worth > 10 gold / 10
+
+================================================================================
+SECTION 6: SELF — EQUIPMENT SLOTS (14 values)
+================================================================================
+
+self_has_head                   bool
+self_has_neck                   bool
+self_has_shoulders              bool
+self_has_chest                  bool
+self_has_back                   bool
+self_has_wrists                 bool
+self_has_hands                  bool
+self_has_waist                  bool
+self_has_legs                   bool
+self_has_feet                   bool
+self_has_ring_l                 bool
+self_has_ring_r                 bool
+self_has_hand_l                 bool
+self_has_hand_r                 bool
+
+================================================================================
+SECTION 7: SELF — WEAPON/AMMO/SPELL DETAIL (15 values)
+================================================================================
+
+self_weapon_damage              float   weapon.damage / 20 (0 if unarmed)
+self_weapon_range               float   weapon.range / 10
+self_weapon_attack_time         float   attack_time_ms / 1000
+self_weapon_durability_ratio    float   dur_current / dur_max (0 if none)
+self_has_ranged_weapon          bool    range > 1
+self_has_ammo                   bool    matching ammo in inventory
+self_ammo_count                 float   quantity / 50
+self_num_consumables            float   count / 10
+self_best_heal_available        float   max heal value / 20
+self_has_buff_potion            bool    any consumable with buffs
+self_num_known_spells           float   / 10
+self_can_cast_any               bool    any spell where mana >= cost
+self_best_spell_damage          float   max castable spell damage / 20
+self_has_heal_spell             bool
+self_has_buff_spell             bool
+
+================================================================================
+SECTION 8: SELF — INVENTORY TEXTURE (13 values)
+================================================================================
+
+self_num_weapons_inventory      float   / 5
+self_num_armor_inventory        float   / 5
+self_num_eggs_carrying          float   / 3
+self_num_trap_items             float   / 3
+self_best_weapon_kpi            float   max weapon KPI / 50
+self_best_armor_kpi             float   max armor KPI / 50
+self_has_unequipped_upgrade     bool    any item better than equipped
+self_weapon_durability_avg      float   avg across equipped
+self_any_equipment_near_break   bool    any dur_ratio < 0.2
+self_num_stackable_items        float   / 20
+self_has_trade_goods            bool    any items worth > 5 gold
+self_least_valuable_item        float   min value / 50
+self_armor_durability_avg       float   avg across equipped armor
+
+================================================================================
+SECTION 9: SELF — SOCIAL CAPITAL (10 values)
+================================================================================
+
+self_avg_sentiment_positive     float   avg among allies / 10
+self_avg_sentiment_negative     float   avg among enemies / 10
+self_avg_interaction_depth      float   avg count / 20
+self_sentiment_variance         float   stdev / 10
+self_most_recent_interaction    float   ticks since / 100
+self_betrayals_committed        float   / 5
+self_betrayals_received         float   / 5
+self_rumors_heard_count         float   / 20
+self_rumors_spread_count        float   / 20
+self_pending_conversations      float   NPCs with available dialogue / 5
+
+================================================================================
+SECTION 10: SELF — STATUS / REPRODUCTION (16 values)
+================================================================================
+
+self_is_sleeping                bool
+self_is_guarding                bool
+self_is_blocking                bool
+self_is_pregnant                bool
+self_has_partner                bool
+self_is_mother                  bool
+self_is_fertile                 bool
+self_in_conversation            bool
+self_pair_cooldown_active       bool
+self_fatigue_level              float   / 4
+self_sleep_debt                 float   / 4
+self_piety                      float   0-1
+self_fecundity                  float   0-1 (0 for males)
+self_has_egg                    bool    carrying egg
+self_egg_gestation_ratio        float   days / 30 (0 if no egg)
+self_egg_is_abomination         bool
+
+================================================================================
+SECTION 11: SELF — QUEST / PROGRESSION (10 values)
+================================================================================
+
+self_active_quests              float   count / 5
+self_completed_quests           float   _quests_completed / 10
+self_failed_quests              float   / 10
+self_quest_steps_done           float   / 20
+self_level                      float   LVL / 20
+self_unspent_stat_points        float   / 10
+self_xp_ratio_to_next           float   progress to next level (0-1)
+self_life_goal_attainment       float   / 10
+self_failed_actions_total       float   / 10
+self_tiles_explored_total       float   / 100
+
+================================================================================
+SECTION 12: SELF — MOVEMENT / POSITION (8 values)
+================================================================================
+
+self_distance_to_map_center     float   manhattan dist / max_dim
+self_at_map_edge                bool
+self_on_linked_tile             bool    tile has linked_map
+self_on_nested_tile             bool    tile has nested_map
+self_map_depth                  float   len(map_stack) / 5
+self_can_exit_map               bool    at entrance and stack not empty
+self_ticks_on_current_tile      float   / 100
+self_ticks_on_current_map       float   / 1000
+
+================================================================================
+SECTION 13: SELF — GENETICS (7 values)
+================================================================================
+
+self_genetic_str_mod            float   express(chromosomes)[STR] / 3
+self_genetic_vit_mod            float   / 3
+self_genetic_agl_mod            float   / 3
+self_genetic_per_mod            float   / 3
+self_genetic_int_mod            float   / 3
+self_genetic_chr_mod            float   / 3
+self_genetic_lck_mod            float   / 3
+
+================================================================================
+SECTION 14: SELF — SIZE + SPECIES + DEITY (25 values with 1 species)
+================================================================================
+
+self_size_tiny                  bool
+self_size_small                 bool
+self_size_medium                bool
+self_size_large                 bool
+self_size_huge                  bool
+self_size_colossal              bool
+
+self_is_male                    bool
+self_is_female                  bool
+self_is_child                   bool
+self_is_adult                   bool
+self_is_abomination             bool
+self_is_inbred                  bool
+self_age_normalized             float   age / OLD_MIN
+self_age_as_adult               float   max(0, age-18) / (OLD_MIN-18)
+
+self_is_species_human           bool    (one per species)
+
+self_deity_none                 bool
+self_deity_aelora               bool
+self_deity_xarith               bool
+self_deity_solmara              bool
+self_deity_vaelkor              bool
+self_deity_verithan             bool
+self_deity_nyssara              bool
+self_deity_sylvaine             bool
+self_deity_mortheus             bool
+
+================================================================================
+SECTION 15: SELF — REPUTATION SUMMARY (6 values)
+================================================================================
+
+self_reputation_utility         float   sumproduct(sentiment,depth)/sum(depth) / 20
+self_total_relationships        float   / 20
+self_positive_relationships     float   count > 0 / 10
+self_negative_relationships     float   count < 0 / 10
+self_num_allies                 float   count > 5 / 10
+self_num_enemies                float   count < -5 / 10
+
+================================================================================
+SECTION 16: CURRENT TILE — DEEP INFO (18 values)
+================================================================================
+
+tile_current_covered            bool    under roof
+tile_current_z_level            float   location.z / z_max
+tile_current_speed_modifier     float
+tile_current_num_items          float   / 10
+tile_current_total_item_value   float   ln(sum + 1) / 10
+tile_current_has_egg            bool
+tile_current_has_weapon         bool
+tile_current_has_consumable     bool
+tile_current_capacity_used      float   used_units / TILE_CAPACITY
+tile_current_num_creatures      float   / 5
+tile_current_has_trap           bool    (if detected)
+tile_current_trap_dc            float   / 20 (0 if none)
+tile_current_has_link           bool
+tile_current_has_nested         bool
+tile_current_bg_color_r         float   / 255
+tile_current_bg_color_g         float   / 255
+tile_current_bg_color_b         float   / 255
+tile_current_has_items          bool
+
+================================================================================
+SECTION 17: SPATIAL — WALL DISTANCES + OPENNESS (25 values)
+================================================================================
+
+# Distance to wall in 8 directions
+dist_wall_N                     float   / sight_range
+dist_wall_S                     float
+dist_wall_E                     float
+dist_wall_W                     float
+dist_wall_NE                    float
+dist_wall_NW                    float
+dist_wall_SE                    float
+dist_wall_SW                    float
+
+# Immediate neighbors walkable
+tile_walkable_N                 bool
+tile_walkable_S                 bool
+tile_walkable_E                 bool
+tile_walkable_W                 bool
+tile_walkable_NE                bool
+tile_walkable_NW                bool
+tile_walkable_SE                bool
+tile_walkable_SW                bool
+
+# Ring analysis
+spatial_ring_1_walkable         float   ratio at distance 1
+spatial_ring_2_walkable         float   ratio at distance 2
+spatial_ring_3_walkable         float   ratio at distance 3
+spatial_is_chokepoint           bool    1-2 walkable neighbors
+spatial_is_open_field           bool    6+ walkable neighbors
+spatial_is_corner               bool    against 2 walls
+
+# Directional features
+spatial_direction_to_exit_x     float   dx to nearest linked tile
+spatial_direction_to_exit_y     float   dy
+
+================================================================================
+SECTION 18: SPATIAL — FEATURE LOCATIONS (12 values)
+================================================================================
+
+spatial_items_direction_x       float   avg dx to tiles with items
+spatial_items_direction_y       float   avg dy
+spatial_enemies_direction_x     float   avg dx to enemies
+spatial_enemies_direction_y     float   avg dy
+spatial_allies_direction_x      float   avg dx to allies
+spatial_allies_direction_y      float   avg dy
+spatial_structures_direction_x  float   avg dx to structures
+spatial_structures_direction_y  float   avg dy
+spatial_num_linked_tiles        float   / 5
+spatial_num_structures          float   / 5
+spatial_tiles_with_items        float   / 10
+spatial_tiles_with_creatures    float   / 10
+
+================================================================================
+SECTION 19: TILE ITEMS — TOP 3 ON CURRENT TILE (27 values)
+================================================================================
+
+For each of 3 items (padded with 0 if fewer):
+
+tile_item_N_value               float   item.value / 50
+tile_item_N_is_weapon           bool
+tile_item_N_is_armor            bool
+tile_item_N_is_consumable       bool
+tile_item_N_is_egg              bool
+tile_item_N_is_ammo             bool
+tile_item_N_weight              float   / 20
+tile_item_N_kpi_for_me          float   effective_kpi(creature) / 50
+tile_item_N_is_upgrade          bool    KPI > current equipped in slot
+
+× 3 = 27 values
+
+================================================================================
+SECTION 20: CREATURE CENSUS — VISIBLE (45 values)
+================================================================================
+
+census_total_visible            float   / 20
+census_same_species             float   / 20
+census_different_species        float   / 20
+census_male                     float   / 20
+census_female                   float   / 20
+census_male_same_species        float   / 20
+census_female_same_species      float   / 20
+census_children                 float   / 20
+census_adults                   float   / 20
+census_allies                   float   / 10
+census_enemies                  float   / 10
+census_neutral                  float   / 10
+census_same_deity               float   / 10
+census_opposed_deity            float   / 10
+census_armed                    float   / 10
+census_pregnant                 float   / 10
+census_sleeping                 float   / 10
+census_abominations             float   / 10
+census_avg_hp_ratio             float   mean HP ratio
+census_avg_distance             float   / sight_range
+census_closest_distance         float   / sight_range
+census_closest_ally_distance    float   / sight_range (1 if none)
+census_closest_enemy_distance   float   / sight_range (1 if none)
+census_closest_same_species     float   / sight_range
+census_closest_opposite_sex     float   / sight_range
+census_armed_enemies            float   / 5
+census_total_enemy_hp           float   / 100
+census_total_ally_hp            float   / 100
+census_enemy_outnumber_me       bool
+census_ally_outnumber_enemies   bool
+census_am_strongest             bool
+census_am_weakest               bool
+census_eligible_mates           float   / 5
+census_eggs_visible             float   / 5
+census_my_children_visible      float   / 3
+census_my_parents_visible       float   0-2
+census_same_partner_visible     bool
+census_indebted_to_me           float   / 5
+census_i_owe_debt_to            float   / 5
+census_my_attractiveness_rank   float   0-1
+census_pairing_eagerness        float   -0.5 to 0.5
+census_religious_majority_mine  bool
+census_avg_visible_wealth       float   / 100
+census_avg_piety_my_god         float   / 1.0
+census_avg_piety_opposed        float   / 1.0
+
+================================================================================
+SECTION 21: CREATURE CENSUS — AUDIBLE (3 values)
+================================================================================
+
+census_heard_not_seen           float   / 10
+census_heard_direction_x        float   avg dx normalized
+census_heard_direction_y        float   avg dy normalized
+
+================================================================================
+SECTION 22: PER-ENGAGED CREATURE (× 6 slots, 45 per slot = 270 values)
+================================================================================
+
+For each of 6 engaged creatures (padded with 0 if fewer):
+
+engaged_N_distance              float   / sight_range
+engaged_N_direction_x           float   normalized dx
+engaged_N_direction_y           float   normalized dy
+engaged_N_sentiment_toward      float   / 20 (clamped -1 to 1)
+engaged_N_sentiment_from        float   / 20 (estimated)
+engaged_N_confidence            float   count / (count + 5)
+engaged_N_curiosity             float   1 / (1 + count)
+engaged_N_rumor_opinion         float   / 10 (clamped)
+engaged_N_hp_ratio              float   visible
+engaged_N_is_armed              bool
+engaged_N_same_species          bool
+engaged_N_same_deity            bool
+engaged_N_opposed_deity         bool
+engaged_N_is_male               bool
+engaged_N_is_female             bool
+engaged_N_is_child              bool
+engaged_N_is_parent             bool    my parent
+engaged_N_is_child_of_mine      bool    my offspring
+engaged_N_is_partner            bool
+engaged_N_is_pregnant           bool
+engaged_N_is_abomination        bool
+engaged_N_is_sleeping           bool
+engaged_N_is_guarding           bool
+engaged_N_is_blocking           bool
+engaged_N_debt_i_owe_them       float   ln(debt + 1) / 5
+engaged_N_debt_they_owe_me      float   ln(debt + 1) / 5
+engaged_N_size_tiny             bool
+engaged_N_size_small            bool
+engaged_N_size_medium           bool
+engaged_N_size_large            bool
+engaged_N_size_huge             bool
+engaged_N_size_colossal         bool
+engaged_N_age_normalized        float   / OLD_MIN
+engaged_N_appears_wounded       bool    HP ratio < 0.5
+engaged_N_appears_critical      bool    HP ratio < 0.2
+engaged_N_appears_wealthy       bool    lots of gear
+engaged_N_appears_poor          bool    minimal gear
+engaged_N_could_kill_me         bool    estimated burst > my HP
+engaged_N_i_could_kill_them     bool    my burst > their HP
+engaged_N_fleeing_from_me       bool    moving away last tick
+engaged_N_approaching_me        bool    moving toward last tick
+engaged_N_has_allies_nearby     bool
+engaged_N_num_visible_allies    float   / 5
+engaged_N_desirability          float   / 1.0
+engaged_N_pairing_eligible      bool    right sex, adult, not pregnant
+
+× 6 slots = 270 values
+
+================================================================================
+SECTION 23: WORLD / TIME (13 values)
+================================================================================
+
+world_hour_sin                  float   sin(hour/24 * 2π)
+world_hour_cos                  float   cos(hour/24 * 2π)
+world_is_day                    bool
+world_sun_elevation             float   0-1
+world_moon_elevation            float   0-1
+world_moon_brightness           float   0-1
+world_moon_phase                float   0-1
+world_game_day                  float   day / 365
+world_light_level               float   composite sun/moon
+world_balance_order_chaos       float   -1 to 1
+world_balance_compassion_wrath  float   -1 to 1
+world_balance_truth_lies        float   -1 to 1
+world_balance_life_death        float   -1 to 1
+
+================================================================================
+SECTION 24: TEMPORAL — IMMEDIATE DELTAS (14 values)
+================================================================================
+
+delta_hp_ratio                  float
+delta_stamina_ratio             float
+delta_mana_ratio                float
+delta_gold                      float   sign * ln(|change| + 1) / 5
+delta_reputation                float   / 10
+delta_closest_threat_distance   float   / sight_range
+delta_piety                     float
+delta_equipment_kpi             float   sign * ln(|change| + 1) / 5
+delta_inventory_value           float   sign * ln(|change| + 1) / 5
+delta_allies                    float
+delta_debt                      float   sign * ln(|change| + 1) / 5
+delta_kills_this_tick           float   0 or 1
+delta_quest_steps_this_tick     float   0 or 1
+delta_xp_gained_this_tick       bool
+
+================================================================================
+SECTION 25: TEMPORAL — TRENDS (11 values)
+================================================================================
+
+# 10-tick averages
+trend_10_hp                     float   avg HP delta
+trend_10_stamina                float
+trend_10_gold                   float
+trend_10_reputation             float
+trend_10_kills                  float   kills in last 10 ticks
+trend_10_damage_taken           float   / HP_MAX
+
+# 100-tick averages
+trend_100_hp                    float
+trend_100_gold                  float
+trend_100_reputation            float
+trend_100_kills                 float
+trend_100_allies_change         float
+
+================================================================================
+SECTION 26: TEMPORAL — TIME SINCE EVENTS (12 values)
+================================================================================
+
+ticks_since_combat              float   / 100
+ticks_since_hit_taken           float   / 100
+ticks_since_kill                float   / 100
+ticks_since_social_interaction  float   / 100
+ticks_since_trade               float   / 100
+ticks_since_sleep               float   / 100
+ticks_since_ate_consumable      float   / 100
+ticks_since_quest_progress      float   / 100
+ticks_since_pairing             float   / 1000
+ticks_since_level_up            float   / 1000
+ticks_since_moved               float   / 100
+ticks_since_failed_action       float   / 100
+
+================================================================================
+SECTION 27: REWARD SIGNAL CURRENT VALUES (17 values)
+================================================================================
+
+reward_hp_ratio                 float   HP_CURR / HP_MAX
+reward_wealth_ln                float   ln(gold + 1) / 10
+reward_debt_ln                  float   ln(debt + 1) / 10
+reward_inventory_value_ln       float   ln(inv + 1) / 10
+reward_equipment_kpi_ln         float   ln(kpi + 1) / 10
+reward_reputation_utility       float   sumproduct / 20
+reward_ally_count               float   / 10
+reward_kills_total              float   / 10
+reward_tiles_explored           float   / 100
+reward_creatures_met            float   / 20
+reward_piety                    float   0-1
+reward_quest_steps_total        float   / 10
+reward_life_goals               float   / 10
+reward_fatigue_level            float   / 4
+reward_failed_actions           float   / 10
+reward_is_underwater            bool    disposable_wealth < 0
+reward_xp_active                bool    XP gained this tick
+
+================================================================================
+GRAND TOTAL
+================================================================================
+
+Section  1: Self base stats              14
+Section  2: Self derived stats           36
+Section  3: Self current resources        6
+Section  4: Self combat readiness        17
+Section  5: Self economy                 20
+Section  6: Self equipment slots         14
+Section  7: Self weapon/ammo/spells      15
+Section  8: Self inventory texture       13
+Section  9: Self social capital          10
+Section 10: Self status/reproduction     16
+Section 11: Self quest/progression       10
+Section 12: Self movement/position        8
+Section 13: Self genetics                 7
+Section 14: Self size/species/deity      25 (with 1 species)
+Section 15: Self reputation summary       6
+Section 16: Current tile deep            18
+Section 17: Spatial wall/openness        25
+Section 18: Spatial feature locations    12
+Section 19: Tile items (3 slots)         27
+Section 20: Census visible               45
+Section 21: Census audible                3
+Section 22: Per-engaged (45 × 6)        270
+Section 23: World / time                 13
+Section 24: Temporal immediate           14
+Section 25: Temporal trends              11
+Section 26: Time since events            12
+Section 27: Reward signal values         17
+─────────────────────────────────────────
+TOTAL (with 1 species):                ~714
+TOTAL (with 10 species):               ~723
+TOTAL (with 20 species):               ~733
+
+================================================================================
+OUTPUTS: 49 action probabilities (softmax)
+================================================================================
