@@ -70,6 +70,63 @@ def _clamp(v, lo=-1.0, hi=1.0):
     return max(lo, min(hi, v))
 
 
+def _sigmoid(x):
+    """Squash to 0-1."""
+    return 1.0 / (1.0 + math.exp(-max(-20, min(20, x))))
+
+
+def _recip(x, cap=10.0):
+    """Urgency transform: 1/x, capped."""
+    if x <= 0:
+        return cap
+    return min(cap, 1.0 / x)
+
+
+def _signed_sq(x):
+    """Sign-preserving square: amplifies extremes."""
+    return math.copysign(x * x, x)
+
+
+def _pos_transforms(x, norm=1.0):
+    """Return [raw, ln, sqrt, sq] for a positive value. Normalized by norm."""
+    v = x / norm if norm > 0 else x
+    return [
+        v,                                         # raw normalized
+        math.log(x + 1) / math.log(norm + 2),     # ln (scaled to ~0-1)
+        math.sqrt(max(0, v)),                      # sqrt
+        min(4.0, v * v),                           # squared (capped)
+    ]
+
+
+def _ratio_transforms(r):
+    """Return [raw, sq, recip, logit] for a 0-1 ratio."""
+    return [
+        r,                                         # raw
+        r * r,                                     # squared (amplifies high end)
+        min(10.0, 1.0 / max(0.01, r)),            # reciprocal (urgency when low)
+        _sln(r - 0.5) * 2,                        # centered signed-ln
+    ]
+
+
+def _signed_transforms(x, scale=10.0):
+    """Return [sigmoid, signed_sq, raw_clamped] for a signed value."""
+    return [
+        _sigmoid(x / max(1, scale)),               # sigmoid to 0-1
+        _signed_sq(x / max(1, scale)),             # amplify extremes
+        _clamp(x / max(1, scale)),                 # raw clamped -1 to 1
+    ]
+
+
+def _dist_transforms(d, max_d):
+    """Return [raw, ln, recip] for a distance value."""
+    norm = d / max(1, max_d)
+    return [
+        norm,                                      # raw normalized
+        math.log(d + 1) / math.log(max_d + 2),    # ln
+        min(5.0, 1.0 / max(0.1, d)) if d > 0 else 5.0,  # urgency when close
+    ]
+
+
 def build_observation(creature, cols: int, rows: int,
                       prev_snapshot: dict | None = None,
                       game_clock=None,
@@ -767,11 +824,106 @@ def build_observation(creature, cols: int, rows: int,
     obs.append(1.0 if disp < 0 else 0.0)
     obs.append(1.0 if stats.base.get(Stat.EXP, 0) > prev.get('exp', 0) else 0.0)
 
+    # ==== SECTION 28: WILD TRANSFORMS ====
+    # Multiple mathematical representations of key variables.
+    # Gives the net different "lenses" on the same data.
+
+    # HP ratio transforms: [raw, sq, recip(urgency), centered-ln]
+    obs.extend(_ratio_transforms(_ratio(hp_cur, hp_max)))
+
+    # Stamina ratio transforms
+    obs.extend(_ratio_transforms(_ratio(stam_cur, stam_max)))
+
+    # Mana ratio transforms
+    obs.extend(_ratio_transforms(_ratio(mana_cur, mana_max)))
+
+    # Gold transforms: [raw, ln, sqrt, sq]
+    obs.extend(_pos_transforms(gold, norm=100))
+
+    # Debt transforms
+    obs.extend(_pos_transforms(total_debt, norm=100))
+
+    # Inventory value transforms
+    obs.extend(_pos_transforms(inv_value, norm=100))
+
+    # Equipment value transforms
+    obs.extend(_pos_transforms(eq_value, norm=100))
+
+    # HP raw transforms (absolute HP matters differently than ratio)
+    obs.extend(_pos_transforms(hp_cur, norm=50))
+
+    # Stamina raw transforms
+    obs.extend(_pos_transforms(stam_cur, norm=100))
+
+    # Mana raw transforms
+    obs.extend(_pos_transforms(mana_cur, norm=100))
+
+    # Base stat transforms (each stat: [raw, sq, dmod_sigmoid])
+    for st in _BASE_ORDER:
+        val = s[st]()
+        dm = _dmod(val)
+        obs.append(val * val / 400.0)                  # squared / 400
+        obs.append(_sigmoid(dm))                        # sigmoid of dmod
+
+    # Reputation transforms: [sigmoid, signed_sq, clamped]
+    obs.extend(_signed_transforms(rep_utility, scale=20))
+
+    # Sentiment extremes transforms
+    best_sent = max((r[0] for r in all_rels), default=0)
+    worst_sent = min((r[0] for r in all_rels), default=0)
+    obs.extend(_signed_transforms(best_sent, scale=20))
+    obs.extend(_signed_transforms(worst_sent, scale=20))
+
+    # Distance to threats: transforms for closest enemy
+    closest_enemy_dist = min(enemy_dists) if enemy_dists else float(sight)
+    obs.extend(_dist_transforms(closest_enemy_dist, sight))
+
+    # Distance to allies
+    closest_ally_dist = min(ally_dists) if ally_dists else float(sight)
+    obs.extend(_dist_transforms(closest_ally_dist, sight))
+
+    # Age transforms: [raw, ln, sqrt]
+    obs.extend(_pos_transforms(creature.age, norm=creature.OLD_MIN))
+
+    # Carried weight ratio transforms
+    cw_ratio = carried / max(1, carry_max)
+    obs.extend(_ratio_transforms(min(1.0, cw_ratio)))
+
+    # Key interaction terms (products of important variables)
+    obs.append(_ratio(hp_cur, hp_max) * _ratio(stam_cur, stam_max))  # combat readiness
+    obs.append(_ratio(hp_cur, hp_max) * _ratio(mana_cur, mana_max))  # caster readiness
+    obs.append(gold * n_allies / max(1, 100 * 10))                   # total capital
+    obs.append(melee_dps / 20.0 * _ratio(stam_cur, stam_max))       # effective attack power
+    obs.append(creature.piety * (1.0 if creature.deity else 0.0))    # religious commitment
+    obs.append(n_enemies / max(1, n_allies + 1))                     # threat ratio
+    obs.append(_ratio(hp_cur, hp_max) * (1.0 - getattr(creature, '_fatigue_level', 0) / 4.0))  # effective health
+    obs.append(creature.age / max(1, creature.OLD_MIN) * creature.fecundity()
+               if hasattr(creature, 'fecundity') else 0.0)           # reproductive value
+
     return obs
 
 
-# Observation size — computed from actual output
-OBSERVATION_SIZE = 682
+# Observation size — will be set after first call
+OBSERVATION_SIZE = None  # set dynamically below
+
+
+def _compute_observation_size():
+    """Compute actual observation size by building one observation."""
+    from classes.maps import Map, Tile
+    from classes.creature import Creature
+    tiles = {MapKey(x, y, 0): Tile(walkable=True) for x in range(5) for y in range(5)}
+    m = Map(tile_set=tiles, entrance=(0, 0), x_max=5, y_max=5)
+    c = Creature(current_map=m, location=MapKey(2, 2, 0), name='_size_probe',
+                 stats={Stat.STR: 10, Stat.VIT: 10, Stat.AGL: 10, Stat.PER: 10,
+                        Stat.INT: 10, Stat.CHR: 10, Stat.LCK: 10})
+    obs = build_observation(c, 5, 5)
+    return len(obs)
+
+
+try:
+    OBSERVATION_SIZE = _compute_observation_size()
+except Exception:
+    OBSERVATION_SIZE = 800  # fallback
 
 
 def make_snapshot(creature, visible_enemies=None) -> dict:
