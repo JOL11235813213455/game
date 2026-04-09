@@ -44,6 +44,10 @@ class Simulation:
         self.now = 0
         self.step_count = 0
 
+        # World data for god system
+        from classes.gods import WorldData
+        self.world_data = WorldData()
+
         # Per-creature state tracking
         self._obs_snapshots: dict[int, dict] = {}  # uid → prev observation snapshot
         self._reward_snapshots: dict[int, dict] = {}  # uid → prev reward snapshot
@@ -74,7 +78,8 @@ class Simulation:
             prev_rew = self._reward_snapshots.get(c.uid)
 
             # Build current observation
-            obs = build_observation(c, self.cols, self.rows, prev_snapshot=prev_obs)
+            obs = build_observation(c, self.cols, self.rows, prev_snapshot=prev_obs,
+                                   world_data=self.world_data)
 
             # Compute reward
             curr_rew = make_reward_snapshot(c)

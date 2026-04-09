@@ -80,9 +80,14 @@ class WorldData(Trackable):
         self._init_default_pantheon()
 
     def _init_default_pantheon(self):
-        """Set up the default 8 gods in 4 pairs."""
+        """Set up the default 8 gods in 4 pairs (fresh copies)."""
         for god in DEFAULT_GODS:
-            self.gods[god.name] = god
+            self.gods[god.name] = God(
+                name=god.name, domain=god.domain, opposed_god=god.opposed_god,
+                aligned_actions=list(god.aligned_actions),
+                opposed_actions=list(god.opposed_actions),
+                description=god.description,
+            )
         # Build dichotomy pairs
         seen = set()
         for god in self.gods.values():

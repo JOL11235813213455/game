@@ -900,6 +900,29 @@ def build_observation(creature, cols: int, rows: int,
     obs.append(creature.age / max(1, creature.OLD_MIN) * creature.fecundity()
                if hasattr(creature, 'fecundity') else 0.0)           # reproductive value
 
+    # God balance transforms (signed: -1 to 1 for each axis)
+    if world_data:
+        for pair in [('Aelora','Xarith'), ('Solmara','Vaelkor'),
+                     ('Verithan','Nyssara'), ('Sylvaine','Mortheus')]:
+            bal = world_data.get_balance(pair[0])
+            obs.extend(_signed_transforms(bal, scale=1.0))
+            # My god's alignment with this axis
+            if creature.deity in pair:
+                obs.append(bal if creature.deity == pair[0] else -bal)
+            else:
+                obs.append(0.0)
+    else:
+        obs.extend([0.0] * 16)  # 4 axes × (3 transforms + 1 personal)
+
+    # Piety interaction with world balance
+    if world_data and creature.deity:
+        my_balance = world_data.get_balance(creature.deity)
+        obs.append(my_balance * creature.piety)               # world favors my god × my devotion
+        obs.append(abs(my_balance) * creature.piety)          # world polarization × my devotion
+        obs.append(1.0 if my_balance > 0 else 0.0)           # is my god winning
+    else:
+        obs.extend([0.0] * 3)
+
     return obs
 
 
@@ -917,6 +940,8 @@ def _compute_observation_size():
                  stats={Stat.STR: 10, Stat.VIT: 10, Stat.AGL: 10, Stat.PER: 10,
                         Stat.INT: 10, Stat.CHR: 10, Stat.LCK: 10})
     obs = build_observation(c, 5, 5)
+    # Clean up probe objects from Trackable registry
+    c.current_map = None
     return len(obs)
 
 
