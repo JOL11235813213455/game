@@ -188,6 +188,12 @@ def _migrate(con: sqlite3.Connection) -> None:
     created_at TEXT NOT NULL DEFAULT '',
     notes TEXT NOT NULL DEFAULT '',
     UNIQUE(name, version))""",
+        "ALTER TABLE species ADD COLUMN model_name TEXT",
+        "ALTER TABLE species ADD COLUMN model_version INTEGER",
+        "ALTER TABLE creatures ADD COLUMN model_name TEXT",
+        "ALTER TABLE creatures ADD COLUMN model_version INTEGER",
+        "ALTER TABLE nn_models ADD COLUMN obs_schema_id INTEGER",
+        "ALTER TABLE nn_models ADD COLUMN act_schema_id INTEGER",
     ]:
         try:
             con.execute(stmt)

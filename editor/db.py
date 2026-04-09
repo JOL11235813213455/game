@@ -445,6 +445,12 @@ def migrate_db():
             "ALTER TABLE tile_sets ADD COLUMN speed_modifier REAL",
             "ALTER TABLE tile_templates ADD COLUMN bg_color TEXT",
             "ALTER TABLE tile_sets ADD COLUMN bg_color TEXT",
+            "ALTER TABLE species ADD COLUMN model_name TEXT",
+            "ALTER TABLE species ADD COLUMN model_version INTEGER",
+            "ALTER TABLE creatures ADD COLUMN model_name TEXT",
+            "ALTER TABLE creatures ADD COLUMN model_version INTEGER",
+            "ALTER TABLE nn_models ADD COLUMN obs_schema_id INTEGER",
+            "ALTER TABLE nn_models ADD COLUMN act_schema_id INTEGER",
         ]:
             try:
                 con.execute(stmt)

@@ -892,6 +892,12 @@ class SqlTab(ttk.Frame):
             ('nn_models', 'training_seconds'): 'Wall-clock seconds for this training run',
             ('nn_models', 'created_at'): 'Timestamp when model was saved',
             ('nn_models', 'notes'): 'Free-form annotation',
+            ('nn_models', 'obs_schema_id'): 'Observation schema ID at time of training',
+            ('nn_models', 'act_schema_id'): 'Action schema ID at time of training',
+            ('species', 'model_name'): 'Neural net model lineage name for this species (NULL = global default)',
+            ('species', 'model_version'): 'Model version to use (NULL = latest)',
+            ('creatures', 'model_name'): 'Override model lineage (NULL = use species default)',
+            ('creatures', 'model_version'): 'Override model version (NULL = use species default)',
         }
 
         con = get_con()

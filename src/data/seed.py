@@ -34,7 +34,9 @@ CREATE TABLE IF NOT EXISTS species (
     territoriality     REAL NOT NULL DEFAULT 0.3,
     curiosity_modifier REAL NOT NULL DEFAULT 0.0,
     preferred_deity    TEXT,
-    egg_sprite         TEXT REFERENCES sprites(name)
+    egg_sprite         TEXT REFERENCES sprites(name),
+    model_name         TEXT,
+    model_version      INTEGER
 );
 CREATE TABLE IF NOT EXISTS species_stats (
     species_name TEXT NOT NULL REFERENCES species(name),
@@ -113,7 +115,9 @@ CREATE TABLE IF NOT EXISTS creatures (
     dialogue_tree    TEXT,
     description      TEXT NOT NULL DEFAULT '',
     cumulative_limit INTEGER NOT NULL DEFAULT -1,
-    concurrent_limit INTEGER NOT NULL DEFAULT -1
+    concurrent_limit INTEGER NOT NULL DEFAULT -1,
+    model_name       TEXT,
+    model_version    INTEGER
 );
 CREATE TABLE IF NOT EXISTS creature_stats (
     creature_key TEXT NOT NULL REFERENCES creatures(key),
@@ -277,6 +281,8 @@ CREATE TABLE IF NOT EXISTS nn_models (
     training_seconds REAL NOT NULL DEFAULT 0,
     created_at       TEXT NOT NULL DEFAULT '',
     notes            TEXT NOT NULL DEFAULT '',
+    obs_schema_id    INTEGER,
+    act_schema_id    INTEGER,
     UNIQUE(name, version)
 );
 CREATE TABLE IF NOT EXISTS animations (
