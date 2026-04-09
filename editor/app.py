@@ -2,18 +2,23 @@ import tkinter as tk
 from tkinter import ttk
 
 from editor.db import migrate_db
-from editor.items_tab import ItemsTab
-from editor.creatures_master_tab import CreaturesMasterTab
-from editor.dialogue_tab import DialogueTab
-from editor.spells_tab import SpellsTab
-from editor.quests_tab import QuestsTab
-from editor.gods_tab import GodsTab
-from editor.sprites_tab import SpritesTab
-from editor.tiles_tab import TilesTab
-from editor.animations_tab import AnimationsTab
-from editor.composites_tab import CompositesTab
-from editor.sql_tab import SqlTab
-from editor.map_editor_tab import MapEditorTab
+
+
+class _LazyTab(ttk.Frame):
+    """Placeholder that builds the real tab on first view."""
+
+    def __init__(self, parent, factory, **kwargs):
+        super().__init__(parent, **kwargs)
+        self._factory = factory
+        self._built = False
+        self._real = None
+
+    def _ensure_built(self):
+        if not self._built:
+            self._real = self._factory(self)
+            self._real.pack(fill=tk.BOTH, expand=True)
+            self._built = True
+        return self._real
 
 
 class EditorApp(tk.Tk):
@@ -33,7 +38,11 @@ class EditorApp(tk.Tk):
         notebook = ttk.Notebook(self)
         notebook.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
 
-        # Graphics group — nested notebook
+        # Graphics group — loaded eagerly (small, frequently used)
+        from editor.sprites_tab import SpritesTab
+        from editor.animations_tab import AnimationsTab
+        from editor.composites_tab import CompositesTab
+
         graphics_frame = ttk.Frame(notebook)
         notebook.add(graphics_frame, text='  Graphics  ')
         gfx_notebook = ttk.Notebook(graphics_frame)
@@ -46,7 +55,10 @@ class EditorApp(tk.Tk):
         gfx_notebook.add(self.anims_tab,      text='  Simple  ')
         gfx_notebook.add(self.composites_tab, text='  Composite  ')
 
-        # Maps group — nested notebook
+        # Maps group — loaded eagerly
+        from editor.map_editor_tab import MapEditorTab
+        from editor.tiles_tab import TilesTab
+
         maps_frame = ttk.Frame(notebook)
         notebook.add(maps_frame, text='  Maps  ')
         maps_notebook = ttk.Notebook(maps_frame)
@@ -57,45 +69,91 @@ class EditorApp(tk.Tk):
         maps_notebook.add(self.map_editor_tab, text='  Map Editor  ')
         maps_notebook.add(self.tiles_tab,     text='  Tile Templates  ')
 
-        self.creatures_master = CreaturesMasterTab(notebook)
-        self.items_tab     = ItemsTab(notebook)
-        self.spells_tab    = SpellsTab(notebook)
-        self.quests_tab    = QuestsTab(notebook)
-        self.gods_tab      = GodsTab(notebook)
-        self.dialogue_tab  = DialogueTab(notebook)
-        self.sql_tab       = SqlTab(notebook)
+        # Heavy tabs — lazy loaded
+        self._creatures_lazy = _LazyTab(notebook, self._make_creatures)
+        self._items_lazy = _LazyTab(notebook, self._make_items)
+        self._spells_lazy = _LazyTab(notebook, self._make_spells)
+        self._quests_lazy = _LazyTab(notebook, self._make_quests)
+        self._gods_lazy = _LazyTab(notebook, self._make_gods)
+        self._dialogue_lazy = _LazyTab(notebook, self._make_dialogue)
+        self._sql_lazy = _LazyTab(notebook, self._make_sql)
 
-        notebook.add(self.creatures_master, text='  Creatures  ')
-        notebook.add(self.items_tab,     text='  Items  ')
-        notebook.add(self.spells_tab,    text='  Spells  ')
-        notebook.add(self.quests_tab,    text='  Quests  ')
-        notebook.add(self.gods_tab,      text='  Gods  ')
-        notebook.add(self.dialogue_tab,  text='  Dialogue  ')
-        notebook.add(self.sql_tab,       text='  SQL  ')
+        notebook.add(self._creatures_lazy, text='  Creatures  ')
+        notebook.add(self._items_lazy,     text='  Items  ')
+        notebook.add(self._spells_lazy,    text='  Spells  ')
+        notebook.add(self._quests_lazy,    text='  Quests  ')
+        notebook.add(self._gods_lazy,      text='  Gods  ')
+        notebook.add(self._dialogue_lazy,  text='  Dialogue  ')
+        notebook.add(self._sql_lazy,       text='  SQL  ')
 
         gfx_notebook.bind('<<NotebookTabChanged>>', self._on_tab_changed)
         maps_notebook.bind('<<NotebookTabChanged>>', self._on_tab_changed)
         notebook.bind('<<NotebookTabChanged>>', self._on_tab_changed)
 
+    # -- Lazy factories --
+    def _make_creatures(self, parent):
+        from editor.creatures_master_tab import CreaturesMasterTab
+        return CreaturesMasterTab(parent)
+
+    def _make_items(self, parent):
+        from editor.items_tab import ItemsTab
+        return ItemsTab(parent)
+
+    def _make_spells(self, parent):
+        from editor.spells_tab import SpellsTab
+        return SpellsTab(parent)
+
+    def _make_quests(self, parent):
+        from editor.quests_tab import QuestsTab
+        return QuestsTab(parent)
+
+    def _make_gods(self, parent):
+        from editor.gods_tab import GodsTab
+        return GodsTab(parent)
+
+    def _make_dialogue(self, parent):
+        from editor.dialogue_tab import DialogueTab
+        return DialogueTab(parent)
+
+    def _make_sql(self, parent):
+        from editor.sql_tab import SqlTab
+        return SqlTab(parent)
+
     def _on_sprites_changed(self):
-        self.items_tab.refresh_sprite_dropdown()
-        self.creatures_master.refresh_sprite_dropdown()
         self.tiles_tab.refresh_sprite_dropdown()
-        self.spells_tab.refresh_sprite_dropdown()
+        # Refresh lazy tabs only if built
+        for lazy in [self._creatures_lazy, self._items_lazy, self._spells_lazy]:
+            if lazy._real and hasattr(lazy._real, 'refresh_sprite_dropdown'):
+                lazy._real.refresh_sprite_dropdown()
 
     def _on_tab_changed(self, event):
         tab = event.widget.tab(event.widget.select(), 'text').strip()
+
+        # Build lazy tab on first visit
+        for lazy in [self._creatures_lazy, self._items_lazy, self._spells_lazy,
+                     self._quests_lazy, self._gods_lazy, self._dialogue_lazy,
+                     self._sql_lazy]:
+            # Check if this lazy tab is the currently selected one
+            try:
+                if event.widget.select() == str(lazy):
+                    lazy._ensure_built()
+            except Exception:
+                pass
+
         if tab in ('Items', 'Creatures', 'Tile Templates', 'Maps'):
-            self.items_tab.refresh_sprite_dropdown()
-            self.creatures_master.refresh_sprite_dropdown()
             self.tiles_tab.refresh_sprite_dropdown()
-        if tab == 'Creatures':
-            self.creatures_master.refresh_species_dropdown()
-        if tab == 'Dialogue':
-            self.dialogue_tab.refresh_dropdowns()
+            for lazy in [self._creatures_lazy, self._items_lazy]:
+                if lazy._real and hasattr(lazy._real, 'refresh_sprite_dropdown'):
+                    lazy._real.refresh_sprite_dropdown()
+        if tab == 'Creatures' and self._creatures_lazy._real:
+            if hasattr(self._creatures_lazy._real, 'refresh_species_dropdown'):
+                self._creatures_lazy._real.refresh_species_dropdown()
         if tab in ('Map Editor', 'Maps'):
             self.map_editor_tab.refresh_dropdowns()
         if tab in ('Simple', 'Animations'):
             self.anims_tab.refresh_dropdowns()
         if tab in ('Composite', 'Composites'):
             self.composites_tab.refresh_dropdowns()
+        if tab == 'Dialogue' and self._dialogue_lazy._real:
+            if hasattr(self._dialogue_lazy._real, 'refresh_dropdowns'):
+                self._dialogue_lazy._real.refresh_dropdowns()
