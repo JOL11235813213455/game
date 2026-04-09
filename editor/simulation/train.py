@@ -72,9 +72,12 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
 
     total_reward = 0.0
     ep_steps = 0
-    action_counts = {}  # action_id → count (reset per episode)
+    action_counts = {}  # action_id → cumulative count
+    trail_actions = []  # list of (step, action_id) for trailing window
+    TRAIL_WINDOW = 20   # 20 steps = 10 seconds at 500ms ticks
     step_rewards = []   # recent step rewards for rolling avg
 
+    from collections import deque
     from classes.observation import build_observation, make_snapshot
     from classes.actions import dispatch, Action
     from classes.world_object import WorldObject
@@ -112,6 +115,12 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             dispatch(c, action, {'cols': sim.cols, 'rows': sim.rows,
                                  'target': target, 'now': sim.now})
             action_counts[action] = action_counts.get(action, 0) + 1
+            trail_actions.append((step, action))
+
+        # Trim trailing window
+        cutoff = step - TRAIL_WINDOW
+        while trail_actions and trail_actions[0][0] < cutoff:
+            trail_actions.pop(0)
 
         # Advance simulation
         sim.now += sim.tick_ms
@@ -154,21 +163,27 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
         # Write state for live viewer (every 10 steps to avoid IO spam)
         if step % 10 == 0:
             from editor.simulation.train_state import write_state
-            # Build top-5 actions for viewer
-            top_actions = sorted(action_counts.items(), key=lambda x: -x[1])[:8]
-            top_action_names = []
-            for aid, cnt in top_actions:
+            # Build trailing window counts
+            trail_counts = {}
+            for _, aid in trail_actions:
+                trail_counts[aid] = trail_counts.get(aid, 0) + 1
+            # Merge all action ids from both dicts, sort by cumulative
+            all_aids = set(action_counts) | set(trail_counts)
+            ranked = sorted(all_aids, key=lambda a: -action_counts.get(a, 0))[:10]
+            top_action_stats = []
+            for aid in ranked:
                 try:
                     name = Action(aid).name.lower()
                 except ValueError:
                     name = f'act_{aid}'
-                top_action_names.append((name, cnt))
+                top_action_stats.append((name, trail_counts.get(aid, 0),
+                                         action_counts.get(aid, 0)))
             avg_rew = sum(step_rewards) / max(1, len(step_rewards))
             viewer_info = {
                 'avg_reward': round(avg_rew, 4),
                 'total_reward': round(total_reward, 2),
                 'ep_steps': ep_steps,
-                'top_actions': top_action_names,
+                'top_actions': top_action_stats,
             }
             write_state(sim, phase='MAPPO', step=step, info=viewer_info)
 
@@ -318,6 +333,8 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
 
     total_reward = 0.0
     ppo_action_counts = {}
+    ppo_trail_actions = []
+    PPO_TRAIL_WINDOW = 20
     ppo_step_rewards = []
 
     for step in range(steps):
@@ -343,6 +360,12 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             dispatch(agent, action, {'cols': sim.cols, 'rows': sim.rows,
                                      'target': target, 'now': sim.now})
             ppo_action_counts[action] = ppo_action_counts.get(action, 0) + 1
+            ppo_trail_actions.append((step, action))
+
+        # Trim trailing window
+        cutoff = step - PPO_TRAIL_WINDOW
+        while ppo_trail_actions and ppo_trail_actions[0][0] < cutoff:
+            ppo_trail_actions.pop(0)
 
         # Advance
         sim.now += sim.tick_ms
@@ -381,20 +404,25 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
         # Write state for live viewer
         if step % 10 == 0:
             from editor.simulation.train_state import write_state
-            top_actions = sorted(ppo_action_counts.items(), key=lambda x: -x[1])[:8]
-            top_action_names = []
-            for aid, cnt in top_actions:
+            trail_counts = {}
+            for _, aid in ppo_trail_actions:
+                trail_counts[aid] = trail_counts.get(aid, 0) + 1
+            all_aids = set(ppo_action_counts) | set(trail_counts)
+            ranked = sorted(all_aids, key=lambda a: -ppo_action_counts.get(a, 0))[:10]
+            top_action_stats = []
+            for aid in ranked:
                 try:
                     name = ActionEnum(aid).name.lower()
                 except ValueError:
                     name = f'act_{aid}'
-                top_action_names.append((name, cnt))
+                top_action_stats.append((name, trail_counts.get(aid, 0),
+                                         ppo_action_counts.get(aid, 0)))
             avg_rew = sum(ppo_step_rewards) / max(1, len(ppo_step_rewards))
             viewer_info = {
                 'avg_reward': round(avg_rew, 4),
                 'total_reward': round(total_reward, 2),
                 'ep_steps': len(ppo_step_rewards),
-                'top_actions': top_action_names,
+                'top_actions': top_action_stats,
             }
             write_state(sim, phase='PPO', step=step, info=viewer_info)
 

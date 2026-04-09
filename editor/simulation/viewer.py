@@ -423,9 +423,14 @@ def run_training_viewer(cell_size: int = 20):
             y += 5
             top_acts = info.get('top_actions', [])
             if top_acts:
-                text('Top actions:', C_GRAY)
-                for name, cnt in top_acts:
-                    text(f'  {name}: {cnt}', C_WHITE)
+                text('Decisions:  10s / cum', C_GRAY)
+                for entry in top_acts:
+                    if len(entry) == 3:
+                        name, trail, cum = entry
+                        text(f'  {name}: {trail}/{cum}', C_WHITE)
+                    else:
+                        name, cum = entry[0], entry[-1]
+                        text(f'  {name}: {cum}', C_WHITE)
             y += 5
 
         # Selected creature
