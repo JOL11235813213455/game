@@ -289,13 +289,32 @@ delta_piety                     float   piety now - last tick
 delta_equipment_kpi             float   sign(change) * ln(|change| + 1) / 5
 
 ================================================================================
-SECTION 20: REWARD FUNCTION TRANSFORMS (4 values)
+SECTION 20: REWARD SIGNAL CURRENT VALUES (17 values)
 ================================================================================
 
-current_reputation_utility      float   sumproduct(sentiment,depth)/sum(depth) / 20
-current_equipment_kpi_total     float   ln(sum of equipped KPI + 1) / 10
-current_inventory_value         float   ln(sum of item values + 1) / 10
-current_wealth_total            float   ln(gold + inv_value + 1) / 10
+# Every reward signal's current state — lets the model anticipate
+# how actions will affect each dimension of the reward function.
+
+# 13 primary signals
+reward_hp_ratio                 float   current HP_CURR / HP_MAX (0-1)
+reward_wealth_ln                float   ln(gold + 1) / 10
+reward_debt_ln                  float   ln(total_debt + 1) / 10
+reward_inventory_value_ln       float   ln(sum item values + 1) / 10
+reward_equipment_kpi_ln         float   ln(sum equipped KPI + 1) / 10
+reward_reputation_utility       float   sumproduct(sentiment,depth)/sum(depth) / 20
+reward_ally_count               float   count with sentiment > 5 / 10
+reward_kills_total              float   _kills / 10
+reward_tiles_explored           float   _tiles_explored / 100
+reward_creatures_met            float   len(relationships) / 20
+reward_piety                    float   piety (0-1)
+reward_quest_steps_total        float   _quest_steps_completed / 10
+reward_life_goals               float   life_goal_attainment / 10
+
+# Penalty-related current states
+reward_fatigue_level            float   _fatigue_level / 4 (0-1)
+reward_failed_actions           float   failed_actions / 10
+reward_is_underwater            bool    1.0 if disposable_wealth < 0
+reward_xp_active                bool    1.0 if XP gained this tick
 
 ================================================================================
 SUMMARY
@@ -320,11 +339,11 @@ Section 16: Census visible              23
 Section 17: Census audible               3
 Section 18: Per-engaged creature       168  (28 × 6)
 Section 19: Temporal deltas              7
-Section 20: Reward transforms            4
+Section 20: Reward signal values        17
 ─────────────────────────────────────────
-TOTAL (with 1 species):               ~325
-TOTAL (with 10 species):              ~334
-TOTAL (with 20 species):              ~344
+TOTAL (with 1 species):               ~338
+TOTAL (with 10 species):              ~347
+TOTAL (with 20 species):              ~357
 
 ================================================================================
 OUTPUTS: 49 action probabilities (softmax)
