@@ -72,9 +72,11 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
 
     total_reward = 0.0
     ep_steps = 0
+    action_counts = {}  # action_id → count (reset per episode)
+    step_rewards = []   # recent step rewards for rolling avg
 
     from classes.observation import build_observation, make_snapshot
-    from classes.actions import dispatch
+    from classes.actions import dispatch, Action
     from classes.world_object import WorldObject
     from classes.creature import Creature
     from classes.reward import compute_reward, make_reward_snapshot
@@ -109,6 +111,7 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
 
             dispatch(c, action, {'cols': sim.cols, 'rows': sim.rows,
                                  'target': target, 'now': sim.now})
+            action_counts[action] = action_counts.get(action, 0) + 1
 
         # Advance simulation
         sim.now += sim.tick_ms
@@ -135,6 +138,9 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             buffer.store(obs_arr, action, reward, value, log_prob,
                          not c.is_alive)
             total_reward += reward
+            step_rewards.append(reward)
+            if len(step_rewards) > 500:
+                step_rewards = step_rewards[-500:]
             ep_steps += 1
 
         # PPO update every rollout_len steps
@@ -148,7 +154,23 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
         # Write state for live viewer (every 10 steps to avoid IO spam)
         if step % 10 == 0:
             from editor.simulation.train_state import write_state
-            write_state(sim, phase='MAPPO', step=step)
+            # Build top-5 actions for viewer
+            top_actions = sorted(action_counts.items(), key=lambda x: -x[1])[:8]
+            top_action_names = []
+            for aid, cnt in top_actions:
+                try:
+                    name = Action(aid).name.lower()
+                except ValueError:
+                    name = f'act_{aid}'
+                top_action_names.append((name, cnt))
+            avg_rew = sum(step_rewards) / max(1, len(step_rewards))
+            viewer_info = {
+                'avg_reward': round(avg_rew, 4),
+                'total_reward': round(total_reward, 2),
+                'ep_steps': ep_steps,
+                'top_actions': top_action_names,
+            }
+            write_state(sim, phase='MAPPO', step=step, info=viewer_info)
 
         # Random mask injection: occasionally swap a creature's mask mid-episode
         # This trains robustness to sudden sensory changes
@@ -295,6 +317,8 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
         c.register_tick('behavior', 500, c._do_behavior)
 
     total_reward = 0.0
+    ppo_action_counts = {}
+    ppo_step_rewards = []
 
     for step in range(steps):
         if agent.is_alive:
@@ -306,7 +330,7 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             obs_arr = np.array(obs, dtype=np.float32)
             action, log_prob, value = net.get_action(obs_arr)
 
-            from classes.actions import dispatch
+            from classes.actions import dispatch, Action as ActionEnum
             from classes.world_object import WorldObject
             from classes.creature import Creature
             target = None
@@ -318,6 +342,7 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
 
             dispatch(agent, action, {'cols': sim.cols, 'rows': sim.rows,
                                      'target': target, 'now': sim.now})
+            ppo_action_counts[action] = ppo_action_counts.get(action, 0) + 1
 
         # Advance
         sim.now += sim.tick_ms
@@ -334,6 +359,9 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
         reward = compute_reward(agent, prev_rew, curr_rew) if prev_rew else 0.0
         sim._reward_snapshots[agent.uid] = curr_rew
         total_reward += reward
+        ppo_step_rewards.append(reward)
+        if len(ppo_step_rewards) > 500:
+            ppo_step_rewards = ppo_step_rewards[-500:]
 
         if hasattr(agent, '_history'):
             agent._history.append(make_history_snapshot(agent))
@@ -353,7 +381,22 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
         # Write state for live viewer
         if step % 10 == 0:
             from editor.simulation.train_state import write_state
-            write_state(sim, phase='PPO', step=step)
+            top_actions = sorted(ppo_action_counts.items(), key=lambda x: -x[1])[:8]
+            top_action_names = []
+            for aid, cnt in top_actions:
+                try:
+                    name = ActionEnum(aid).name.lower()
+                except ValueError:
+                    name = f'act_{aid}'
+                top_action_names.append((name, cnt))
+            avg_rew = sum(ppo_step_rewards) / max(1, len(ppo_step_rewards))
+            viewer_info = {
+                'avg_reward': round(avg_rew, 4),
+                'total_reward': round(total_reward, 2),
+                'ep_steps': len(ppo_step_rewards),
+                'top_actions': top_action_names,
+            }
+            write_state(sim, phase='PPO', step=step, info=viewer_info)
 
         # Reset
         if step % 5000 == 4999 or not agent.is_alive or sim.alive_count <= 1:

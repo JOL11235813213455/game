@@ -330,20 +330,25 @@ def run_training_viewer(cell_size: int = 20):
         if screen.get_width() != need_w or screen.get_height() != need_h:
             screen = pygame.display.set_mode((need_w, need_h))
 
-        # Draw tiles (base color only — no per-tile template from state for perf)
+        # Draw base tile grid
         for x in range(cols):
             for y in range(rows):
-                color = C_GRASS
+                r, g, b = C_GRASS
+                noise = ((x * 7 + y * 13) % 20) - 10
+                color = (max(0, min(255, r + noise)),
+                         max(0, min(255, g + noise)),
+                         max(0, min(255, b + noise)))
                 pygame.draw.rect(screen, color,
                                  (x * cell_size, y * cell_size, cell_size, cell_size))
 
-        # Draw tile gold/items from state
+        # Overlay tile info (gold, items, water tiles)
         for ti in state.get('tile_info', []):
             tx, ty = ti['x'], ti['y']
             tmpl = ti.get('template', 'grass')
-            color = TILE_COLORS.get(tmpl, C_GRASS)
-            pygame.draw.rect(screen, color,
-                             (tx * cell_size, ty * cell_size, cell_size, cell_size))
+            if tmpl != 'grass':
+                color = TILE_COLORS.get(tmpl, C_GRASS)
+                pygame.draw.rect(screen, color,
+                                 (tx * cell_size, ty * cell_size, cell_size, cell_size))
             if ti['gold'] > 0:
                 pygame.draw.circle(screen, C_YELLOW,
                                    (tx * cell_size + cell_size // 2,
@@ -404,7 +409,24 @@ def run_training_viewer(cell_size: int = 20):
         text(f'Alive: {state["alive"]} / {state["total"]}')
         if stale:
             text('STALE — training may have stopped', C_RED)
-        y += 10
+        y += 5
+
+        # Training stats from info dict
+        info = state.get('info', {})
+        if info:
+            avg_r = info.get('avg_reward', 0)
+            tot_r = info.get('total_reward', 0)
+            color_r = C_GREEN if avg_r > 0 else C_RED if avg_r < 0 else C_GRAY
+            text(f'Avg reward: {avg_r:+.4f}', color_r)
+            text(f'Total reward: {tot_r:+.2f}', color_r)
+            text(f'Ep steps: {info.get("ep_steps", 0)}')
+            y += 5
+            top_acts = info.get('top_actions', [])
+            if top_acts:
+                text('Top actions:', C_GRAY)
+                for name, cnt in top_acts:
+                    text(f'  {name}: {cnt}', C_WHITE)
+            y += 5
 
         # Selected creature
         if selected_data:
@@ -420,17 +442,23 @@ def run_training_viewer(cell_size: int = 20):
                 text(f'Mask: {c["mask"]}', C_ORANGE)
 
         # Population
-        y = need_h - 80
+        y = need_h - 100
         text('--- Population ---', C_GRAY)
         sp_count = {}
         total_gold = 0
+        total_items = 0
+        total_equip = 0
         for c in state['creatures']:
             if c['alive']:
                 sp_count[c['species']] = sp_count.get(c['species'], 0) + 1
                 total_gold += c['gold']
+                total_items += c['items']
+                total_equip += c['equip']
         for sp, n in sorted(sp_count.items()):
             text(f'  {sp}: {n}', SPECIES_COLORS.get(sp, C_WHITE))
-        text(f'Gold in pockets: {total_gold}')
+        text(f'Gold: {total_gold}  Items: {total_items}  Equip: {total_equip}')
+        tile_gold = sum(ti['gold'] for ti in state.get('tile_info', []))
+        text(f'Ground gold: {tile_gold}')
 
         pygame.display.flip()
         clock.tick(15)  # 15 FPS for viewer — training writes every 10 ticks

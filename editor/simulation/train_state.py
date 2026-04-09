@@ -36,15 +36,17 @@ def write_state(sim, phase: str = '', step: int = 0, info: dict = None):
             'mask': c.observation_mask,
         })
 
-    # Tile gold/items summary (just non-empty tiles)
+    # Tile info: non-grass templates + tiles with gold/items
     tile_info = []
     for key, tile in sim.game_map.tiles.items():
-        if tile.gold > 0 or tile.inventory.items:
+        tmpl = tile.tile_template or 'grass'
+        has_stuff = tile.gold > 0 or tile.inventory.items
+        if tmpl != 'grass' or has_stuff:
             tile_info.append({
                 'x': key.x, 'y': key.y,
                 'gold': tile.gold,
                 'items': len(tile.inventory.items),
-                'template': tile.tile_template or 'grass',
+                'template': tmpl,
             })
 
     state = {
