@@ -212,6 +212,30 @@ class TrainingTab(ttk.Frame):
             messagebox.showwarning('Training', 'Training is already running.')
             return
 
+        # Prevent starting a new model with a name that already exists in DB
+        model_name = self.v_model_name.get().strip()
+        resume = self.v_resume.get()
+        is_resuming = resume and resume != '(new)' and resume.startswith(model_name + ':')
+        if model_name and not is_resuming:
+            try:
+                from editor.simulation.train import _list_models_from_db
+                existing = [m for m in _list_models_from_db() if m['name'] == model_name]
+                if existing:
+                    latest = max(m['version'] for m in existing)
+                    if not messagebox.askyesno(
+                        'Model exists',
+                        f'Model "{model_name}" already has {len(existing)} version(s) '
+                        f'(latest: v{latest}).\n\n'
+                        f'Did you mean to resume from it?\n\n'
+                        f'Yes = resume from latest version\n'
+                        f'No = cancel'):
+                        return
+                    # Auto-set resume to latest version
+                    resume = f'{model_name}:{latest}'
+                    is_resuming = True
+            except Exception:
+                pass
+
         # Wrap in systemd-inhibit to prevent sleep during training
         cmd = [
             'systemd-inhibit', '--what=idle:sleep',
@@ -229,12 +253,12 @@ class TrainingTab(ttk.Frame):
             '--arena-rows', self.v_arena_rows.get(),
             '--num-creatures', self.v_num_creatures.get(),
         ]
-        model_name = self.v_model_name.get().strip()
         if model_name:
             cmd.extend(['--model', model_name])
-        resume = self.v_resume.get()
-        if resume and resume != '(new)':
-            # Extract "name:version" from the display string (before the parenthetical)
+        if is_resuming:
+            resume_key = resume.split(' (')[0]
+            cmd.extend(['--resume', resume_key])
+        elif resume and resume != '(new)':
             resume_key = resume.split(' (')[0]
             cmd.extend(['--resume', resume_key])
 
