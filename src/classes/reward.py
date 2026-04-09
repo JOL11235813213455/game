@@ -24,106 +24,101 @@ def _sln(x: float) -> float:
     return math.copysign(math.log(abs(x) + 1), x)
 
 
-def compute_reward(creature, prev: dict, curr: dict) -> float:
+def compute_reward(creature, prev: dict, curr: dict,
+                   breakdown: bool = False) -> float | tuple[float, dict]:
     """Compute reward for a single step.
 
     Args:
         creature: the Creature being evaluated
         prev: previous snapshot from make_reward_snapshot()
         curr: current snapshot from make_reward_snapshot()
+        breakdown: if True, also return per-signal dict
 
     Returns:
-        float reward value
+        float reward value, or (float, dict) if breakdown=True
     """
-    reward = 0.0
+    signals = {}
 
     # ---- DEATH (overrides everything) ----
     if not curr['alive']:
         if prev['alive']:
-            return -20.0  # just died
-        return -1.0  # ongoing death
+            signals['death'] = -20.0
+            total = -20.0
+        else:
+            signals['death_ongoing'] = -1.0
+            total = -1.0
+        return (total, signals) if breakdown else total
 
     # ---- 1. HP change (scale 8.0) ----
-    reward += _ln_ratio(curr['hp_ratio'], prev['hp_ratio']) * 8.0
+    signals['hp'] = _ln_ratio(curr['hp_ratio'], prev['hp_ratio']) * 8.0
 
     # ---- 2. Wealth / gold (scale 3.0) ----
-    reward += _ln_ratio(curr['gold'] + 1, prev['gold'] + 1) * 3.0
+    signals['gold'] = _ln_ratio(curr['gold'] + 1, prev['gold'] + 1) * 3.0
 
     # ---- 3. Debt reduction (scale 2.0) + underwater penalty ----
+    signals['debt'] = 0.0
     if prev['debt'] > 0 or curr['debt'] > 0:
-        # Positive when debt shrinks (before > after)
-        reward += _ln_ratio(prev['debt'] + 1, curr['debt'] + 1) * 2.0
+        signals['debt'] = _ln_ratio(prev['debt'] + 1, curr['debt'] + 1) * 2.0
     if curr['disposable'] < 0:
-        reward -= 0.5  # per-tick underwater penalty
+        signals['debt'] -= 0.5  # per-tick underwater penalty
 
     # ---- 4. Inventory value (scale 1.0) ----
-    reward += _ln_ratio(curr['inv_value'] + 1, prev['inv_value'] + 1) * 1.0
+    signals['inventory'] = _ln_ratio(curr['inv_value'] + 1, prev['inv_value'] + 1) * 1.0
 
     # ---- 5. Equipment KPI (scale 2.0) ----
-    reward += _ln_ratio(curr['eq_kpi'] + 1, prev['eq_kpi'] + 1) * 2.0
+    signals['equipment'] = _ln_ratio(curr['eq_kpi'] + 1, prev['eq_kpi'] + 1) * 2.0
 
     # ---- 6. Reputation (scale 3.0) ----
-    # Use offset to handle sign crossing
     offset = 50.0
-    reward += _ln_ratio(curr['reputation'] + offset,
-                        prev['reputation'] + offset) * 3.0
+    signals['reputation'] = _ln_ratio(curr['reputation'] + offset,
+                                      prev['reputation'] + offset) * 3.0
 
     # ---- 7. Ally count (scale 1.0, raw delta) ----
-    ally_delta = curr['allies'] - prev['allies']
-    reward += ally_delta * 1.0
+    signals['allies'] = (curr['allies'] - prev['allies']) * 1.0
 
     # ---- 8. Kills (scale 3.0) ----
-    kill_delta = curr['kills'] - prev['kills']
-    reward += kill_delta * 3.0
+    signals['kills'] = (curr['kills'] - prev['kills']) * 3.0
 
     # ---- 9. Exploration (scale 0.5) ----
     new_tiles = curr['tiles_explored'] - prev['tiles_explored']
     new_met = curr['creatures_met'] - prev['creatures_met']
-    reward += new_tiles * 0.2 + new_met * 0.5
+    signals['exploration'] = new_tiles * 0.2 + new_met * 0.5
 
     # ---- 10. Piety (scale 2.0) ----
+    signals['piety'] = 0.0
     if prev['piety'] > 0 or curr['piety'] > 0:
-        reward += _ln_ratio(curr['piety'] + 0.01,
-                            prev['piety'] + 0.01) * 2.0
-    # World alignment bonus
+        signals['piety'] = _ln_ratio(curr['piety'] + 0.01,
+                                     prev['piety'] + 0.01) * 2.0
     if curr['world_balance'] > 0:
-        reward += curr['world_balance'] * curr['piety'] * 0.5
-    # Lost/gained god
+        signals['piety'] += curr['world_balance'] * curr['piety'] * 0.5
     if prev['has_deity'] and not curr['has_deity']:
-        reward -= 2.0
+        signals['piety'] -= 2.0
     elif not prev['has_deity'] and curr['has_deity']:
-        reward += 1.0
+        signals['piety'] += 1.0
 
-    # ---- 11. Quest progress (steps 5.0, completion 10.0, failure -3.0) ----
+    # ---- 11. Quest progress ----
     step_delta = curr['quest_steps'] - prev['quest_steps']
     quest_delta = curr['quests_completed'] - prev['quests_completed']
-    reward += step_delta * 5.0
-    reward += quest_delta * 10.0
+    signals['quests'] = step_delta * 5.0 + quest_delta * 10.0
 
     # ---- 12. Life goals (scale 2.0) ----
-    goal_delta = curr['life_goals'] - prev['life_goals']
-    reward += goal_delta * 2.0
+    signals['life_goals'] = (curr['life_goals'] - prev['life_goals']) * 2.0
 
     # ---- 13. XP activity (scale 0.05) ----
-    if curr['exp'] > prev['exp']:
-        reward += 0.05  # sign(ln(exp_after/exp_before)) × 0.05
+    signals['xp'] = 0.05 if curr['exp'] > prev['exp'] else 0.0
 
     # ---- PENALTIES ----
-    # Failed actions
     fail_delta = curr['failed_actions'] - prev['failed_actions']
-    reward += fail_delta * -0.5
+    signals['failed_actions'] = fail_delta * -0.5
 
-    # Fatigue
     fatigue_delta = curr['fatigue'] - prev['fatigue']
-    if fatigue_delta > 0:
-        reward -= fatigue_delta * 1.5
+    signals['fatigue'] = -fatigue_delta * 1.5 if fatigue_delta > 0 else 0.0
 
-    # Overcrowding — penalty when 5+ creatures within 3 tiles
     nearby = curr.get('nearby_count', 0)
-    if nearby >= 5:
-        reward -= (nearby - 4) * 0.3  # -0.3 per creature above threshold
+    signals['crowding'] = -(nearby - 4) * 0.3 if nearby >= 5 else 0.0
 
-    return reward
+    total = sum(signals.values())
+    return (total, signals) if breakdown else total
 
 
 def make_reward_snapshot(creature) -> dict:

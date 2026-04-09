@@ -10,6 +10,7 @@ Usage:
 """
 from __future__ import annotations
 import argparse
+import json
 import sys
 import time
 import random
@@ -182,12 +183,37 @@ def _log(tag: str, value: float, step: int):
         _writer.add_scalar(tag, value, step)
 
 
+def _creature_final_state(c) -> dict:
+    """Capture a creature's final state for analytics."""
+    from classes.stats import Stat
+    hp_max = max(1, c.stats.active[Stat.HP_MAX]())
+    all_rels = list(c.relationships.values())
+    base_stats = {}
+    for st in [Stat.STR, Stat.VIT, Stat.AGL, Stat.PER, Stat.INT, Stat.CHR, Stat.LCK]:
+        base_stats[st.name] = c.stats.base.get(st, 10)
+    return {
+        'species': c.species, 'sex': c.sex,
+        'profile': '', 'mask': c.observation_mask,
+        'hp_ratio': c.stats.active[Stat.HP_CURR]() / hp_max,
+        'gold': c.gold,
+        'items': len(c.inventory.items),
+        'equipment': len(c.equipment),
+        'allies': sum(1 for r in all_rels if r[0] > 5),
+        'enemies': sum(1 for r in all_rels if r[0] < -5),
+        'kills': getattr(c, '_kills', 0),
+        'tiles_explored': getattr(c, '_tiles_explored', 0),
+        'creatures_met': len(c.relationships),
+        'base_stats': base_stats,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Training Phases
 # ---------------------------------------------------------------------------
 
 def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
-              arena_kwargs: dict = None, rollout_len: int = 4096) -> TorchCreatureNet:
+              arena_kwargs: dict = None, rollout_len: int = 4096,
+              sink=None) -> TorchCreatureNet:
     """Phase 1: Multi-agent PPO — all creatures share weights."""
     print(f'\n=== MAPPO Phase ({steps} steps) ===')
     arena_kwargs = arena_kwargs or {
@@ -275,7 +301,10 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
 
             prev_rew = sim._reward_snapshots.get(c.uid)
             curr_rew = make_reward_snapshot(c)
-            reward = compute_reward(c, prev_rew, curr_rew) if prev_rew else 0.0
+            if prev_rew:
+                reward, signals = compute_reward(c, prev_rew, curr_rew, breakdown=True)
+            else:
+                reward, signals = 0.0, {}
             sim._reward_snapshots[c.uid] = curr_rew
 
             if hasattr(c, '_history'):
@@ -289,6 +318,10 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
                 step_rewards = step_rewards[-500:]
             ep_steps += 1
 
+            if sink:
+                sink.record_step(c.uid, action, reward, signals,
+                                 creature_name=c.name or '', alive=c.is_alive)
+
         # PPO update every rollout_len steps
         if len(buffer) >= rollout_len:
             info = ppo.update(*buffer.get())
@@ -296,6 +329,9 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             _log('mappo/policy_loss', info['policy_loss'], step)
             _log('mappo/value_loss', info['value_loss'], step)
             _log('mappo/entropy', info['entropy'], step)
+            if sink:
+                sink.record_training_update(info['entropy'], info['value_loss'],
+                                            info['policy_loss'])
 
         # Write state for live viewer (every 10 steps to avoid IO spam)
         if step % 10 == 0:
@@ -340,6 +376,18 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             episode_rewards.append(avg)
             _log('mappo/episode_reward', avg, step)
             _log('mappo/alive_count', sim.alive_count, step)
+
+            if sink:
+                # Gather creature final states
+                creature_finals = {}
+                for c in sim.creatures:
+                    creature_finals[c.uid] = _creature_final_state(c)
+                sink.end_episode('MAPPO', 0, sim.alive_count,
+                                 len(sim.creatures),
+                                 arena_kwargs.get('cols', 0),
+                                 arena_kwargs.get('rows', 0),
+                                 creature_finals)
+
             total_reward = 0.0
             ep_steps = 0
             arena = generate_arena(**arena_kwargs)
@@ -441,7 +489,8 @@ def run_es(net: TorchCreatureNet, generations: int = 50,
 
 def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             checkpoint_dir: Path = None,
-            arena_kwargs: dict = None, rollout_len: int = 2048) -> TorchCreatureNet:
+            arena_kwargs: dict = None, rollout_len: int = 2048,
+            sink=None) -> TorchCreatureNet:
     """Phase 3: Single-agent PPO against diverse opponents."""
     print(f'\n=== PPO Phase ({steps} steps) ===')
     arena_kwargs = arena_kwargs or {
@@ -526,12 +575,19 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
         from classes.temporal import make_history_snapshot
         prev_rew = sim._reward_snapshots.get(agent.uid)
         curr_rew = make_reward_snapshot(agent)
-        reward = compute_reward(agent, prev_rew, curr_rew) if prev_rew else 0.0
+        if prev_rew:
+            reward, signals = compute_reward(agent, prev_rew, curr_rew, breakdown=True)
+        else:
+            reward, signals = 0.0, {}
         sim._reward_snapshots[agent.uid] = curr_rew
         total_reward += reward
         ppo_step_rewards.append(reward)
         if len(ppo_step_rewards) > 500:
             ppo_step_rewards = ppo_step_rewards[-500:]
+
+        if sink and agent.is_alive:
+            sink.record_step(agent.uid, action, reward, signals,
+                             creature_name=agent.name or '', alive=agent.is_alive)
 
         if hasattr(agent, '_history'):
             agent._history.append(make_history_snapshot(agent))
@@ -547,6 +603,9 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             _log('ppo/policy_loss', info['policy_loss'], step)
             _log('ppo/value_loss', info['value_loss'], step)
             _log('ppo/entropy', info['entropy'], step)
+            if sink:
+                sink.record_training_update(info['entropy'], info['value_loss'],
+                                            info['policy_loss'])
 
         # Write state for live viewer
         if step % 10 == 0:
@@ -578,6 +637,17 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             episode_rewards.append(total_reward)
             _log('ppo/episode_reward', total_reward, step)
             _log('ppo/alive_count', sim.alive_count, step)
+
+            if sink:
+                creature_finals = {}
+                for c in sim.creatures:
+                    creature_finals[c.uid] = _creature_final_state(c)
+                sink.end_episode('PPO', 0, sim.alive_count,
+                                 len(sim.creatures),
+                                 arena_kwargs.get('cols', 0),
+                                 arena_kwargs.get('rows', 0),
+                                 creature_finals)
+
             total_reward = 0.0
             arena = generate_arena(**arena_kwargs)
             sim = Simulation(arena)
@@ -695,6 +765,22 @@ def train(cycles: int = 3, mappo_steps: int = 100000,
     pipeline_t0 = time.time()
     all_cycle_stats = []
 
+    # Initialize training analytics sink
+    from editor.simulation.training_sink import TrainingSink, summarize_to_db
+    from editor.simulation.training_db import (
+        get_con as get_training_con, save_schema,
+        generate_observation_schema, generate_action_schema,
+    )
+
+    sink = TrainingSink(SAVE_DIR)
+
+    # Save current observation/action schemas
+    obs_schema = generate_observation_schema()
+    act_schema = generate_action_schema()
+    obs_schema_id = save_schema('observation', obs_schema, OBSERVATION_SIZE)
+    act_schema_id = save_schema('action', act_schema, NUM_ACTIONS)
+    print(f'  Obs schema: id={obs_schema_id}, Act schema: id={act_schema_id}')
+
     for cycle in range(cycles):
         print(f'\n{"="*60}')
         print(f'CYCLE {cycle + 1} / {cycles}')
@@ -703,22 +789,34 @@ def train(cycles: int = 3, mappo_steps: int = 100000,
         t0 = time.time()
 
         # Phase 1: MAPPO
-        net = run_mappo(net, ppo, steps=mappo_steps, arena_kwargs=arena_kwargs)
-        # Save .npz for runtime inference during training
+        mappo_t0 = time.time()
+        net = run_mappo(net, ppo, steps=mappo_steps, arena_kwargs=arena_kwargs,
+                        sink=sink)
+        sink.end_phase('MAPPO', cycle + 1, 0, mappo_steps,
+                       time.time() - mappo_t0)
         net.export_to_numpy(SAVE_DIR / f'mappo_cycle{cycle+1}.npz')
 
         # Phase 2: ES
+        es_t0 = time.time()
         net = run_es(net, generations=es_generations, variants=es_variants,
                      steps_per_variant=es_steps, arena_kwargs=es_arena_kwargs)
+        sink.end_phase('ES', cycle + 1, mappo_steps,
+                       mappo_steps + es_generations * es_variants,
+                       time.time() - es_t0)
 
         # Phase 3: PPO
+        ppo_t0 = time.time()
         ppo = PPO(net, lr=lr)  # fresh optimizer
         net = run_ppo(net, ppo, steps=ppo_steps, checkpoint_dir=SAVE_DIR,
-                      arena_kwargs=arena_kwargs)
+                      arena_kwargs=arena_kwargs, sink=sink)
+        sink.end_phase('PPO', cycle + 1, mappo_steps, mappo_steps + ppo_steps,
+                       time.time() - ppo_t0)
 
         elapsed = time.time() - t0
         all_cycle_stats.append({'cycle': cycle + 1, 'seconds': round(elapsed, 1)})
         print(f'\nCycle {cycle+1} complete in {elapsed:.0f}s')
+
+    sink.close()
 
     # Save final model to DB
     total_seconds = time.time() - pipeline_t0
@@ -732,7 +830,30 @@ def train(cycles: int = 3, mappo_steps: int = 100000,
         training_params, training_stats, total_seconds,
     )
 
-    # Also export .npz for runtime use
+    # Create training_runs record and summarize sink to training.db
+    try:
+        from datetime import datetime
+        tcon = get_training_con()
+        tcon.execute('''INSERT INTO training_runs
+            (model_name, model_version, parent_version,
+             obs_schema_id, act_schema_id,
+             started_at, finished_at, total_seconds, training_params)
+            VALUES (?,?,?,?,?,?,?,?,?)''',
+            (model_name, version, parent_version,
+             obs_schema_id, act_schema_id,
+             datetime.utcfromtimestamp(pipeline_t0).isoformat(sep=' ', timespec='seconds'),
+             datetime.utcnow().isoformat(sep=' ', timespec='seconds'),
+             total_seconds, json.dumps(training_params)))
+        tcon.commit()
+        run_id = tcon.execute('SELECT last_insert_rowid()').fetchone()[0]
+        tcon.close()
+        # Update sink run_id and summarize
+        summarize_to_db(SAVE_DIR, run_id)
+        print(f'  Training analytics saved to training.db (run_id={run_id})')
+    except Exception as e:
+        print(f'  Warning: failed to save training analytics: {e}')
+
+    # Export .npz for runtime use
     net.export_to_numpy(SAVE_DIR / 'final.npz')
     root_models = Path(__file__).parent.parent / 'models'
     net.export_to_numpy(root_models / 'latest.npz')
