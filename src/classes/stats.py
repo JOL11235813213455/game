@@ -325,6 +325,8 @@ OPPOSING_STATS: dict[str, tuple[Stat, Stat]] = {
     'intimidation_vs_fear':  (Stat.INTIMIDATION,  Stat.FEAR_RESIST),
     'deception_vs_detection':(Stat.DECEPTION,     Stat.DETECTION),
     # Persuasion: not opposed — enhances interaction rewards (talk/nonviolent)
+    # -- Utility --
+    'push':                  (Stat.STR,           Stat.STR),
 }
 
 # ---------------------------------------------------------------------------

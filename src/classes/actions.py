@@ -72,6 +72,10 @@ class Action(IntEnum):
     EXIT_BLOCK = 47
     EXIT_GUARD = 48
 
+    # New actions
+    DIG = 49
+    PUSH = 50
+
 
 NUM_ACTIONS = len(Action)
 
@@ -88,6 +92,7 @@ ACTION_NAMES = {
     Action.FLEE: 'flee', Action.FOLLOW: 'follow',
     Action.CALL_BACKUP: 'call_backup', Action.SLEEP: 'sleep',
     Action.SET_TRAP: 'set_trap', Action.BLOCK_STANCE: 'block_stance',
+    Action.DIG: 'dig', Action.PUSH: 'push',
 }
 
 
@@ -320,5 +325,17 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
     if action == Action.EXIT_GUARD:
         creature.stop_guard()
         return {'success': True}
+
+    # -- Dig / Push --
+    if action == Action.DIG:
+        return creature.dig()
+
+    if action == Action.PUSH:
+        if target is None:
+            return {'success': False, 'reason': 'no_target'}
+        # Push direction: from creature toward target
+        dx = target.location.x - creature.location.x
+        dy = target.location.y - creature.location.y
+        return creature.push(target, dx, dy, cols, rows)
 
     return {'success': False, 'reason': 'unknown_action'}

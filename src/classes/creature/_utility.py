@@ -234,3 +234,114 @@ class UtilityMixin:
     def enter_guard(self, cols: int, rows: int) -> bool:
         """Alias for guard()."""
         return self.guard(cols, rows)
+
+    def dig(self) -> dict:
+        """Dig at current tile to access buried inventory.
+
+        Requires a shovel-type tool in inventory or equipment.
+        Costs stamina. Transfers buried items to surface.
+        Returns dict with success, items_found.
+        """
+        from classes.inventory import Weapon, Equippable
+
+        result = {'success': False, 'items_found': []}
+
+        tile = self.current_map.tiles.get(self.location)
+        if tile is None:
+            result['reason'] = 'no_tile'
+            return result
+
+        if not hasattr(tile, 'buried_inventory') or not tile.buried_inventory.items:
+            result['reason'] = 'nothing_buried'
+            return result
+
+        # Check for shovel in inventory or equipment
+        has_shovel = False
+        all_items = list(self.inventory.items) + list(set(self.equipment.values()))
+        for item in all_items:
+            if getattr(item, 'name', '').lower() in ('shovel', 'spade', 'pickaxe'):
+                has_shovel = True
+                break
+
+        if not has_shovel:
+            result['reason'] = 'no_shovel'
+            return result
+
+        # Stamina cost
+        stam_cost = 5
+        if self.stats.active[Stat.CUR_STAMINA]() < stam_cost:
+            result['reason'] = 'exhausted'
+            return result
+        self.stats.base[Stat.CUR_STAMINA] = max(
+            0, self.stats.base.get(Stat.CUR_STAMINA, 0) - stam_cost)
+
+        # Transfer all buried items to surface
+        for item in list(tile.buried_inventory.items):
+            tile.buried_inventory.items.remove(item)
+            tile.inventory.items.append(item)
+            result['items_found'].append(item)
+
+        result['success'] = True
+        return result
+
+    def push(self, target, dx: int, dy: int, cols: int, rows: int) -> dict:
+        """Push another creature one tile in a direction.
+
+        Requires: adjacent to target, enough stamina, STR contest.
+        The push direction is from self toward target.
+        """
+        from classes.maps import MapKey
+
+        result = {'success': False}
+
+        # Must be adjacent
+        dist = abs(self.location.x - target.location.x) + abs(self.location.y - target.location.y)
+        if dist > 1:
+            result['reason'] = 'too_far'
+            return result
+
+        # Stamina cost
+        stam_cost = 3
+        if self.stats.active[Stat.CUR_STAMINA]() < stam_cost:
+            result['reason'] = 'exhausted'
+            return result
+        self.stats.base[Stat.CUR_STAMINA] = max(
+            0, self.stats.base.get(Stat.CUR_STAMINA, 0) - stam_cost)
+
+        # STR contest: pusher vs target
+        won, margin = self.stats.contest(target.stats, 'push')
+        if not won:
+            result['reason'] = 'resisted'
+            target.record_interaction(self, -1.0)
+            return result
+
+        # Normalize push direction to unit vector
+        if dx != 0:
+            dx = 1 if dx > 0 else -1
+        if dy != 0:
+            dy = 1 if dy > 0 else -1
+        if dx == 0 and dy == 0:
+            dx = 1  # default push east if on same tile somehow
+
+        # Check target tile
+        new_x = target.location.x + dx
+        new_y = target.location.y + dy
+        if new_x < 0 or new_x >= cols or new_y < 0 or new_y >= rows:
+            result['reason'] = 'edge'
+            return result
+
+        new_key = MapKey(new_x, new_y, target.location.z)
+        new_tile = target.current_map.tiles.get(new_key)
+        if new_tile is None:
+            result['reason'] = 'no_tile'
+            return result
+
+        # Push succeeds — move the target (even into unwalkable/liquid tiles!)
+        target.location = new_key
+        result['success'] = True
+        result['pushed_to'] = (new_x, new_y)
+
+        # Hostile act
+        target.record_interaction(self, -3.0)
+
+        return result
