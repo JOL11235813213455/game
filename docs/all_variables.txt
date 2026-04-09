@@ -1,0 +1,416 @@
+ALL GAME VARIABLES BY CLASS
+===========================
+Generated: 2026-04-08
+
+================================================================================
+TRACKABLE (src/classes/trackable.py) — Root base class
+================================================================================
+
+Class Variables:
+  _instances          weakref.WeakSet   All instances of this class
+  _subclasses         list              All Trackable subclasses
+  _next_uid           int               Auto-incrementing unique ID counter
+
+Instance Variables:
+  uid                 int               Unique identifier
+  _timed_events       dict[str, list]   {name: [interval_ms, last_tick, callback]}
+
+================================================================================
+WORLD_OBJECT (src/classes/world_object.py) — extends Trackable
+================================================================================
+
+Class Variables:
+  sprite_name         str               Default None
+  composite_name      str               None
+  z_index             int               Display layer, default 0
+  tile_scale          float             Sprite scale, default 1.0
+  collision           bool              False by default
+  _by_map             dict[int, WeakSet] Per-map spatial index
+
+Instance Variables:
+  _current_map        Map | None        Current map reference
+  location            MapKey            (x, y, z) position
+  anim                AnimationState    Current frame animation state
+  _composite_anim     str | None        Active composite animation name
+  _composite_anim_start int             Animation start timestamp
+  _composite_flip_h   bool              Horizontal flip flag
+  _variant_overrides  tuple             Layer sprite overrides
+
+Properties:
+  current_map         Map | None        Get/set map with _by_map registration
+
+================================================================================
+CREATURE (src/classes/creature.py) — extends WorldObject
+================================================================================
+
+Class Variables:
+  sprite_name         str               Default 'player'
+  z_index             int               3
+  collision           bool              True
+  YOUNG_MAX           int               30 days
+  OLD_MIN             int               365 days
+  ADULT_AGE           int               18 days
+  PAIR_COOLDOWN_DAYS  int               1 day
+  _DIR_BEHAVIORS      dict              Direction → animation mapping
+  _next_consumable_id int               Auto-incrementing consumable counter
+
+Instance Variables — Identity:
+  name                str               Creature name
+  species             str               Species identifier
+  sex                 str               'male' or 'female'
+  age                 int               Age in game days
+  is_abomination      bool              Cross-species offspring
+
+Instance Variables — Genetics:
+  chromosomes         tuple             (chrom_a, chrom_b) lists of 14 genes each (0-15)
+  mother_uid          int | None        UID of biological mother
+  father_uid          int | None        UID of biological father
+  inbred              bool              From close relatives
+
+Instance Variables — Stats:
+  stats               Stats             Unified stat container (base/derived/mods/active)
+  tile_scale          float             Sprite scale from species
+  sprite_name         str               Sprite from species
+  composite_name      str               Composite sprite from species
+
+Instance Variables — Inventory/Equipment:
+  inventory           Inventory         Item collection
+  equipment           dict[Slot, Equippable]  Equipped items by slot
+  gold                int               Currency
+  _item_prices        dict              {item_id: gold_paid} purchase history
+
+Instance Variables — Social:
+  relationships       dict[int, list]   {uid: [sentiment, count, min_score, max_score]}
+  rumors              dict[int, list]   {subject_uid: [(source_uid, sentiment, confidence, tick)]}
+  prudishness         float             0.0-1.0 pairing reluctance
+  partner_uid         int | None        UID of amorous partner
+
+Instance Variables — Debt:
+  loans               dict[int, dict]   {lender_uid: {principal, rate, originated}}
+  loans_given         dict[int, dict]   {borrower_uid: {principal, rate, originated}}
+
+Instance Variables — Religion:
+  deity               str | None        God name or None
+  piety               float             0.0-1.0 devotion level
+
+Instance Variables — Quests:
+  quest_log           QuestLog          Per-creature quest tracking
+
+Instance Variables — Reproduction:
+  is_pregnant         bool              Currently gestating
+  _pair_cooldown      int               Game tick when next pairing allowed
+  _pregnancy_egg      Egg | None        Egg being gestated
+  _has_hatched_child  bool              Has successfully hatched offspring
+
+Instance Variables — Behavior/AI:
+  behavior            object            AI module (RandomWander, Neural, StatWeighted, etc.)
+  _cols               int               Map width for behavior
+  _rows               int               Map height for behavior
+  dialogue            dict | None       {target_uid, conversation, current_node_id}
+
+Instance Variables — Navigation:
+  map_stack           list[tuple]       Stack of (Map, MapKey) for nested maps
+
+Instance Variables — Health/Regen:
+  _regen_start        float             Timestamp when HP regen begins
+  _regen_fib          tuple             (prev, curr) fibonacci regen state
+  sleep_debt          int               Days without sleep
+  _fatigue_level      int               Fatigue debuff tier 0-4
+
+Instance Variables — RL Tracking:
+  life_goal_attainment int              Pairing/hatch/child milestones
+  failed_actions      int               Actions failed due to resources
+  _kills              int               Combat kill counter
+  _tiles_explored     int               Tile discovery counter
+  _quests_completed   int               Quest completion counter
+  _quest_steps_completed int            Quest step counter
+  _max_hit_taken      int               Worst single hit received
+
+Properties:
+  age_class           str               'young', 'adult', or 'old'
+  is_alive            bool              HP > 0
+  is_adult            bool              age >= ADULT_AGE (18)
+  is_child            bool              age < ADULT_AGE
+  is_fertile          bool              Female: fecundity > 0. Male: is_adult
+  is_mother           bool              Has hatched a child
+  has_partner         bool              partner_uid is not None
+  is_blocking         bool              In block stance
+  is_guarding         bool              In guard stance
+  is_sleeping         bool              In sleep state
+  carried_weight      float             Sum of inventory + equipped weight
+  fatigue_level       int               0=rested, 1=mild, 2=exhaust, 3=severe, 4=collapse
+
+================================================================================
+STATS (src/classes/stats.py)
+================================================================================
+
+Stat Enum — 51 values:
+  Base:         STR, VIT, AGL, PER, INT, CHR, LCK
+  Progression:  LVL, EXP, HIT_DICE
+  Tracking:     HP_CURR, CUR_STAMINA, CUR_MANA
+  Combat:       HP_MAX, MELEE_DMG, RANGED_DMG, MAGIC_DMG, ATK_SPEED,
+                ACCURACY, CRIT_CHANCE, CRIT_DMG, DODGE, ARMOR, BLOCK
+  Movement:     MOVE_SPEED, SIGHT_RANGE, HEARING_RANGE, STEALTH,
+                DETECTION, CARRY_WEIGHT
+  Resources:    MAX_STAMINA, MAX_MANA, MANA_REGEN, HP_REGEN_DELAY, STAM_REGEN
+  Resistance:   POISON_RESIST, DISEASE_RESIST, MAGIC_RESIST,
+                STAGGER_RESIST, FEAR_RESIST
+  Social:       BARTER_MOD, NPC_DISPOSITION, COMPANION_LIMIT,
+                PERSUASION, INTIMIDATION, DECEPTION
+  Loot/Craft:   LOOT_GINI, CRAFT_QUALITY, DURABILITY_USE
+  Progression:  XP_MOD
+
+Stats Class Instance Variables:
+  base                dict[Stat, int]   Raw base stat values
+  derived             dict[Stat, int]   Cached derived values
+  mods                list[dict]        [{source, stat, amount, stackable}]
+  active              dict[Stat, callable]  Final evaluated values (call to get)
+  unspent_stat_points int               Points available to allocate
+  on_level_up         list[callable]    Level-up callbacks
+
+Module Constants:
+  BASE_STATS          frozenset         {STR, VIT, AGL, PER, INT, CHR, LCK}
+  PROGRESSION_STATS   frozenset         {LVL, EXP, HIT_DICE}
+  TRACKING_STATS      frozenset         {HP_CURR, CUR_STAMINA, CUR_MANA}
+  DERIVED_FORMULAS    dict[Stat, fn]    Formula functions for each derived stat
+  OPPOSING_STATS      dict[str, tuple]  Contest definitions
+  STAT_POINTS_PER_LEVEL int             3
+
+================================================================================
+MAP / TILE (src/classes/maps.py)
+================================================================================
+
+MapKey (namedtuple):
+  x                   int               X coordinate, default 0
+  y                   int               Y coordinate, default 0
+  z                   int               Z/depth coordinate, default 0
+
+Bounds (namedtuple):
+  n, s, e, w          bool              Cardinal passage flags, default True
+  ne, nw, se, sw      bool              Diagonal passage flags, default True
+
+Tile Instance Variables:
+  walkable            bool              Creatures can move here
+  covered             bool              Visible from above
+  bounds              Bounds            Directional passage restrictions
+  sprite_name         str | None        Visual representation
+  tile_scale          float             Sprite scaling, default 1.0
+  animation_name      str | None        Animation key
+  speed_modifier      float             Movement speed multiplier, default 1.0
+  bg_color            str | None        Background color
+  nested_map          Map | None        Map inside this tile
+  inventory           Inventory         Items on this tile
+  tile_template       str | None        Template reference
+  linked_map          str | None        Target map name for teleport
+  linked_location     MapKey | None     Target position for teleport
+  link_auto           bool              Auto-trigger teleport on step
+  stat_mods           dict              {key: value} tile-level modifiers
+                                        Keys used: 'hidden_dc', 'trap_dc', 'trap_item'
+
+Map Instance Variables:
+  tiles               dict[MapKey, Tile] Spatial grid
+  entrance            tuple[int, int]    Default spawn (x, y)
+  name                str | None         Map identifier
+  default_tile_template str | None       Default tile type
+  x_min, x_max        int               Horizontal bounds
+  y_min, y_max        int               Vertical bounds
+  z_min, z_max        int               Depth bounds
+
+================================================================================
+ITEMS (src/classes/inventory.py)
+================================================================================
+
+Slot Enum:
+  HEAD, NECK, SHOULDERS, CHEST, BACK, WRISTS, HANDS, WAIST,
+  LEGS, FEET, RING_L, RING_R, HAND_L, HAND_R
+
+Item Instance Variables:
+  name                str               Item name
+  description         str               Flavor text
+  weight              float             Carrying burden
+  value               float             Base gold equivalent
+  sprite_name         str | None        Visual
+  inventoriable       bool              Can be picked up
+  buffs               dict              {Stat: amount} stat modifications
+  action_word         str               Verb ('slash', 'drink', etc.)
+  requirements        dict              {Stat: min_value} to use/equip
+
+Stackable extends Item:
+  max_stack_size      int               Max per stack, default 99
+  quantity            int               Current count, default 1
+
+Consumable extends Stackable:
+  duration            float             Effect duration seconds, default 0.0
+
+Ammunition extends Stackable:
+  damage              float             Per-projectile damage
+  destroy_on_use_probability float      Break chance, default 1.0
+  recoverable         bool              Lands on tile on miss, default True
+
+Equippable extends Item:
+  slots               list[Slot]        Valid equipment slots
+  slot_count          int               Slots occupied, default 1
+  durability_max      int               Max durability, default 100
+  durability_current  int               Current durability
+  render_on_creature  bool              Show on sprite, default False
+
+Weapon extends Equippable:
+  damage              float             Base damage
+  attack_time_ms      int               Attack speed ms, default 500
+  directions          list[str]         Attack directions, default ['front']
+  range               int               Tiles, default 1
+  ammunition_type     str | None        Required ammo name
+
+Wearable extends Equippable:
+  (no additional variables)
+
+Structure extends Item:
+  footprint           list[tuple]       Occupied tile offsets
+  collision_mask      list[tuple]       Blocking tile offsets
+  entry_points        dict              {offset_key: [x,y]}
+  nested_map_name     str | None        Interior map name
+
+Egg extends Item:
+  creature            Creature          Unhatched creature inside
+  live                bool              Still viable
+  days_with_mother    int               Gestation with biological mother
+  gestation_days      int               Total days since conception
+  gestation_period    int               Days to hatch, default 30
+  mother_species      str               Mother's species
+  father_species      str               Father's species
+
+Inventory Instance Variables:
+  items               list[Item]        Contained items
+
+================================================================================
+GODS / WORLD (src/classes/gods.py)
+================================================================================
+
+God Instance Variables:
+  name                str               God's name
+  domain              str               Portfolio (order, chaos, etc.)
+  opposed_god         str | None        Opposing deity name
+  aligned_actions     list[str]         Action names that please this god
+  opposed_actions     list[str]         Action names that displease this god
+  description         str               Lore text
+  action_count        int               Global action counter
+
+Default Pantheon (4 opposed pairs):
+  Aelora (order)      ↔  Xarith (chaos)
+  Solmara (compassion) ↔  Vaelkor (wrath)
+  Verithan (truth)    ↔  Nyssara (lies)
+  Sylvaine (life)     ↔  Mortheus (death)
+
+WorldData Instance Variables:
+  gods                dict[str, God]    All gods
+  dichotomies         dict[str, tuple]  Opposed pairs
+  flags               dict[str, object] Global quest/world state
+
+Module Constants:
+  PIETY_DRIFT_BASE         0.01    Per opposing act witnessed
+  PIETY_MAX_ACTS_PER_CYCLE 10      Max acts before cooldown
+  PIETY_CONVERSION_THRESHOLD 5     Piety needed to adopt new god
+  PIETY_MIN_FOR_GOD        0.0     Minimum to keep deity
+
+================================================================================
+QUESTS (src/classes/quest.py)
+================================================================================
+
+QuestState Enum:
+  AVAILABLE, ACTIVE, COMPLETED, FAILED
+
+QuestLog Instance Variables:
+  quests              dict[str, dict]   Per-quest tracking:
+    'state'           QuestState        Current state
+    'steps_completed' set               {(step_no, step_sub), ...}
+    'started_at'      int               Game tick of acceptance
+    'step_timers'     dict              {(step_no, sub): start_tick}
+    'completed_at'    int | None        Game tick of completion
+    'cooldown_until'  int | None        Tick when repeatable quest available
+
+================================================================================
+GENETICS (src/classes/genetics.py)
+================================================================================
+
+Constants:
+  GENE_STAT_MAP       dict              {position 0-13: Stat} (2 per stat)
+  NUM_GENES           int               14
+  Y_BIAS_STATS        set               {STR, INT, PER} male-favored
+  X_BIAS_STATS        set               {VIT, AGL, CHR} female-favored
+  MUTATION_RATE        float            0.02 (2%)
+  INBRED_MUTATION_RATE float            0.15 (15%)
+
+================================================================================
+ACTIONS (src/classes/actions.py)
+================================================================================
+
+Action Enum (49 actions):
+  Movement:    MOVE_N..NW (0-7), RUN_N..NW (8-15), SNEAK_N..NW (16-23)
+  Combat:      MELEE_ATTACK (24), RANGED_ATTACK (25), GRAPPLE (26), CAST_SPELL (27)
+  Social:      INTIMIDATE (28), DECEIVE (29), TRADE (30), BRIBE (31),
+               STEAL (32), SHARE_RUMOR (33), TALK (34)
+  Utility:     PICKUP (35), DROP (36), USE_ITEM (37), WAIT (38), GUARD (39),
+               SEARCH (40), FLEE (41), FOLLOW (42), CALL_BACKUP (43),
+               SLEEP (44), SET_TRAP (45)
+  Stances:     BLOCK_STANCE (46), EXIT_BLOCK (47), EXIT_GUARD (48)
+
+Constants:
+  NUM_ACTIONS         int               49
+  ACTION_NAMES        dict              {Action: god_action_str}
+
+================================================================================
+OBSERVATION (src/classes/observation.py)
+================================================================================
+
+Constants:
+  MAX_NEIGHBORS        int              8
+  OBSERVATION_SIZE     int              114 (current — needs update)
+  SELF_STATS_SIZE      int              15
+  RESOURCES_SIZE       int              3
+  STATUS_SIZE          int              4
+  PER_NEIGHBOR_SIZE    int              10
+  TERRAIN_SIZE         int              9
+  TEMPORAL_SIZE        int              3
+
+================================================================================
+VALUATION (src/classes/valuation.py)
+================================================================================
+
+Functions:
+  compute_raw_kpi(item, creature)      → float   Item effectiveness score
+  decompounded_value(base, uses)       → float   Time-preference weighted total
+  worth_to_creature(item, creature)    → float   Gold-equivalent value
+  min_sell_price(item, creature)       → float   Floor selling price
+  max_buy_price(item, creature)        → float   Ceiling buying price
+  compute_trade_price(item, s, b)      → dict    Surplus split negotiation
+  trade_reward(surplus, wealth)        → float   RL reward from trade
+
+================================================================================
+REWARD (src/classes/reward.py)
+================================================================================
+
+Signals (current — to be rebuilt):
+  1. HP change           ln × 8.0
+  2. Wealth (gold)       ln × 3.0
+  3. Debt reduction      ln × 2.0 + underwater -0.5/tick
+  4. Inventory value     ln × 1.0
+  5. Equipment KPI       ln × 2.0
+  6. Reputation          sumproduct(sentiment,depth)/sum(depth), ln × 3.0
+  7. Ally count          delta × 1.0
+  8. Kills               delta × 3.0
+  9. Exploration         tiles 0.2 + creatures 0.5
+  10. Piety              ln × 2.0 + world balance bonus
+  11. Quest progress     steps 5.0 + completion 10.0 + failure -3.0
+  12. Life goals         delta × 2.0
+  13. XP activity        sign(ln) × 0.05
+
+Penalties:
+  Death                  -20 flat
+  Failed actions         -0.5 per
+  Fatigue                -1.5 per tier
+  Underwater             -0.5 per tick
+
+Snapshot fields:
+  alive, hp_ratio, stam_ratio, inventory_value, total_sentiment,
+  ally_count, creatures_met, tiles_explored, kills, fatigue,
+  piety, world_balance

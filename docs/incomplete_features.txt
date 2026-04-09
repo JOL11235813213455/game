@@ -96,6 +96,8 @@ FUTURE: PRESENTATION LAYER
 - Stylized text display system (for dialogue, cutscenes, quests)
 - Sound system (SFX + music)
 - Cutscene engine (text + sound + scripted camera/events)
+- 3D rendering mode: translate tile maps to Doom-style BSP (linedefs from
+  tile bounds, sectors from z-levels, sprites as things)
 
 DIALOGUE SYSTEM (classes/creature.py, data/db.py, editor/dialogue_tab.py)
 - dialogue table: conversation trees with parent-child nodes (parent_id=NULL for roots)
