@@ -13,12 +13,25 @@ DB_PATH = Path(__file__).parent / 'game.db'
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS species (
-    name        TEXT PRIMARY KEY,
-    playable    INTEGER NOT NULL,
-    sprite_name TEXT REFERENCES sprites(name),
-    tile_scale  REAL NOT NULL DEFAULT 1.0,
-    prudishness REAL,
-    size        TEXT NOT NULL DEFAULT 'medium'
+    name               TEXT PRIMARY KEY,
+    playable           INTEGER NOT NULL,
+    sprite_name        TEXT REFERENCES sprites(name),
+    composite_name     TEXT,
+    tile_scale         REAL NOT NULL DEFAULT 1.0,
+    size               TEXT NOT NULL DEFAULT 'medium',
+    description        TEXT NOT NULL DEFAULT '',
+    prudishness        REAL NOT NULL DEFAULT 0.5,
+    base_move_speed    REAL NOT NULL DEFAULT 4.0,
+    lifespan           INTEGER NOT NULL DEFAULT 365,
+    maturity_age       INTEGER NOT NULL DEFAULT 18,
+    young_max          INTEGER NOT NULL DEFAULT 30,
+    fecundity_peak     INTEGER NOT NULL DEFAULT 100,
+    fecundity_end      INTEGER NOT NULL DEFAULT 300,
+    aggression         REAL NOT NULL DEFAULT 0.3,
+    sociability        REAL NOT NULL DEFAULT 0.5,
+    territoriality     REAL NOT NULL DEFAULT 0.3,
+    curiosity_modifier REAL NOT NULL DEFAULT 0.0,
+    preferred_deity    TEXT
 );
 CREATE TABLE IF NOT EXISTS species_stats (
     species_name TEXT NOT NULL REFERENCES species(name),
@@ -76,15 +89,26 @@ CREATE TABLE IF NOT EXISTS item_slots (
     PRIMARY KEY (item_key, slot)
 );
 CREATE TABLE IF NOT EXISTS creatures (
-    key          TEXT PRIMARY KEY,
-    name         TEXT NOT NULL DEFAULT '',
-    species      TEXT NOT NULL REFERENCES species(name),
-    level        INTEGER,
-    sex          TEXT,
-    age          INTEGER,
-    prudishness  REAL,
-    behavior     TEXT,
-    items        TEXT NOT NULL DEFAULT '[]'
+    key              TEXT PRIMARY KEY,
+    name             TEXT NOT NULL DEFAULT '',
+    title            TEXT NOT NULL DEFAULT '',
+    species          TEXT NOT NULL REFERENCES species(name),
+    level            INTEGER,
+    sex              TEXT,
+    age              INTEGER,
+    prudishness      REAL,
+    behavior         TEXT,
+    items            TEXT NOT NULL DEFAULT '[]',
+    deity            TEXT,
+    piety            REAL,
+    gold             INTEGER,
+    observation_mask TEXT,
+    is_unique        INTEGER NOT NULL DEFAULT 1,
+    spawn_map        TEXT,
+    spawn_x          INTEGER,
+    spawn_y          INTEGER,
+    dialogue_tree    TEXT,
+    description      TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS creature_stats (
     creature_key TEXT NOT NULL REFERENCES creatures(key),

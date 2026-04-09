@@ -3,8 +3,7 @@ from tkinter import ttk
 
 from editor.db import migrate_db
 from editor.items_tab import ItemsTab
-from editor.species_tab import SpeciesTab
-from editor.creatures_tab import CreaturesTab
+from editor.creatures_master_tab import CreaturesMasterTab
 from editor.dialogue_tab import DialogueTab
 from editor.spells_tab import SpellsTab
 from editor.quests_tab import QuestsTab
@@ -58,8 +57,7 @@ class EditorApp(tk.Tk):
         maps_notebook.add(self.map_editor_tab, text='  Map Editor  ')
         maps_notebook.add(self.tiles_tab,     text='  Tile Templates  ')
 
-        self.species_tab   = SpeciesTab(notebook)
-        self.creatures_tab = CreaturesTab(notebook)
+        self.creatures_master = CreaturesMasterTab(notebook)
         self.items_tab     = ItemsTab(notebook)
         self.spells_tab    = SpellsTab(notebook)
         self.quests_tab    = QuestsTab(notebook)
@@ -67,8 +65,7 @@ class EditorApp(tk.Tk):
         self.dialogue_tab  = DialogueTab(notebook)
         self.sql_tab       = SqlTab(notebook)
 
-        notebook.add(self.species_tab,   text='  Species  ')
-        notebook.add(self.creatures_tab, text='  Creatures  ')
+        notebook.add(self.creatures_master, text='  Creatures  ')
         notebook.add(self.items_tab,     text='  Items  ')
         notebook.add(self.spells_tab,    text='  Spells  ')
         notebook.add(self.quests_tab,    text='  Quests  ')
@@ -82,18 +79,18 @@ class EditorApp(tk.Tk):
 
     def _on_sprites_changed(self):
         self.items_tab.refresh_sprite_dropdown()
-        self.species_tab.refresh_sprite_dropdown()
+        self.creatures_master.refresh_sprite_dropdown()
         self.tiles_tab.refresh_sprite_dropdown()
         self.spells_tab.refresh_sprite_dropdown()
 
     def _on_tab_changed(self, event):
         tab = event.widget.tab(event.widget.select(), 'text').strip()
-        if tab in ('Items', 'Species', 'Creatures', 'Tile Templates', 'Maps'):
+        if tab in ('Items', 'Creatures', 'Tile Templates', 'Maps'):
             self.items_tab.refresh_sprite_dropdown()
-            self.species_tab.refresh_sprite_dropdown()
+            self.creatures_master.refresh_sprite_dropdown()
             self.tiles_tab.refresh_sprite_dropdown()
         if tab == 'Creatures':
-            self.creatures_tab.refresh_species_dropdown()
+            self.creatures_master.refresh_species_dropdown()
         if tab == 'Dialogue':
             self.dialogue_tab.refresh_dropdowns()
         if tab in ('Map Editor', 'Maps'):
