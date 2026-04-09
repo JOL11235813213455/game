@@ -56,6 +56,7 @@ class DialogueTab(ttk.Frame):
         self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         tsb.pack(side=tk.RIGHT, fill=tk.Y)
         self.tree.bind('<<TreeviewSelect>>', self._on_tree_select)
+        self.tree.bind('<Shift-Delete>', lambda e: self._delete_node())
 
         # Buttons under tree
         btn_row = ttk.Frame(left)

@@ -31,6 +31,7 @@ class TilesTab(ttk.Frame):
         self.listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         sb.pack(side=tk.RIGHT, fill=tk.Y)
         self.listbox.bind('<<ListboxSelect>>', self._on_select)
+        self.listbox.bind('<Shift-Delete>', lambda e: self._delete())
         br = ttk.Frame(left)
         br.pack(fill=tk.X, pady=4)
         btn_new = ttk.Button(br, text='New',    command=self._new); btn_new.pack(side=tk.LEFT, padx=2)

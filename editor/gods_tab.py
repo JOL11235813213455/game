@@ -31,6 +31,7 @@ class GodsTab(ttk.Frame):
         self.listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         sb.pack(side=tk.RIGHT, fill=tk.Y)
         self.listbox.bind('<<ListboxSelect>>', self._on_select)
+        self.listbox.bind('<Shift-Delete>', lambda e: self._delete())
 
         btn_row = ttk.Frame(left)
         btn_row.pack(fill=tk.X, pady=4)

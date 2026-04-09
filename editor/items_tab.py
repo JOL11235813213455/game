@@ -62,6 +62,7 @@ class _ItemSubTab(ttk.Frame):
         self.listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         sb.pack(side=tk.RIGHT, fill=tk.Y)
         self.listbox.bind('<<ListboxSelect>>', self._on_select)
+        self.listbox.bind('<Shift-Delete>', lambda e: self._delete())
 
         btn_row = ttk.Frame(left)
         btn_row.pack(fill=tk.X, pady=4)
@@ -734,7 +735,7 @@ class _StructureTab(_ItemSubTab):
             self._map_cb = ttk.Combobox(p, textvariable=self.v_nested_map,
                                         values=self._map_names, state='readonly', width=18)
             self._map_cb.pack(anchor='w')
-        self._add('Nested Map', _build_map)
+        self._add('Nested Map', _build_map, 'Interior map when entering this structure')
 
     def _add_specific_vals(self, v):
         v['footprint'] = self.v_footprint.get().strip()
