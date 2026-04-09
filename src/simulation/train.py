@@ -374,13 +374,16 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
 
 def train(cycles: int = 3, mappo_steps: int = 100000,
           es_generations: int = 50, es_variants: int = 50,
-          ppo_steps: int = 100000, lr: float = 3e-4):
+          ppo_steps: int = 100000, lr: float = 3e-4,
+          run_name: str = None, resume_from: str = None):
     """Run the full MAPPO → ES → PPO training pipeline."""
     global _writer
     from torch.utils.tensorboard import SummaryWriter
-    run_name = f'train_{time.strftime("%Y%m%d_%H%M%S")}'
+    if not run_name:
+        run_name = f'train_{time.strftime("%Y%m%d_%H%M%S")}'
     _writer = SummaryWriter(log_dir=LOG_DIR / run_name)
     print(f'TensorBoard: tensorboard --logdir {LOG_DIR}')
+    print(f'Run name: {run_name}')
     print(f'Training pipeline: {cycles} cycles')
     print(f'  MAPPO: {mappo_steps} steps per cycle')
     print(f'  ES: {es_generations} generations × {es_variants} variants')
@@ -390,6 +393,9 @@ def train(cycles: int = 3, mappo_steps: int = 100000,
     print(f'  Learning rate: {lr}')
 
     net = TorchCreatureNet()
+    if resume_from:
+        print(f'  Resuming from: {resume_from}')
+        net.load_state_dict(torch.load(resume_from, weights_only=True))
     ppo = PPO(net, lr=lr)
     print(f'  Net params: {net.param_count():,}')
     print()
@@ -440,6 +446,8 @@ if __name__ == '__main__':
     parser.add_argument('--ppo-steps', type=int, default=100000)
     parser.add_argument('--lr', type=float, default=3e-4)
     parser.add_argument('--seed', type=int, default=42)
+    parser.add_argument('--name', type=str, default=None, help='Run name for TensorBoard')
+    parser.add_argument('--resume', type=str, default=None, help='Path to .pt checkpoint to resume from')
     args = parser.parse_args()
 
     random.seed(args.seed)
@@ -453,4 +461,6 @@ if __name__ == '__main__':
         es_variants=args.es_variants,
         ppo_steps=args.ppo_steps,
         lr=args.lr,
+        run_name=args.name,
+        resume_from=args.resume,
     )

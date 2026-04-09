@@ -98,6 +98,27 @@ class TrainingTab(ttk.Frame):
         self.btn_tb.pack(side=tk.LEFT, padx=4)
         add_tooltip(self.btn_tb, 'Launch TensorBoard in browser (http://localhost:6006)')
 
+        # Run name + resume
+        name_row = ttk.Frame(ctrl)
+        name_row.pack(fill=tk.X, pady=2)
+        ttk.Label(name_row, text='Run name:').pack(side=tk.LEFT, padx=4)
+        self.v_run_name = tk.StringVar(value='')
+        e = ttk.Entry(name_row, textvariable=self.v_run_name, width=20)
+        e.pack(side=tk.LEFT, padx=2)
+        add_tooltip(e, 'Name for this training run (blank = auto timestamp)')
+
+        ttk.Label(name_row, text='Resume from:').pack(side=tk.LEFT, padx=8)
+        self.v_resume = tk.StringVar(value='(new)')
+        self._checkpoint_list = ['(new)']
+        self._refresh_checkpoints()
+        self.resume_cb = ttk.Combobox(name_row, textvariable=self.v_resume,
+                                      values=self._checkpoint_list, width=25)
+        self.resume_cb.pack(side=tk.LEFT, padx=2)
+        add_tooltip(self.resume_cb, 'Start fresh or resume from a saved .pt checkpoint')
+        btn_refresh = ttk.Button(name_row, text='↻', width=3, command=self._refresh_checkpoints)
+        btn_refresh.pack(side=tk.LEFT, padx=2)
+        add_tooltip(btn_refresh, 'Refresh checkpoint list')
+
         # Status
         self.v_status = tk.StringVar(value='Idle')
         ttk.Label(ctrl, textvariable=self.v_status, font=('TkDefaultFont', 10, 'bold')).pack(anchor='w', pady=2)
@@ -122,6 +143,13 @@ class TrainingTab(ttk.Frame):
         self.models_list.pack(fill=tk.X)
         self._refresh_models()
 
+    def _refresh_checkpoints(self):
+        self._checkpoint_list = ['(new)']
+        if MODELS_DIR.exists():
+            for f in sorted(MODELS_DIR.glob('*.pt')):
+                self._checkpoint_list.append(f.name)
+        self.resume_cb['values'] = self._checkpoint_list
+
     def _log(self, text):
         self.log_text.configure(state='normal')
         self.log_text.insert(tk.END, text)
@@ -143,6 +171,12 @@ class TrainingTab(ttk.Frame):
             '--lr', self.v_lr.get(),
             '--seed', self.v_seed.get(),
         ]
+        run_name = self.v_run_name.get().strip()
+        if run_name:
+            cmd.extend(['--name', run_name])
+        resume = self.v_resume.get()
+        if resume and resume != '(new)':
+            cmd.extend(['--resume', str(MODELS_DIR / resume)])
 
         self._log(f'Starting: {" ".join(cmd)}\n\n')
         self._process = subprocess.Popen(
