@@ -468,8 +468,11 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
 
 def train(cycles: int = 3, mappo_steps: int = 100000,
           es_generations: int = 50, es_variants: int = 50,
+          es_steps: int = 500,
           ppo_steps: int = 100000, lr: float = 3e-4,
-          run_name: str = None, resume_from: str = None):
+          run_name: str = None, resume_from: str = None,
+          arena_cols: int = 25, arena_rows: int = 25,
+          num_creatures: int = 16):
     """Run the full MAPPO → ES → PPO training pipeline."""
     global _writer, SAVE_DIR
     from torch.utils.tensorboard import SummaryWriter
@@ -484,7 +487,7 @@ def train(cycles: int = 3, mappo_steps: int = 100000,
     print(f'Models dir: {SAVE_DIR}')
     print(f'Training pipeline: {cycles} cycles')
     print(f'  MAPPO: {mappo_steps} steps per cycle')
-    print(f'  ES: {es_generations} generations × {es_variants} variants')
+    print(f'  ES: {es_generations} generations × {es_variants} variants × {es_steps} steps')
     print(f'  PPO: {ppo_steps} steps per cycle')
     print(f'  Observation size: {OBSERVATION_SIZE}')
     print(f'  Action space: {NUM_ACTIONS}')
@@ -507,7 +510,25 @@ def train(cycles: int = 3, mappo_steps: int = 100000,
         net.load_state_dict(saved_state, strict=False)
     ppo = PPO(net, lr=lr)
     print(f'  Net params: {net.param_count():,}')
+    print(f'  Arena: {arena_cols}x{arena_rows}, {num_creatures} creatures')
     print()
+
+    # Build arena kwargs used by all phases
+    arena_kwargs = {
+        'cols': arena_cols, 'rows': arena_rows,
+        'num_creatures': num_creatures,
+        'mask_probability': 0.1,
+        'mask_pool': ['socially_deaf', 'blind', 'deaf', 'fearless',
+                      'feral', 'impulsive', 'nearsighted', 'paranoid'],
+    }
+    # ES uses smaller arena and more masks by default
+    es_arena_kwargs = {
+        **arena_kwargs,
+        'mask_probability': 0.15,
+        'mask_pool': ['socially_deaf', 'blind', 'deaf', 'fearless',
+                      'feral', 'impulsive', 'nearsighted', 'paranoid',
+                      'amnesiac', 'greedy', 'zealot'],
+    }
 
     for cycle in range(cycles):
         print(f'\n{"="*60}')
@@ -517,18 +538,20 @@ def train(cycles: int = 3, mappo_steps: int = 100000,
         t0 = time.time()
 
         # Phase 1: MAPPO
-        net = run_mappo(net, ppo, steps=mappo_steps)
+        net = run_mappo(net, ppo, steps=mappo_steps, arena_kwargs=arena_kwargs)
         net.export_to_numpy(SAVE_DIR / f'mappo_cycle{cycle+1}.npz')
         torch.save(net.state_dict(), SAVE_DIR / f'mappo_cycle{cycle+1}.pt')
 
         # Phase 2: ES
-        net = run_es(net, generations=es_generations, variants=es_variants)
+        net = run_es(net, generations=es_generations, variants=es_variants,
+                     steps_per_variant=es_steps, arena_kwargs=es_arena_kwargs)
         net.export_to_numpy(SAVE_DIR / f'es_cycle{cycle+1}.npz')
         torch.save(net.state_dict(), SAVE_DIR / f'es_cycle{cycle+1}.pt')
 
         # Phase 3: PPO
         ppo = PPO(net, lr=lr)  # fresh optimizer
-        net = run_ppo(net, ppo, steps=ppo_steps, checkpoint_dir=SAVE_DIR)
+        net = run_ppo(net, ppo, steps=ppo_steps, checkpoint_dir=SAVE_DIR,
+                      arena_kwargs=arena_kwargs)
         net.export_to_numpy(SAVE_DIR / f'ppo_cycle{cycle+1}.npz')
         torch.save(net.state_dict(), SAVE_DIR / f'ppo_cycle{cycle+1}.pt')
 
@@ -559,11 +582,15 @@ if __name__ == '__main__':
     parser.add_argument('--mappo-steps', type=int, default=100000)
     parser.add_argument('--es-generations', type=int, default=50)
     parser.add_argument('--es-variants', type=int, default=50)
+    parser.add_argument('--es-steps', type=int, default=500, help='Sim steps per ES variant evaluation')
     parser.add_argument('--ppo-steps', type=int, default=100000)
     parser.add_argument('--lr', type=float, default=3e-4)
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--name', type=str, default=None, help='Run name for TensorBoard')
     parser.add_argument('--resume', type=str, default=None, help='Path to .pt checkpoint to resume from')
+    parser.add_argument('--arena-cols', type=int, default=25, help='Arena width in tiles')
+    parser.add_argument('--arena-rows', type=int, default=25, help='Arena height in tiles')
+    parser.add_argument('--num-creatures', type=int, default=16, help='Creatures per arena')
     args = parser.parse_args()
 
     random.seed(args.seed)
@@ -575,8 +602,12 @@ if __name__ == '__main__':
         mappo_steps=args.mappo_steps,
         es_generations=args.es_generations,
         es_variants=args.es_variants,
+        es_steps=args.es_steps,
         ppo_steps=args.ppo_steps,
         lr=args.lr,
         run_name=args.name,
         resume_from=args.resume,
+        arena_cols=args.arena_cols,
+        arena_rows=args.arena_rows,
+        num_creatures=args.num_creatures,
     )

@@ -31,57 +31,94 @@ class TrainingTab(ttk.Frame):
         self._build_ui()
 
     def _build_ui(self):
-        # -- Controls --
-        ctrl = ttk.LabelFrame(self, text='Training Controls', padding=8)
+        # -- Pipeline overview --
+        ctrl = ttk.LabelFrame(self, text='Training Pipeline: MAPPO → ES → PPO', padding=8)
         ctrl.pack(fill=tk.X, padx=8, pady=4)
 
-        row1 = ttk.Frame(ctrl)
-        row1.pack(fill=tk.X, pady=2)
+        # General settings row
+        gen_row = ttk.Frame(ctrl)
+        gen_row.pack(fill=tk.X, pady=2)
 
-        ttk.Label(row1, text='Cycles:').pack(side=tk.LEFT, padx=4)
+        ttk.Label(gen_row, text='Cycles:').pack(side=tk.LEFT, padx=4)
         self.v_cycles = tk.StringVar(value='1')
-        e = ttk.Entry(row1, textvariable=self.v_cycles, width=5)
+        e = ttk.Entry(gen_row, textvariable=self.v_cycles, width=5)
         e.pack(side=tk.LEFT, padx=2)
-        add_tooltip(e, 'Number of MAPPO → ES → PPO cycles')
+        add_tooltip(e, 'Number of full MAPPO → ES → PPO cycles to run')
 
-        ttk.Label(row1, text='MAPPO steps:').pack(side=tk.LEFT, padx=4)
-        self.v_mappo = tk.StringVar(value='50000')
-        e = ttk.Entry(row1, textvariable=self.v_mappo, width=8)
-        e.pack(side=tk.LEFT, padx=2)
-        add_tooltip(e, 'Steps per MAPPO phase')
-
-        ttk.Label(row1, text='PPO steps:').pack(side=tk.LEFT, padx=4)
-        self.v_ppo = tk.StringVar(value='50000')
-        e = ttk.Entry(row1, textvariable=self.v_ppo, width=8)
-        e.pack(side=tk.LEFT, padx=2)
-        add_tooltip(e, 'Steps per PPO phase')
-
-        row2 = ttk.Frame(ctrl)
-        row2.pack(fill=tk.X, pady=2)
-
-        ttk.Label(row2, text='ES gens:').pack(side=tk.LEFT, padx=4)
-        self.v_es_gens = tk.StringVar(value='20')
-        e = ttk.Entry(row2, textvariable=self.v_es_gens, width=5)
-        e.pack(side=tk.LEFT, padx=2)
-        add_tooltip(e, 'ES generations')
-
-        ttk.Label(row2, text='ES variants:').pack(side=tk.LEFT, padx=4)
-        self.v_es_vars = tk.StringVar(value='20')
-        e = ttk.Entry(row2, textvariable=self.v_es_vars, width=5)
-        e.pack(side=tk.LEFT, padx=2)
-        add_tooltip(e, 'ES variants per generation')
-
-        ttk.Label(row2, text='LR:').pack(side=tk.LEFT, padx=4)
+        ttk.Label(gen_row, text='LR:').pack(side=tk.LEFT, padx=12)
         self.v_lr = tk.StringVar(value='0.0003')
-        e = ttk.Entry(row2, textvariable=self.v_lr, width=8)
+        e = ttk.Entry(gen_row, textvariable=self.v_lr, width=8)
         e.pack(side=tk.LEFT, padx=2)
-        add_tooltip(e, 'Learning rate')
+        add_tooltip(e, 'Learning rate for MAPPO and PPO optimizers')
 
-        ttk.Label(row2, text='Seed:').pack(side=tk.LEFT, padx=4)
+        ttk.Label(gen_row, text='Seed:').pack(side=tk.LEFT, padx=12)
         self.v_seed = tk.StringVar(value='42')
-        e = ttk.Entry(row2, textvariable=self.v_seed, width=6)
+        e = ttk.Entry(gen_row, textvariable=self.v_seed, width=6)
         e.pack(side=tk.LEFT, padx=2)
         add_tooltip(e, 'Random seed for reproducibility')
+
+        # Arena settings row
+        arena_row = ttk.Frame(ctrl)
+        arena_row.pack(fill=tk.X, pady=2)
+
+        ttk.Label(arena_row, text='Arena size:').pack(side=tk.LEFT, padx=4)
+        self.v_arena_cols = tk.StringVar(value='25')
+        e = ttk.Entry(arena_row, textvariable=self.v_arena_cols, width=4)
+        e.pack(side=tk.LEFT, padx=2)
+        add_tooltip(e, 'Arena width in tiles')
+        ttk.Label(arena_row, text='x').pack(side=tk.LEFT)
+        self.v_arena_rows = tk.StringVar(value='25')
+        e = ttk.Entry(arena_row, textvariable=self.v_arena_rows, width=4)
+        e.pack(side=tk.LEFT, padx=2)
+        add_tooltip(e, 'Arena height in tiles')
+
+        ttk.Label(arena_row, text='Creatures:').pack(side=tk.LEFT, padx=12)
+        self.v_num_creatures = tk.StringVar(value='16')
+        e = ttk.Entry(arena_row, textvariable=self.v_num_creatures, width=4)
+        e.pack(side=tk.LEFT, padx=2)
+        add_tooltip(e, 'Number of creatures to spawn per arena')
+
+        # --- Phase 1: MAPPO ---
+        mappo_frame = ttk.LabelFrame(ctrl, text='Phase 1: MAPPO (multi-agent shared weights)', padding=4)
+        mappo_frame.pack(fill=tk.X, pady=(6, 2))
+
+        ttk.Label(mappo_frame, text='Steps:').pack(side=tk.LEFT, padx=4)
+        self.v_mappo = tk.StringVar(value='50000')
+        e = ttk.Entry(mappo_frame, textvariable=self.v_mappo, width=8)
+        e.pack(side=tk.LEFT, padx=2)
+        add_tooltip(e, 'MAPPO training steps — all creatures share one net and learn together')
+
+        # --- Phase 2: ES ---
+        es_frame = ttk.LabelFrame(ctrl, text='Phase 2: ES (weight perturbation + fitness eval)', padding=4)
+        es_frame.pack(fill=tk.X, pady=2)
+
+        ttk.Label(es_frame, text='Generations:').pack(side=tk.LEFT, padx=4)
+        self.v_es_gens = tk.StringVar(value='20')
+        e = ttk.Entry(es_frame, textvariable=self.v_es_gens, width=5)
+        e.pack(side=tk.LEFT, padx=2)
+        add_tooltip(e, 'ES generations — each generation tests all variants and updates weights toward the best')
+
+        ttk.Label(es_frame, text='Variants:').pack(side=tk.LEFT, padx=8)
+        self.v_es_vars = tk.StringVar(value='20')
+        e = ttk.Entry(es_frame, textvariable=self.v_es_vars, width=5)
+        e.pack(side=tk.LEFT, padx=2)
+        add_tooltip(e, 'ES variants per generation — each variant is a random noise perturbation of the weights')
+
+        ttk.Label(es_frame, text='Steps/variant:').pack(side=tk.LEFT, padx=8)
+        self.v_es_steps = tk.StringVar(value='500')
+        e = ttk.Entry(es_frame, textvariable=self.v_es_steps, width=6)
+        e.pack(side=tk.LEFT, padx=2)
+        add_tooltip(e, 'Simulation steps to evaluate each variant (total ES work = gens x variants x this)')
+
+        # --- Phase 3: PPO ---
+        ppo_frame = ttk.LabelFrame(ctrl, text='Phase 3: PPO (single-agent vs diverse opponents)', padding=4)
+        ppo_frame.pack(fill=tk.X, pady=(2, 6))
+
+        ttk.Label(ppo_frame, text='Steps:').pack(side=tk.LEFT, padx=4)
+        self.v_ppo = tk.StringVar(value='50000')
+        e = ttk.Entry(ppo_frame, textvariable=self.v_ppo, width=8)
+        e.pack(side=tk.LEFT, padx=2)
+        add_tooltip(e, 'PPO training steps — one agent trains against a mix of saved checkpoints and StatWeighted AI')
 
         # Buttons
         btn_row = ttk.Frame(ctrl)
@@ -192,8 +229,12 @@ class TrainingTab(ttk.Frame):
             '--ppo-steps', self.v_ppo.get(),
             '--es-generations', self.v_es_gens.get(),
             '--es-variants', self.v_es_vars.get(),
+            '--es-steps', self.v_es_steps.get(),
             '--lr', self.v_lr.get(),
             '--seed', self.v_seed.get(),
+            '--arena-cols', self.v_arena_cols.get(),
+            '--arena-rows', self.v_arena_rows.get(),
+            '--num-creatures', self.v_num_creatures.get(),
         ]
         run_name = self.v_run_name.get().strip()
         if run_name:
