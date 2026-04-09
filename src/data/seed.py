@@ -31,7 +31,8 @@ CREATE TABLE IF NOT EXISTS species (
     sociability        REAL NOT NULL DEFAULT 0.5,
     territoriality     REAL NOT NULL DEFAULT 0.3,
     curiosity_modifier REAL NOT NULL DEFAULT 0.0,
-    preferred_deity    TEXT
+    preferred_deity    TEXT,
+    egg_sprite         TEXT REFERENCES sprites(name)
 );
 CREATE TABLE IF NOT EXISTS species_stats (
     species_name TEXT NOT NULL REFERENCES species(name),

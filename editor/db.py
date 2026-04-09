@@ -150,6 +150,7 @@ def migrate_db():
             "ALTER TABLE creatures ADD COLUMN spawn_y INTEGER",
             "ALTER TABLE creatures ADD COLUMN dialogue_tree TEXT",
             "ALTER TABLE creatures ADD COLUMN description TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE species ADD COLUMN egg_sprite TEXT",
             "ALTER TABLE creatures ADD COLUMN cumulative_limit INTEGER NOT NULL DEFAULT -1",
             "ALTER TABLE creatures ADD COLUMN concurrent_limit INTEGER NOT NULL DEFAULT -1",
             "ALTER TABLE items ADD COLUMN action_word TEXT NOT NULL DEFAULT ''",

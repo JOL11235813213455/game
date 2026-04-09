@@ -97,6 +97,7 @@ def _migrate(con: sqlite3.Connection) -> None:
         "ALTER TABLE creatures ADD COLUMN spawn_y INTEGER",
         "ALTER TABLE creatures ADD COLUMN dialogue_tree TEXT",
         "ALTER TABLE creatures ADD COLUMN description TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE species ADD COLUMN egg_sprite TEXT",
         "ALTER TABLE creatures ADD COLUMN cumulative_limit INTEGER NOT NULL DEFAULT -1",
         "ALTER TABLE creatures ADD COLUMN concurrent_limit INTEGER NOT NULL DEFAULT -1",
         "ALTER TABLE items ADD COLUMN action_word TEXT NOT NULL DEFAULT ''",
@@ -403,7 +404,7 @@ def load(db_path: Path = _DB_PATH) -> None:
 
 
 def _load_species(con: sqlite3.Connection) -> None:
-    rows      = con.execute('SELECT name, playable, sprite_name, tile_scale, composite_name, prudishness, size FROM species').fetchall()
+    rows      = con.execute('SELECT * FROM species').fetchall()
     stat_rows = con.execute('SELECT species_name, stat, value FROM species_stats').fetchall()
 
     stats_by_species: dict[str, dict] = {r['name']: {} for r in rows}
@@ -421,6 +422,8 @@ def _load_species(con: sqlite3.Connection) -> None:
         if r['prudishness'] is not None:
             block['prudishness'] = r['prudishness']
         block['size'] = r['size'] or 'medium'
+        if r['egg_sprite'] is not None:
+            block['egg_sprite'] = r['egg_sprite']
         SPECIES[name] = block
         if r['playable']:
             PLAYABLE[name] = block
