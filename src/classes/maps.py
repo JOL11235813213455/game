@@ -61,6 +61,7 @@ class Tile(Trackable):
         self.nested_map: Map = map
         self.inventory = Inventory(items=items or [])
         self.buried_inventory = Inventory()  # requires DIG action + shovel to access
+        self.buried_gold: int = 0            # buried gold (separate from surface gold)
         self.gold: int = 0  # gold on the ground
         self.tile_template = tile_template
         self.linked_map    = linked_map
@@ -91,3 +92,86 @@ class Map(Trackable):
         self.y_max = y_max
         self.z_min = z_min
         self.z_max = z_max
+
+    # Flow directions to (dx, dy)
+    _FLOW_DIRS = {'N': (0, -1), 'S': (0, 1), 'E': (1, 0), 'W': (-1, 0)}
+
+    def flow_items(self):
+        """Move surface items and gold along liquid flow directions.
+
+        Items only flow into adjacent liquid tiles. Items that reach
+        a still liquid tile (no flow) or a non-liquid tile stop.
+        """
+        moves = []  # (from_key, to_key, items, gold)
+        for key, tile in self.tiles.items():
+            if not getattr(tile, 'liquid', False):
+                continue
+            flow_dir = getattr(tile, 'flow_direction', None)
+            if not flow_dir or getattr(tile, 'flow_speed', 0) <= 0:
+                continue
+            if not tile.inventory.items and tile.gold <= 0:
+                continue
+            fd = self._FLOW_DIRS.get(flow_dir)
+            if not fd:
+                continue
+            dx, dy = fd
+            next_key = MapKey(key.x + dx, key.y + dy, key.z)
+            next_tile = self.tiles.get(next_key)
+            if next_tile and getattr(next_tile, 'liquid', False):
+                moves.append((key, next_key,
+                               list(tile.inventory.items), tile.gold))
+
+        for from_key, to_key, items, gold in moves:
+            from_tile = self.tiles[from_key]
+            to_tile = self.tiles[to_key]
+            for item in items:
+                if item in from_tile.inventory.items:
+                    from_tile.inventory.items.remove(item)
+                    to_tile.inventory.items.append(item)
+            if gold > 0:
+                from_tile.gold -= gold
+                to_tile.gold += gold
+
+    def generate_buried_loot(self, loot_table: list[dict] = None,
+                             density: float = 0.05, seed: int = None):
+        """Populate buried_inventory on walkable tiles.
+
+        Args:
+            loot_table: list of dicts with keys:
+                'item_factory': callable() -> Item
+                'weight': float (relative probability)
+                'gold_min': int, 'gold_max': int (optional gold range)
+            density: fraction of walkable tiles that get buried loot
+            seed: random seed for reproducibility
+        """
+        import random as rng
+        if seed is not None:
+            rng.seed(seed)
+
+        if loot_table is None:
+            # Default: just bury some gold
+            loot_table = [{'weight': 1.0, 'gold_min': 1, 'gold_max': 20}]
+
+        total_weight = sum(e.get('weight', 1.0) for e in loot_table)
+        walkable = [k for k, t in self.tiles.items() if t.walkable]
+
+        for key in walkable:
+            if rng.random() > density:
+                continue
+            tile = self.tiles[key]
+            # Pick a loot entry
+            roll = rng.random() * total_weight
+            cumul = 0.0
+            for entry in loot_table:
+                cumul += entry.get('weight', 1.0)
+                if roll <= cumul:
+                    # Gold
+                    gmin = entry.get('gold_min', 0)
+                    gmax = entry.get('gold_max', 0)
+                    if gmax > 0:
+                        tile.buried_gold += rng.randint(gmin, gmax)
+                    # Item
+                    factory = entry.get('item_factory')
+                    if factory:
+                        tile.buried_inventory.items.append(factory())
+                    break

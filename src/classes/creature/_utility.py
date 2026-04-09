@@ -251,7 +251,9 @@ class UtilityMixin:
             result['reason'] = 'no_tile'
             return result
 
-        if not hasattr(tile, 'buried_inventory') or not tile.buried_inventory.items:
+        has_buried = (hasattr(tile, 'buried_inventory') and tile.buried_inventory.items) or \
+                     getattr(tile, 'buried_gold', 0) > 0
+        if not has_buried:
             result['reason'] = 'nothing_buried'
             return result
 
@@ -280,6 +282,13 @@ class UtilityMixin:
             tile.buried_inventory.items.remove(item)
             tile.inventory.items.append(item)
             result['items_found'].append(item)
+
+        # Transfer buried gold to surface
+        buried_gold = getattr(tile, 'buried_gold', 0)
+        if buried_gold > 0:
+            tile.gold += buried_gold
+            tile.buried_gold = 0
+            result['gold_found'] = buried_gold
 
         result['success'] = True
         return result

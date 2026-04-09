@@ -169,6 +169,11 @@ class Creature(
         if behavior is not None:
             self.register_tick('behavior', move_interval, self._do_behavior)
 
+        # Skills
+        self.can_swim: bool = False  # learned skill — prevents drowning
+        self.is_drowning: bool = False  # currently drowning (in liquid, no swim, submerged)
+        self._drown_ticks: int = 0  # consecutive ticks spent drowning
+
         # Sleep deprivation
         self.sleep_debt: int = 0  # days without sleep
         self._fatigue_level: int = 0  # current debuff tier (0-4)
@@ -183,6 +188,9 @@ class Creature(
 
         # Mana regen
         self.register_tick('mana_regen', 1000, self._do_mana_regen)
+
+        # Water/flow tick — checks drowning and applies current
+        self.register_tick('water', 500, self._do_water_tick)
 
     # -- Age ----------------------------------------------------------------
 

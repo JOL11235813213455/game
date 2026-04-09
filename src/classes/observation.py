@@ -37,7 +37,7 @@ _SECTION_SIZES = {
     'self_weapon': 15, 'self_inv_texture': 13, 'self_social': 10,
     'self_status': 16, 'self_quest': 10, 'self_movement': 8,
     'self_genetics': 7, 'self_reputation': 6,
-    'tile_deep': 18, 'spatial_walls': 25, 'spatial_features': 12,
+    'tile_deep': 18, 'tile_liquid': 10, 'spatial_walls': 25, 'spatial_features': 12,
     'tile_items': MAX_TILE_ITEMS * 9, 'census': 45, 'census_audio': 3,
     'world_time': 13, 'temporal': 14, 'trends': 11, 'time_since': 12,
     'reward_signals': 17,
@@ -514,6 +514,21 @@ def build_observation(creature, cols: int, rows: int,
     else:
         obs.extend([0.5, 0.5, 0.5])
     obs.append(1.0 if tile_items else 0.0)
+
+    # ==== SECTION 16b: TILE LIQUID / WATER (10) ====
+    is_liquid = getattr(tile, 'liquid', False) if tile else False
+    obs.append(1.0 if is_liquid else 0.0)
+    flow_dir = getattr(tile, 'flow_direction', None) if tile else None
+    obs.append(1.0 if flow_dir == 'N' else 0.0)
+    obs.append(1.0 if flow_dir == 'S' else 0.0)
+    obs.append(1.0 if flow_dir == 'E' else 0.0)
+    obs.append(1.0 if flow_dir == 'W' else 0.0)
+    obs.append(getattr(tile, 'flow_speed', 0) / 4.0 if tile else 0.0)
+    obs.append(getattr(tile, 'depth', 0) / 3.0 if tile else 0.0)
+    obs.append(1.0 if getattr(creature, 'is_drowning', False) else 0.0)
+    obs.append(1.0 if getattr(creature, 'can_swim', False) else 0.0)
+    buried_count = len(tile.buried_inventory.items) if tile and hasattr(tile, 'buried_inventory') else 0
+    obs.append(1.0 if buried_count > 0 or getattr(tile, 'buried_gold', 0) > 0 else 0.0)
 
     # ==== SECTION 17: SPATIAL WALLS + OPENNESS (25) ====
     _dirs8 = [(0,-1),(0,1),(1,0),(-1,0),(1,-1),(-1,-1),(1,1),(-1,1)]
@@ -997,18 +1012,19 @@ SECTION_RANGES = {
     'self_identity':    (190, 215),
     'self_reputation':  (215, 221),
     'tile_deep':        (221, 239),
-    'spatial_walls':    (239, 264),
-    'spatial_features': (264, 280),     # +4 crowding metrics
-    'tile_items':       (280, 307),
-    'census_visible':   (307, 352),
-    'census_audible':   (352, 355),
-    'per_engaged':      (355, 625),
-    'world_time':       (625, 638),
-    'temporal':         (638, 652),
-    'trends':           (652, 663),
-    'time_since':       (663, 675),
-    'reward_signals':   (675, 692),
-    'transforms':       (692, OBSERVATION_SIZE),
+    'tile_liquid':      (239, 249),
+    'spatial_walls':    (249, 274),
+    'spatial_features': (274, 290),     # +4 crowding metrics
+    'tile_items':       (290, 317),
+    'census_visible':   (317, 362),
+    'census_audible':   (362, 365),
+    'per_engaged':      (365, 635),
+    'world_time':       (635, 648),
+    'temporal':         (648, 662),
+    'trends':           (662, 673),
+    'time_since':       (673, 685),
+    'reward_signals':   (685, 702),
+    'transforms':       (702, OBSERVATION_SIZE),
 }
 
 # Semantic groups for easy mask building
@@ -1023,7 +1039,7 @@ SECTION_GROUPS = {
     'religion': ['world_time'],  # god balances are in world_time + transforms
     'memory': ['temporal', 'trends', 'time_since'],
     'quest': ['self_quest'],
-    'spatial': ['self_movement', 'spatial_walls', 'spatial_features', 'tile_deep'],
+    'spatial': ['self_movement', 'spatial_walls', 'spatial_features', 'tile_deep', 'tile_liquid'],
     'reproduction': ['self_status', 'self_genetics'],
 }
 

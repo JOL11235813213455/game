@@ -4,6 +4,16 @@ from classes.maps import MapKey, DIRECTION_BOUNDS
 from classes.stats import Stat
 from classes.creature._constants import SIZE_FOOTPRINT, SIZE_UNITS, TILE_CAPACITY
 
+# How many tiles of depth a creature's head clears above water by size
+# depth <= clearance means head is above water
+_SIZE_WATER_CLEARANCE = {
+    'tiny': 0, 'small': 0, 'medium': 0,
+    'large': 1, 'huge': 2, 'colossal': 3,
+}
+
+# Flow direction to (dx, dy)
+_FLOW_DIRS = {'N': (0, -1), 'S': (0, 1), 'E': (1, 0), 'W': (-1, 0)}
+
 
 class MovementMixin:
     """Movement and map transition methods for Creature."""
@@ -75,6 +85,9 @@ class MovementMixin:
         return False
 
     def move(self, dx: int, dy: int, cols: int, rows: int):
+        # Flow restriction: in flowing liquid, non-swimmers are axis-locked
+        if self._flow_restricts_movement(dx, dy):
+            return
         # Clamp so entire footprint stays in bounds
         foot = SIZE_FOOTPRINT.get(self.size, [])
         max_ox = max((ox for ox, _ in foot), default=0)
@@ -239,3 +252,76 @@ class MovementMixin:
         old_loc = self.location
         self.move(dx, dy, cols, rows)
         return self.location != old_loc
+
+    # -- Water / Flow -------------------------------------------------------
+
+    def _head_above_water(self, tile) -> bool:
+        """Check if this creature's head is above water on the given tile."""
+        if not getattr(tile, 'liquid', False):
+            return True
+        depth = getattr(tile, 'depth', 0)
+        clearance = _SIZE_WATER_CLEARANCE.get(self.size, 0)
+        return depth <= clearance
+
+    def _is_in_liquid(self) -> bool:
+        """Return True if creature is currently on a liquid tile."""
+        tile = self.current_map.tiles.get(self.location)
+        return tile is not None and getattr(tile, 'liquid', False)
+
+    def _do_water_tick(self, now: int):
+        """Periodic water check: drowning damage and flow movement."""
+        tile = self.current_map.tiles.get(self.location)
+        if tile is None or not getattr(tile, 'liquid', False):
+            self.is_drowning = False
+            self._drown_ticks = 0
+            return
+
+        head_clear = self._head_above_water(tile)
+
+        # Drowning: submerged and can't swim
+        if not head_clear and not self.can_swim:
+            self.is_drowning = True
+            self._drown_ticks += 1
+            dmg = min(5, self._drown_ticks)
+            hp = self.stats.base.get(Stat.HP_CURR, 0)
+            self.stats.base[Stat.HP_CURR] = max(0, hp - dmg)
+            if self.stats.base[Stat.HP_CURR] <= 0:
+                self.die()
+                return
+        else:
+            self.is_drowning = False
+            self._drown_ticks = 0
+
+        # Flow: push creature in flow direction into next liquid tile
+        flow_dir = getattr(tile, 'flow_direction', None)
+        flow_speed = getattr(tile, 'flow_speed', 0.0)
+        if flow_dir and flow_speed > 0:
+            fd = _FLOW_DIRS.get(flow_dir)
+            if fd:
+                dx, dy = fd
+                nx = self.location.x + dx
+                ny = self.location.y + dy
+                next_tile = self.current_map.tiles.get(
+                    MapKey(nx, ny, self.location.z))
+                if next_tile and getattr(next_tile, 'liquid', False):
+                    self.location = self.location._replace(x=nx, y=ny)
+
+    def _flow_restricts_movement(self, dx: int, dy: int) -> bool:
+        """In liquid with flow, non-swimmers can only move along the flow axis."""
+        tile = self.current_map.tiles.get(self.location)
+        if tile is None or not getattr(tile, 'liquid', False):
+            return False
+        if self.can_swim:
+            return False
+        flow_dir = getattr(tile, 'flow_direction', None)
+        if not flow_dir:
+            return False
+        fd = _FLOW_DIRS.get(flow_dir)
+        if not fd:
+            return False
+        fx, fy = fd
+        if fx != 0 and dy != 0:
+            return True  # E/W flow blocks N/S movement
+        if fy != 0 and dx != 0:
+            return True  # N/S flow blocks E/W movement
+        return False
