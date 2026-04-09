@@ -69,15 +69,25 @@ class Creature(WorldObject):
 
         from data.db import SPECIES
         species_data = SPECIES.get(species, {}) if species else {}
-        self.tile_scale     = species_data.get('tile_scale',     self.__class__.tile_scale)
-        self.sprite_name    = species_data.get('sprite_name',    self.__class__.sprite_name)
-        self.composite_name = species_data.get('composite_name', self.__class__.composite_name)
+
+        # Sex first — sprite selection depends on it
+        self.sex = sex if sex is not None else random.choice(('male', 'female'))
+
+        # Sprite: pick sex-appropriate version, fall back to default
+        if self.sex == 'female' and species_data.get('sprite_name_f'):
+            self.sprite_name = species_data['sprite_name_f']
+        else:
+            self.sprite_name = species_data.get('sprite_name', self.__class__.sprite_name)
+
+        if self.sex == 'female' and species_data.get('composite_name_f'):
+            self.composite_name = species_data['composite_name_f']
+        else:
+            self.composite_name = species_data.get('composite_name', self.__class__.composite_name)
+
+        self.tile_scale = species_data.get('tile_scale', self.__class__.tile_scale)
 
         # Size: from species default or override
         self.size = size or species_data.get('size', 'medium')
-
-        # Sex: per-creature, randomly assigned if not specified
-        self.sex = sex if sex is not None else random.choice(('male', 'female'))
         # Prudishness: species default with per-creature override
         self.prudishness = prudishness if prudishness is not None else species_data.get('prudishness', 0.5)
         # Age in game days (0 = newborn)

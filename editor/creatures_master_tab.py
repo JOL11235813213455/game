@@ -116,11 +116,15 @@ class _SpeciesSubTab(ttk.Frame):
         self._add('Sprite', _sp, 'Default sprite')
         self.v_tile_scale = tk.StringVar(value='1.0')
         self._add('Tile Scale', lambda p: ttk.Entry(p, textvariable=self.v_tile_scale, width=10).pack(anchor='w'), 'Visual scale')
+        self.v_sprite_f = tk.StringVar()
+        self._add('Sprite (F)', lambda p: ttk.Combobox(p, textvariable=self.v_sprite_f, values=self._sprite_names, state='readonly', width=18).pack(anchor='w'), 'Female sprite (blank = use male)')
         self.v_composite = tk.StringVar()
         self._composite_names = [''] + fetch_composite_names()
-        self._add('Composite', lambda p: ttk.Combobox(p, textvariable=self.v_composite, values=self._composite_names, state='readonly', width=18).pack(anchor='w'), 'Layered sprite')
+        self._add('Composite (M)', lambda p: ttk.Combobox(p, textvariable=self.v_composite, values=self._composite_names, state='readonly', width=18).pack(anchor='w'), 'Male layered sprite')
+        self.v_composite_f = tk.StringVar()
+        self._add('Composite (F)', lambda p: ttk.Combobox(p, textvariable=self.v_composite_f, values=self._composite_names, state='readonly', width=18).pack(anchor='w'), 'Female layered sprite (blank = use male)')
         self.v_egg_sprite = tk.StringVar()
-        self._add('Egg Sprite', lambda p: ttk.Combobox(p, textvariable=self.v_egg_sprite, values=self._sprite_names, state='readonly', width=18).pack(anchor='w'), 'Sprite used for this species\' eggs')
+        self._add('Egg Sprite', lambda p: ttk.Combobox(p, textvariable=self.v_egg_sprite, values=self._sprite_names, state='readonly', width=18).pack(anchor='w'), 'Sprite for this species\' eggs')
 
         # -- Behavior Baselines --
         ttk.Separator(self.form, orient=tk.HORIZONTAL).grid(row=self._row, column=0, columnspan=2, sticky='ew', padx=6, pady=6); self._row += 1
@@ -194,7 +198,8 @@ class _SpeciesSubTab(ttk.Frame):
     def _clear(self):
         self.v_name.set(''); self.v_playable.set(False); self.v_description.set('')
         self.v_size.set('medium'); self.v_sprite.set(''); self.v_tile_scale.set('1.0')
-        self.v_composite.set(''); self.v_egg_sprite.set(''); self.v_prudishness.set('0.5')
+        self.v_sprite_f.set(''); self.v_composite.set(''); self.v_composite_f.set('')
+        self.v_egg_sprite.set(''); self.v_prudishness.set('0.5')
         self.v_aggression.set('0.3'); self.v_sociability.set('0.5')
         self.v_territoriality.set('0.3'); self.v_curiosity.set('0.0')
         self.v_base_speed.set('4.0'); self.v_preferred_deity.set('')
@@ -219,7 +224,9 @@ class _SpeciesSubTab(ttk.Frame):
         self.v_sprite.set(row['sprite_name'] or '')
         self.sprite_preview.load(row['sprite_name'] or None)
         self.v_tile_scale.set(str(row['tile_scale'] or 1.0))
+        self.v_sprite_f.set(row['sprite_name_f'] or '' if 'sprite_name_f' in row.keys() else '')
         self.v_composite.set(row['composite_name'] or '')
+        self.v_composite_f.set(row['composite_name_f'] or '' if 'composite_name_f' in row.keys() else '')
         self.v_egg_sprite.set(row['egg_sprite'] or '' if 'egg_sprite' in row.keys() else '')
         self.v_prudishness.set(str(row['prudishness'] if row['prudishness'] is not None else 0.5))
         self.v_aggression.set(str(row['aggression'] if row['aggression'] is not None else 0.3))
@@ -251,14 +258,18 @@ class _SpeciesSubTab(ttk.Frame):
         con = get_con()
         try:
             con.execute(
-                '''INSERT INTO species (name, playable, sprite_name, composite_name, tile_scale,
+                '''INSERT INTO species (name, playable, sprite_name, sprite_name_f,
+                   composite_name, composite_name_f, tile_scale,
                    size, description, prudishness, base_move_speed, lifespan, maturity_age,
                    young_max, fecundity_peak, fecundity_end, aggression, sociability,
                    territoriality, curiosity_modifier, preferred_deity, egg_sprite)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                    ON CONFLICT(name) DO UPDATE SET
                    playable=excluded.playable, sprite_name=excluded.sprite_name,
-                   composite_name=excluded.composite_name, tile_scale=excluded.tile_scale,
+                   sprite_name_f=excluded.sprite_name_f,
+                   composite_name=excluded.composite_name,
+                   composite_name_f=excluded.composite_name_f,
+                   tile_scale=excluded.tile_scale,
                    size=excluded.size, description=excluded.description,
                    prudishness=excluded.prudishness, base_move_speed=excluded.base_move_speed,
                    lifespan=excluded.lifespan, maturity_age=excluded.maturity_age,
@@ -270,7 +281,10 @@ class _SpeciesSubTab(ttk.Frame):
                    egg_sprite=excluded.egg_sprite
                 ''',
                 (name, int(self.v_playable.get()), self.v_sprite.get().strip() or None,
-                 self.v_composite.get().strip() or None, self._float(self.v_tile_scale, 1.0),
+                 self.v_sprite_f.get().strip() or None,
+                 self.v_composite.get().strip() or None,
+                 self.v_composite_f.get().strip() or None,
+                 self._float(self.v_tile_scale, 1.0),
                  self.v_size.get(), self.v_description.get().strip(),
                  self._float(self.v_prudishness, 0.5), self._float(self.v_base_speed, 4.0),
                  self._int(self.v_lifespan, 365), self._int(self.v_maturity, 18),

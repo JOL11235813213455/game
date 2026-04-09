@@ -97,6 +97,8 @@ def _migrate(con: sqlite3.Connection) -> None:
         "ALTER TABLE creatures ADD COLUMN spawn_y INTEGER",
         "ALTER TABLE creatures ADD COLUMN dialogue_tree TEXT",
         "ALTER TABLE creatures ADD COLUMN description TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE species ADD COLUMN sprite_name_f TEXT",
+        "ALTER TABLE species ADD COLUMN composite_name_f TEXT",
         "ALTER TABLE species ADD COLUMN egg_sprite TEXT",
         "ALTER TABLE creatures ADD COLUMN cumulative_limit INTEGER NOT NULL DEFAULT -1",
         "ALTER TABLE creatures ADD COLUMN concurrent_limit INTEGER NOT NULL DEFAULT -1",
@@ -416,8 +418,12 @@ def _load_species(con: sqlite3.Connection) -> None:
         block = stats_by_species[name]
         if r['sprite_name'] is not None:
             block['sprite_name'] = r['sprite_name']
+        if r['sprite_name_f'] is not None:
+            block['sprite_name_f'] = r['sprite_name_f']
         if r['composite_name'] is not None:
             block['composite_name'] = r['composite_name']
+        if r['composite_name_f'] is not None:
+            block['composite_name_f'] = r['composite_name_f']
         block['tile_scale'] = r['tile_scale'] if r['tile_scale'] is not None else 1.0
         if r['prudishness'] is not None:
             block['prudishness'] = r['prudishness']
