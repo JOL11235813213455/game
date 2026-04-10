@@ -88,18 +88,39 @@ PROCESSING_RECIPES: list[Recipe] = [
 ]
 
 
+def _item_matches_ingredient(item, ingredient: str) -> bool:
+    """True if ``item`` matches the given ingredient reference.
+
+    Ingredient strings can be either a catalog item key (``'food_wheat_raw'``)
+    or a display name (``'Wheat'``). Catalog items carry a ``key`` attribute
+    set by the DB loader — we check key first for resilience against
+    renames, then fall back to name for runtime-constructed items.
+    """
+    item_key = getattr(item, 'key', None)
+    item_name = getattr(item, 'name', None)
+    return ingredient == item_key or ingredient == item_name
+
+
 def find_matching_recipe(inventory_items: list, category: str = None) -> Recipe | None:
     """Find the first recipe the given inventory can satisfy.
+
+    Matching is by item key OR item name: DB-loaded recipes use catalog
+    keys (stable across renames), hardcoded fallback recipes use display
+    names. Both resolve correctly because every inventory item is counted
+    under both identifiers.
 
     Returns the recipe, or None if no ingredients match. If ``category``
     is given, restricts to that family (``'food'`` or ``'material'``).
     """
     counts: dict[str, int] = {}
     for item in inventory_items:
-        if not hasattr(item, 'name'):
-            continue
         qty = getattr(item, 'quantity', 1)
-        counts[item.name] = counts.get(item.name, 0) + qty
+        key = getattr(item, 'key', None)
+        name = getattr(item, 'name', None)
+        if key:
+            counts[key] = counts.get(key, 0) + qty
+        if name and name != key:
+            counts[name] = counts.get(name, 0) + qty
 
     for recipe in PROCESSING_RECIPES:
         if category and recipe.category != category:
@@ -112,17 +133,21 @@ def find_matching_recipe(inventory_items: list, category: str = None) -> Recipe 
 def consume_inputs(inventory, recipe: Recipe) -> bool:
     """Deduct a recipe's inputs from the inventory in-place.
 
-    Walks stackable items of matching names and decrements their quantity,
-    removing items that hit zero. Returns True on full success, False if
+    Matches ingredients by catalog key or display name (see
+    :func:`find_matching_recipe`). Decrements stackables in place and
+    removes empty stacks. Returns True on full success, False if
     ingredients were insufficient (inventory left unchanged).
     """
     # First verify sufficient total quantity per ingredient.
     counts: dict[str, int] = {}
     for item in inventory.items:
-        if not hasattr(item, 'name'):
-            continue
         qty = getattr(item, 'quantity', 1)
-        counts[item.name] = counts.get(item.name, 0) + qty
+        key = getattr(item, 'key', None)
+        name = getattr(item, 'name', None)
+        if key:
+            counts[key] = counts.get(key, 0) + qty
+        if name and name != key:
+            counts[name] = counts.get(name, 0) + qty
     for ing, need in recipe.inputs.items():
         if counts.get(ing, 0) < need:
             return False
@@ -134,7 +159,7 @@ def consume_inputs(inventory, recipe: Recipe) -> bool:
         for item in inventory.items:
             if remaining <= 0:
                 break
-            if getattr(item, 'name', None) != ing:
+            if not _item_matches_ingredient(item, ing):
                 continue
             qty = getattr(item, 'quantity', 1)
             if qty <= remaining:

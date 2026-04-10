@@ -124,6 +124,14 @@ class CreaturesTab(ttk.Frame):
         add_tooltip(beh_cb, 'Behavior module for this creature (blank = none/player)')
         row += 1
 
+        # Job
+        ttk.Label(f, text='Job').grid(row=row, column=0, sticky='w', padx=6, pady=4)
+        self.v_job = tk.StringVar()
+        self.job_cb = ttk.Combobox(f, textvariable=self.v_job, values=[], width=20)
+        self.job_cb.grid(row=row, column=1, sticky='w', padx=6, pady=4)
+        add_tooltip(self.job_cb, 'Profession from the jobs catalog (blank = wanderer)')
+        row += 1
+
         # Items
         ttk.Label(f, text='Items (JSON)').grid(row=row, column=0, sticky='w', padx=6, pady=4)
         self.v_items = tk.StringVar(value='[]')
@@ -169,6 +177,7 @@ class CreaturesTab(ttk.Frame):
         con = get_con()
         try:
             rows = con.execute('SELECT key, name, species FROM creatures ORDER BY species, key').fetchall()
+            job_rows = con.execute('SELECT key FROM jobs ORDER BY key').fetchall()
         finally:
             con.close()
         self.listbox.delete(0, tk.END)
@@ -177,6 +186,8 @@ class CreaturesTab(ttk.Frame):
             if r['name']:
                 label += f" ({r['name']})"
             self.listbox.insert(tk.END, label)
+        # Populate the job dropdown (blank = wanderer)
+        self.job_cb['values'] = [''] + [j['key'] for j in job_rows]
 
     def refresh_species_dropdown(self):
         self._species_names = fetch_species_names()
@@ -191,6 +202,7 @@ class CreaturesTab(ttk.Frame):
         self.v_age.set('')
         self.v_prudishness.set('')
         self.v_behavior.set('')
+        self.v_job.set('')
         self.v_items.set('[]')
         for var in self.stat_vars.values():
             var.set('')
@@ -215,6 +227,10 @@ class CreaturesTab(ttk.Frame):
         self.v_age.set(str(row['age']) if row['age'] is not None else '')
         self.v_prudishness.set(str(row['prudishness']) if row['prudishness'] is not None else '')
         self.v_behavior.set(row['behavior'] or '')
+        try:
+            self.v_job.set(row['job_key'] or '')
+        except (KeyError, IndexError):
+            self.v_job.set('')
         self.v_items.set(row['items'] or '[]')
 
         stats = {r['stat']: r['value'] for r in stat_rows}
@@ -277,13 +293,13 @@ class CreaturesTab(ttk.Frame):
         con = get_con()
         try:
             con.execute(
-                '''INSERT INTO creatures (key, name, species, level, sex, age, prudishness, behavior, items)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                '''INSERT INTO creatures (key, name, species, level, sex, age, prudishness, behavior, items, job_key)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(key) DO UPDATE SET
                    name=excluded.name, species=excluded.species,
                    level=excluded.level, sex=excluded.sex, age=excluded.age,
                    prudishness=excluded.prudishness, behavior=excluded.behavior,
-                   items=excluded.items
+                   items=excluded.items, job_key=excluded.job_key
                 ''',
                 (
                     key,
@@ -295,6 +311,7 @@ class CreaturesTab(ttk.Frame):
                     self._float_or_none(self.v_prudishness),
                     self.v_behavior.get().strip() or None,
                     self.v_items.get().strip() or '[]',
+                    self.v_job.get().strip() or None,
                 )
             )
             con.execute('DELETE FROM creature_stats WHERE creature_key=?', (key,))

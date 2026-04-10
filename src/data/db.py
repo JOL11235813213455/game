@@ -30,6 +30,7 @@ MAP_GRAPH = None  # MapGraph instance, built after maps are loaded
 ITEM_FRAMES: dict[str, dict] = {}  # frame_key → {recipe, output_item_key, auto_pop, ...}
 JOBS:         dict[str, object] = {}  # job_key → Job instance (classes.jobs.Job)
 PROCESSING_RECIPES: list = []          # list of classes.recipes.Recipe
+SCHEDULES:    dict[str, object] = {}  # schedule_key → classes.jobs.Schedule
 STRUCTURES: dict[str, 'Structure'] = {}  # key → Structure instance (templates from DB)
 ANIMATIONS: dict[str, dict] = {}    # name → {target_type, frames: [{sprite_name, duration_ms}]}
 ANIM_BINDINGS: dict[tuple, str] = {}  # (target_name, behavior) → animation_name
@@ -224,6 +225,13 @@ def _migrate(con: sqlite3.Connection) -> None:
         "ALTER TABLE items ADD COLUMN is_food INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE items ADD COLUMN kpi_metric TEXT",
         # Jobs / schedules / recipes — the economy catalog
+        """CREATE TABLE IF NOT EXISTS schedules (
+    key TEXT PRIMARY KEY,
+    name TEXT NOT NULL DEFAULT '',
+    description TEXT NOT NULL DEFAULT '',
+    sleep_bands TEXT NOT NULL DEFAULT '[]',
+    work_bands TEXT NOT NULL DEFAULT '[]',
+    open_bands TEXT NOT NULL DEFAULT '[]')""",
         """CREATE TABLE IF NOT EXISTS jobs (
     key TEXT PRIMARY KEY,
     name TEXT NOT NULL DEFAULT '',
@@ -489,6 +497,10 @@ def load(db_path: Path = _DB_PATH) -> None:
     try:
         _migrate(con)
         _load_species(con)
+        # Schedules and jobs load BEFORE creatures so creature rows can
+        # resolve their job_key into a live Job instance at load time.
+        _load_schedules(con)
+        _load_jobs(con)
         _load_creatures(con)
         _load_dialogue(con)
         _load_spells(con)
@@ -501,7 +513,8 @@ def load(db_path: Path = _DB_PATH) -> None:
         _load_animations(con)
         _load_composites(con)
         _load_item_frames(con)
-        _load_jobs(con)
+        # Recipes load last because their output_factory closures clone
+        # items from the ITEMS catalog.
         _load_processing_recipes(con)
     finally:
         con.close()
@@ -576,6 +589,15 @@ def _load_creatures(con: sqlite3.Connection) -> None:
             block['prudishness'] = r['prudishness']
         if r['behavior'] is not None:
             block['behavior'] = r['behavior']
+        # Resolve job from the DB reference — JOBS was populated earlier
+        # in the load sequence. Unknown or missing job_key → wanderer.
+        try:
+            job_key = r['job_key']
+        except (KeyError, IndexError):
+            job_key = None
+        block['job_key'] = job_key
+        if job_key and job_key in JOBS:
+            block['job'] = JOBS[job_key]
         CREATURES[key] = block
 
 
@@ -984,26 +1006,67 @@ def _load_item_frames(con: sqlite3.Connection) -> None:
         }
 
 
+def _load_schedules(con: sqlite3.Connection) -> None:
+    """Load daily schedules from the schedules table.
+
+    Each row becomes a :class:`~classes.jobs.Schedule` instance with
+    band lists keyed by activity ('sleep', 'work', 'open'). Publishes
+    into the ``SCHEDULES`` module global for later use by ``_load_jobs``.
+
+    Also overwrites the module-level fallback templates (DAY_WORKER,
+    NIGHT_WORKER, WANDERER) in ``classes.jobs`` so any code that
+    imports those constants directly sees DB-authoritative data.
+    """
+    global SCHEDULES
+    SCHEDULES.clear()
+
+    from classes import jobs as jobs_mod
+    from classes.jobs import Schedule
+
+    try:
+        rows = con.execute(
+            'SELECT key, sleep_bands, work_bands, open_bands FROM schedules'
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return  # table absent — keep hardcoded fallback templates
+
+    for r in rows:
+        bands = {}
+        for activity, col in (('sleep', 'sleep_bands'),
+                               ('work',  'work_bands'),
+                               ('open',  'open_bands')):
+            raw = r[col] or '[]'
+            pairs = json.loads(raw)
+            if pairs:
+                bands[activity] = [tuple(p) for p in pairs]
+        schedule = Schedule(bands=bands)
+        SCHEDULES[r['key']] = schedule
+
+    # Keep the module-level fallback constants in sync with DB where
+    # possible. Preserves backward compatibility for any caller that
+    # imports DAY_WORKER etc. directly.
+    if 'day_worker' in SCHEDULES:
+        jobs_mod.DAY_WORKER = SCHEDULES['day_worker']
+    if 'night_worker' in SCHEDULES:
+        jobs_mod.NIGHT_WORKER = SCHEDULES['night_worker']
+    if 'wanderer' in SCHEDULES:
+        jobs_mod.WANDERER = SCHEDULES['wanderer']
+
+
 def _load_jobs(con: sqlite3.Connection) -> None:
     """Load the jobs catalog and publish into classes.jobs.DEFAULT_JOBS.
 
     Each job row becomes a fully-constructed Job instance with its schedule
-    template resolved. The module-level ``classes.jobs.DEFAULT_JOBS`` dict
-    is cleared and repopulated so every caller that imports it sees the
-    DB-authoritative catalog.
+    resolved from the SCHEDULES global (which must have been populated by
+    ``_load_schedules`` first). The module-level ``classes.jobs.DEFAULT_JOBS``
+    dict is cleared and repopulated so every caller that imports it sees
+    the DB-authoritative catalog.
     """
     global JOBS
     JOBS.clear()
 
-    from classes.jobs import (Job, DAY_WORKER, NIGHT_WORKER, WANDERER,
-                                DEFAULT_JOBS)
+    from classes.jobs import Job, DAY_WORKER, DEFAULT_JOBS
     from classes.stats import Stat
-
-    template_map = {
-        'day_worker':   DAY_WORKER,
-        'night_worker': NIGHT_WORKER,
-        'wanderer':     WANDERER,
-    }
 
     try:
         rows = con.execute(
@@ -1020,7 +1083,7 @@ def _load_jobs(con: sqlite3.Connection) -> None:
             stat = Stat[r['required_stat']]
         except KeyError:
             stat = Stat.STR
-        schedule = template_map.get(r['schedule_template'], DAY_WORKER)
+        schedule = SCHEDULES.get(r['schedule_template'], DAY_WORKER)
         workplaces = tuple(json.loads(r['workplace_purposes'] or '[]'))
         if not workplaces:
             workplaces = (r['purpose'],)
@@ -1067,13 +1130,11 @@ def _load_processing_recipes(con: sqlite3.Connection) -> None:
             'SELECT ingredient_item_key, quantity FROM processing_recipe_inputs '
             'WHERE recipe_key=?', (r['key'],)
         ).fetchall():
-            ing_item = ITEMS.get(ing['ingredient_item_key'])
-            # Use the item's display name as the lookup key so it matches
-            # what inventory stacks are named. Falls back to the raw item
-            # key when the item isn't loaded yet (shouldn't happen in
-            # normal load order but keeps things robust).
-            ing_name = ing_item.name if ing_item else ing['ingredient_item_key']
-            inputs[ing_name] = int(ing['quantity'])
+            # Use the catalog key (stable across display-name renames).
+            # The recipe matcher in classes.recipes counts inventory items
+            # under both key and name, so either side can reference the
+            # ingredient and still match.
+            inputs[ing['ingredient_item_key']] = int(ing['quantity'])
 
         output_item = ITEMS.get(r['output_item_key'])
         if output_item is None:

@@ -126,6 +126,14 @@ CREATE TABLE IF NOT EXISTS creatures (
     model_version    INTEGER,
     job_key          TEXT REFERENCES jobs(key)
 );
+CREATE TABLE IF NOT EXISTS schedules (
+    key              TEXT PRIMARY KEY,
+    name             TEXT NOT NULL DEFAULT '',
+    description      TEXT NOT NULL DEFAULT '',
+    sleep_bands      TEXT NOT NULL DEFAULT '[]',
+    work_bands       TEXT NOT NULL DEFAULT '[]',
+    open_bands       TEXT NOT NULL DEFAULT '[]'
+);
 CREATE TABLE IF NOT EXISTS jobs (
     key                 TEXT PRIMARY KEY,
     name                TEXT NOT NULL DEFAULT '',
@@ -135,7 +143,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     required_stat       TEXT NOT NULL DEFAULT 'STR',
     required_level      INTEGER NOT NULL DEFAULT 8,
     workplace_purposes  TEXT NOT NULL DEFAULT '[]',
-    schedule_template   TEXT NOT NULL DEFAULT 'day_worker'
+    schedule_template   TEXT NOT NULL DEFAULT 'day_worker' REFERENCES schedules(key)
 );
 CREATE TABLE IF NOT EXISTS processing_recipes (
     key                   TEXT PRIMARY KEY,

@@ -3893,6 +3893,48 @@ if _db_loaded:
     check("bread is in inventory after PROCESS", cat_bread is not None)
     check("bread has heal_amount from DB",
           cat_bread is not None and cat_bread.heal_amount == 5)
+
+    # --- Fix 1: recipe matching uses item.key AND item.name ---
+    # Rename the wheat item to something else. The bake_bread recipe
+    # references the item by key, so it should still match.
+    from classes.recipes import find_matching_recipe
+    key_map = make_map(5, 5)
+    renamer = make_creature(key_map, x=0, y=0, name='Renamer')
+    # Clone wheat from catalog and rename it
+    import copy as _cp
+    wheat_tmpl = ITEMS['food_wheat_raw']
+    fake_wheat = _cp.copy(wheat_tmpl)
+    fake_wheat.name = 'Bizarro Wheat'  # display rename
+    fake_wheat.quantity = 5
+    renamer.inventory.items.append(fake_wheat)
+    matched = find_matching_recipe(renamer.inventory.items, category='food')
+    check(f"renamed wheat still matches via catalog key (got {matched.name if matched else None})",
+          matched is not None and matched.name == 'bake_bread')
+
+    # --- Fix 2: schedules loaded from DB ---
+    from data.db import SCHEDULES
+    check(f">= 3 schedules loaded (got {len(SCHEDULES)})", len(SCHEDULES) >= 3)
+    check("day_worker schedule in DB SCHEDULES", 'day_worker' in SCHEDULES)
+    check("night_worker schedule has work bands",
+          'night_worker' in SCHEDULES
+          and len(SCHEDULES['night_worker'].bands.get('work', [])) > 0)
+    check("wanderer schedule has no work bands",
+          'wanderer' in SCHEDULES
+          and len(SCHEDULES['wanderer'].bands.get('work', [])) == 0)
+    # Guard job's schedule should be the night_worker from DB
+    guard_job = JOBS.get('guard')
+    check("guard job schedule is night_worker from DB",
+          guard_job is not None and
+          guard_job.schedule is SCHEDULES.get('night_worker'))
+
+    # --- Fix 3: creatures can be assigned a job from DB ---
+    # The creatures table has job_key column — verify schema allows it.
+    import sqlite3 as _sq
+    from pathlib import Path as _P
+    _db = _sq.connect(str(_P('src/data/game.db')))
+    creature_cols = [r[1] for r in _db.execute('PRAGMA table_info(creatures)').fetchall()]
+    _db.close()
+    check("creatures.job_key column exists", 'job_key' in creature_cols)
 else:
     check("DB catalog was loadable", False)
 

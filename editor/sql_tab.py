@@ -380,6 +380,7 @@ class SqlTab(ttk.Frame):
         ('processing_recipe_inputs', 'recipe_key', 'processing_recipes', 'key'),
         ('processing_recipe_inputs', 'ingredient_item_key', 'items', 'key'),
         ('creatures', 'job_key', 'jobs', 'key'),
+        ('jobs', 'schedule_template', 'schedules', 'key'),
     ]
 
     # Clusters: groups of related tables laid out together
@@ -416,7 +417,8 @@ class SqlTab(ttk.Frame):
         {
             'label': 'Economy',
             'color': '#3a3a1a',
-            'tables': ['jobs', 'processing_recipes', 'processing_recipe_inputs'],
+            'tables': ['schedules', 'jobs', 'processing_recipes',
+                       'processing_recipe_inputs'],
         },
         {
             'label': 'Spells',
@@ -871,6 +873,13 @@ class SqlTab(ttk.Frame):
             ('items', 'crafter_uid'): 'UID of creature that crafted this item (NULL = found/spawned)',
             ('items', 'is_food'): '1 = item counts as food — eligible for hunger-dependent valuation and food-filtered recipes',
             ('items', 'kpi_metric'): 'KPI computation hint: burst_damage, damage_reduction, heal_value, ammo_value, stat_delta. NULL = auto-detect from item class',
+            # schedules
+            ('schedules', 'key'): 'Unique schedule identifier (e.g. day_worker, night_worker, wanderer)',
+            ('schedules', 'name'): 'Display name',
+            ('schedules', 'description'): 'Flavor text shown in editor',
+            ('schedules', 'sleep_bands'): 'JSON list of [start_hour, end_hour] pairs marking sleep time',
+            ('schedules', 'work_bands'): 'JSON list of [start_hour, end_hour] pairs marking work time',
+            ('schedules', 'open_bands'): 'JSON list of [start_hour, end_hour] pairs marking unstructured time',
             # jobs
             ('jobs', 'key'): 'Unique job identifier',
             ('jobs', 'name'): 'Display name (e.g. "Farmer")',

@@ -698,8 +698,34 @@ def seed():
                 slot_count=1, action_word='dig')
     insert_slots(con, 'tool_shovel', ['hand_r'])
 
-    # --- Jobs (seeded into jobs table) ---
+    # --- Schedules (seeded into schedules table) ---
     import json as _json
+    def _schedule(key, name, description, sleep, work, open_):
+        con.execute(
+            'INSERT OR REPLACE INTO schedules (key, name, description, '
+            'sleep_bands, work_bands, open_bands) VALUES (?,?,?,?,?,?)',
+            (key, name, description,
+             _json.dumps(sleep), _json.dumps(work), _json.dumps(open_))
+        )
+
+    _schedule('day_worker', 'Day Worker',
+              'Typical dawn-to-dusk schedule: sleep overnight, two work '
+              'blocks with a midday break, evening leisure.',
+              sleep=[[22.0, 6.0]],
+              work=[[8.0, 12.0], [13.0, 17.0]],
+              open_=[[6.0, 8.0], [12.0, 13.0], [17.0, 22.0]])
+    _schedule('night_worker', 'Night Worker',
+              'Dusk-to-dawn schedule for guards and watchmen.',
+              sleep=[[8.0, 16.0]],
+              work=[[18.0, 24.0], [0.0, 6.0]],
+              open_=[[16.0, 18.0], [6.0, 8.0]])
+    _schedule('wanderer', 'Wanderer',
+              'No set work hours; free to roam during daylight.',
+              sleep=[[22.0, 6.0]],
+              work=[],
+              open_=[[6.0, 22.0]])
+
+    # --- Jobs (seeded into jobs table) ---
     def _job(key, name, description, purpose, wage, stat, level, workplaces, sched):
         con.execute(
             'INSERT OR REPLACE INTO jobs (key, name, description, purpose, '

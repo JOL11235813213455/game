@@ -475,6 +475,13 @@ def migrate_db():
             "ALTER TABLE tile_sets ADD COLUMN growth_rate REAL",
             "ALTER TABLE items ADD COLUMN is_food INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE items ADD COLUMN kpi_metric TEXT",
+            """CREATE TABLE IF NOT EXISTS schedules (
+    key TEXT PRIMARY KEY,
+    name TEXT NOT NULL DEFAULT '',
+    description TEXT NOT NULL DEFAULT '',
+    sleep_bands TEXT NOT NULL DEFAULT '[]',
+    work_bands TEXT NOT NULL DEFAULT '[]',
+    open_bands TEXT NOT NULL DEFAULT '[]')""",
             """CREATE TABLE IF NOT EXISTS jobs (
     key TEXT PRIMARY KEY,
     name TEXT NOT NULL DEFAULT '',
