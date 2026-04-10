@@ -109,6 +109,19 @@ DIALOGUE SYSTEM (classes/creature.py, data/db.py, editor/dialogue_tab.py)
 - World/quest condition checking not yet wired (needs quest/world state system)
 - NPC-to-NPC conversations supported (no limits yet)
 
+SPATIAL MEMORY & GOALS (classes/creature/_goals.py)
+- GoalMixin: spatial memory dict (known_locations) + goal state per creature
+- remember_location(): stores purpose -> [(map, x, y, tick)] with dedup and cap (10/purpose)
+- update_spatial_memory(): auto-learns tile purpose on 500ms tick
+- set_goal/clear_goal: hierarchical RL goal tracking (purpose, target, zone_id, tick)
+- goal_distance/goal_progress/at_goal: Manhattan distance tracking and progress delta
+- pick_goal_target: selects best known location for a purpose (current map > other map)
+- direction_to_goal: unit vector toward goal target
+- NOT YET: zone_registry integration (no ZoneRegistry class exists)
+- NOT YET: cross-map pathfinding (returns 100.0 placeholder distance)
+- NOT YET: goal selection by RL policy (goal is set manually, not by neural net)
+- NOT YET: wired into observation space or reward function
+
 NPC BEHAVIOR (classes/creature.py)
 - NPC subclass removed; all creatures use Creature with behavior modules
 - Only RandomWanderBehavior exists — no pathfinding, aggro, patrol, or scheduling

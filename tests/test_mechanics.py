@@ -3028,6 +3028,153 @@ for _ in range(30):
 check(f"Multi-agent survived 30+ steps", menv.sim.step_count >= 30)
 
 # ==========================================================================
+print("\n=== Spatial Memory & Goals ===")
+gm = make_map(20, 20)
+gc = make_creature(gm, x=5, y=5, name='GoalCreature')
+gm.name = 'test_map'
+
+# -- remember_location basics --
+gc.remember_location('trading', 'test_map', 10, 10, tick=100)
+check("remember_location adds entry",
+      len(gc.known_locations.get('trading', [])) == 1)
+check("remembered coords correct",
+      gc.known_locations['trading'][0] == ('test_map', 10, 10, 100))
+
+# -- deduplication: same coords updates tick --
+gc.remember_location('trading', 'test_map', 10, 10, tick=200)
+check("dedup: still 1 entry after re-remembering same coords",
+      len(gc.known_locations['trading']) == 1)
+check("dedup: tick updated to 200",
+      gc.known_locations['trading'][0][3] == 200)
+
+# -- different coords adds second entry --
+gc.remember_location('trading', 'test_map', 15, 15, tick=300)
+check("different coords adds second entry",
+      len(gc.known_locations['trading']) == 2)
+
+# -- multiple purposes stay separate --
+gc.remember_location('farming', 'test_map', 3, 3, tick=100)
+check("farming purpose separate from trading",
+      'farming' in gc.known_locations and len(gc.known_locations['farming']) == 1)
+
+# -- memory cap --
+from classes.creature._goals import _MAX_MEMORY_PER_PURPOSE
+for i in range(_MAX_MEMORY_PER_PURPOSE + 5):
+    gc.remember_location('capped', 'test_map', i, 0, tick=i)
+check(f"memory capped at {_MAX_MEMORY_PER_PURPOSE}",
+      len(gc.known_locations['capped']) == _MAX_MEMORY_PER_PURPOSE)
+
+# -- update_spatial_memory from tile purpose --
+gm2 = make_map(10, 10)
+gm2.name = 'purpose_map'
+gm2.tiles[MapKey(3, 3, 0)].purpose = 'hunting'
+gc2 = make_creature(gm2, x=3, y=3, name='PurposeCreature')
+gc2.update_spatial_memory(tick=500)
+check("update_spatial_memory learns tile purpose",
+      'hunting' in gc2.known_locations and len(gc2.known_locations['hunting']) == 1)
+
+# -- tile without purpose: no entry --
+gc3 = make_creature(gm2, x=0, y=0, name='NoPurpose')
+gc3.update_spatial_memory(tick=600)
+check("no purpose tile: known_locations empty",
+      len(gc3.known_locations) == 0)
+
+# -- set_goal / goal_distance / at_goal --
+gm3 = make_map(20, 20)
+gm3.name = 'goal_map'
+gc4 = make_creature(gm3, x=2, y=2, name='GoalRunner')
+gc4.set_goal('trading', 'goal_map', 10, 10, tick=0)
+check("current_goal set", gc4.current_goal == 'trading')
+check("goal_target set", gc4.goal_target == ('goal_map', 10, 10))
+check("goal_distance = Manhattan(2,2 -> 10,10) = 16",
+      gc4.goal_distance() == 16.0)
+check("not at_goal when 16 away", not gc4.at_goal())
+
+# -- goal_progress: moving closer --
+gc4.location = MapKey(5, 5, 0)
+progress = gc4.goal_progress()
+check("goal_progress positive when moving closer (was 16, now 10, progress=6)",
+      progress == 6.0)
+
+# -- at_goal: within 1 tile --
+gc4.location = MapKey(10, 10, 0)
+check("at_goal when on target tile", gc4.at_goal())
+
+# -- at_goal: 1 tile away --
+gc4.location = MapKey(10, 11, 0)
+check("at_goal when 1 tile away", gc4.at_goal())
+
+# -- not at_goal: 2 tiles away --
+gc4.location = MapKey(10, 12, 0)
+check("not at_goal when 2 tiles away", not gc4.at_goal())
+
+# -- clear_goal --
+gc4.clear_goal()
+check("clear_goal: current_goal is None", gc4.current_goal is None)
+check("clear_goal: goal_target is None", gc4.goal_target is None)
+check("clear_goal: goal_distance is inf", gc4.goal_distance() == float('inf'))
+
+# -- direction_to_goal --
+gm4 = make_map(20, 20)
+gm4.name = 'dir_map'
+gc5 = make_creature(gm4, x=5, y=5, name='DirCreature')
+gc5.set_goal('farming', 'dir_map', 10, 3, tick=0)
+dx, dy = gc5.direction_to_goal()
+check("direction_to_goal dx=1 (east)", dx == 1)
+check("direction_to_goal dy=-1 (north)", dy == -1)
+
+# -- direction_to_goal: no goal --
+gc5.clear_goal()
+check("direction_to_goal (0,0) when no goal", gc5.direction_to_goal() == (0, 0))
+
+# -- cross-map goal --
+gc5.set_goal('trading', 'other_map', 0, 0, tick=0)
+check("cross-map goal_distance = 100 placeholder", gc5.goal_distance() == 100.0)
+check("cross-map not at_goal", not gc5.at_goal())
+check("cross-map direction (0,0)", gc5.direction_to_goal() == (0, 0))
+
+# -- pick_goal_target from memory --
+gm5 = make_map(20, 20)
+gm5.name = 'pick_map'
+gc6 = make_creature(gm5, x=0, y=0, name='Picker')
+gc6.remember_location('trading', 'pick_map', 8, 8, tick=100)
+gc6.remember_location('trading', 'pick_map', 15, 15, tick=200)
+result = gc6.pick_goal_target('trading')
+check("pick_goal_target returns closest on current map",
+      result is not None and result[1] == 8 and result[2] == 8)
+
+# -- pick_goal_target: no known locations returns None --
+result_none = gc6.pick_goal_target('unknown_purpose')
+check("pick_goal_target returns None for unknown purpose", result_none is None)
+
+# -- pick_goal_target: other map fallback --
+gc6.remember_location('healing', 'far_away_map', 5, 5, tick=300)
+result_far = gc6.pick_goal_target('healing')
+check("pick_goal_target falls back to other map",
+      result_far is not None and result_far[0] == 'far_away_map')
+
+# -- spatial_memory tick fires via process_ticks --
+gm6 = make_map(10, 10)
+gm6.name = 'tick_map'
+gm6.tiles[MapKey(1, 1, 0)].purpose = 'resting'
+gc7 = make_creature(gm6, x=1, y=1, name='TickCreature')
+gc7.process_ticks(1000)  # fire all registered ticks
+check("spatial_memory tick learns tile purpose",
+      'resting' in gc7.known_locations)
+
+# -- goal_target_zone_id --
+gc8 = make_creature(gm6, x=0, y=0, name='ZoneCreature')
+gc8.set_goal('trading', 'tick_map', 5, 5, zone_id=42, tick=0)
+check("goal_target_zone_id set", gc8.goal_target_zone_id == 42)
+gc8.clear_goal()
+check("goal_target_zone_id cleared", gc8.goal_target_zone_id is None)
+
+# -- goal_started_tick --
+gc9 = make_creature(gm6, x=0, y=0, name='TickTracker')
+gc9.set_goal('farming', 'tick_map', 5, 5, tick=12345)
+check("goal_started_tick set", gc9.goal_started_tick == 12345)
+
+# ==========================================================================
 print(f"\n{'='*50}")
 print(f"Results: {PASS} passed, {FAIL} failed out of {PASS+FAIL} tests")
 if FAIL:
