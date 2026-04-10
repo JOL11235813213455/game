@@ -57,6 +57,9 @@ class Simulation:
         from main.game_clock import GameClock
         self.game_clock = GameClock(start_hour=8.0)
         self._last_clock_tick = 0
+        # Track the integer game day so we can fire daily ticks (eggs
+        # gestating, hatching) exactly once per day boundary.
+        self._last_game_day = int(self.game_clock.day)
 
         # Per-creature state tracking
         self._obs_snapshots: dict[int, dict] = {}  # uid → prev observation snapshot
@@ -66,6 +69,69 @@ class Simulation:
         for c in self.creatures:
             self._obs_snapshots[c.uid] = make_snapshot(c)
             self._reward_snapshots[c.uid] = make_reward_snapshot(c)
+
+    def _tick_lifecycle_day(self):
+        """Daily population tick: gestation + hatching.
+
+        Walks every Egg in the world (creature inventories and tile
+        inventories), advances each by one game day, and hatches any
+        that are ready. Hatched creatures appear at the carrier's or
+        tile's location and are appended to ``self.creatures`` so the
+        next ``step()`` will iterate over them like any other creature.
+
+        This is the entry point for births in the simulation. Pairings
+        produce eggs (via :meth:`Creature.propose_pairing` →
+        :meth:`Creature._execute_pairing`); this method makes those
+        eggs eventually become living creatures.
+        """
+        from classes.inventory import Egg
+
+        # --- Phase 1: tick gestation on every egg in the world ---
+        # Track (egg, owner_kind, owner_ref, location) so phase 2 can
+        # remove ready eggs from their containers and place the
+        # hatchlings on the right tile.
+        eggs_seen: list[tuple] = []
+
+        # Eggs in creature inventories (pregnancies + carried eggs)
+        for c in self.creatures:
+            if not c.is_alive:
+                continue
+            for item in c.inventory.items:
+                if isinstance(item, Egg):
+                    carried = (getattr(c, 'is_pregnant', False)
+                               and getattr(c, '_pregnancy_egg', None) is item)
+                    item.tick_gestation(carried_by_mother=carried)
+                    eggs_seen.append((item, 'creature', c, c.location))
+
+        # Eggs on tiles (abomination drops, lost-and-found)
+        for key, tile in self.game_map.tiles.items():
+            for item in tile.inventory.items:
+                if isinstance(item, Egg):
+                    item.tick_gestation(carried_by_mother=False)
+                    eggs_seen.append((item, 'tile', tile, key))
+
+        # --- Phase 2: hatch ready eggs into live creatures ---
+        for egg, owner_kind, owner_ref, loc in eggs_seen:
+            if not egg.ready_to_hatch:
+                continue
+            child = egg.hatch(self.game_map, loc)
+            if child is None:
+                continue
+            # Remove the egg from its container, end pregnancy if applicable
+            if owner_kind == 'creature':
+                if egg in owner_ref.inventory.items:
+                    owner_ref.inventory.items.remove(egg)
+                if (getattr(owner_ref, 'is_pregnant', False)
+                        and getattr(owner_ref, '_pregnancy_egg', None) is egg):
+                    owner_ref.end_pregnancy()
+            else:  # tile
+                if egg in owner_ref.inventory.items:
+                    owner_ref.inventory.items.remove(egg)
+
+            # Welcome the newborn into the simulation roster
+            self.creatures.append(child)
+            self._obs_snapshots[child.uid] = make_snapshot(child)
+            self._reward_snapshots[child.uid] = make_reward_snapshot(child)
 
     def step(self) -> list[dict]:
         """Advance one simulation step.
@@ -81,6 +147,15 @@ class Simulation:
         # GameClock.update takes real seconds and maps 1 real second = 1
         # game minute, so advance by exactly 1 real-second per tick.
         self.game_clock.update(1.0)
+
+        # Detect day boundary and fire the daily lifecycle pass exactly
+        # once per game day (eggs gestating + hatching). Loop in case
+        # multiple days slipped — defensive, shouldn't normally happen.
+        current_day = int(self.game_clock.day)
+        if current_day != self._last_game_day:
+            for _ in range(max(1, current_day - self._last_game_day)):
+                self._tick_lifecycle_day()
+            self._last_game_day = current_day
 
         # Process all creature ticks (behavior, regen, etc.)
         for c in self.creatures:

@@ -81,6 +81,7 @@ class Action(IntEnum):
     JOB = 54    # single parameterized action; dispatches via creature.do_job()
     FARM = 55   # stewardship: boost resource growth on farming tiles
     PROCESS = 56   # raw -> refined: bake/cook/smelt (tile-gated to crafting)
+    PAIR = 57      # propose pairing with adjacent fertile partner
 
 
 NUM_ACTIONS = len(Action)
@@ -123,6 +124,7 @@ ACTION_PURPOSE = {
     Action.FARM: 'farming',       # stewardship — distinct from extraction
     Action.JOB: None,              # resolved at reward time from creature.job.purpose
     Action.PROCESS: 'crafting',   # cook/smelt — tile-gated to crafting
+    Action.PAIR: 'pairing',
     Action.USE_ITEM: 'eating',     # consumables
     Action.SET_TRAP: 'hunting',
 }
@@ -159,6 +161,7 @@ ACTION_NAMES = {
     Action.HARVEST: 'harvest',
     Action.JOB: 'job', Action.FARM: 'farm',
     Action.PROCESS: 'process',
+    Action.PAIR: 'pair',
 }
 
 
@@ -450,5 +453,31 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
 
     if action == Action.PROCESS:
         return creature.process()
+
+    if action == Action.PAIR:
+        # Auto-target: find a fertile, adjacent, opposite-sex creature
+        # of the same species. The pairing helper itself does the
+        # contest (proposal, acceptance, fertility checks); dispatch
+        # only chooses the partner.
+        if target is None:
+            from classes.world_object import WorldObject
+            from classes.creature import Creature as _Creature
+            target = next(
+                (o for o in WorldObject.on_map(creature.current_map)
+                 if isinstance(o, _Creature) and o is not creature
+                 and o.is_alive
+                 and o.sex != creature.sex
+                 and o.species == creature.species
+                 and abs(o.location.x - creature.location.x) +
+                     abs(o.location.y - creature.location.y) <= 1),
+                None
+            )
+            if target is None:
+                return {'success': False, 'reason': 'no_partner'}
+        # propose_pairing always wants the male as caller, female as
+        # partner; flip if needed.
+        if creature.sex == 'male':
+            return creature.propose_pairing(target, now)
+        return target.propose_pairing(creature, now)
 
     return {'success': False, 'reason': 'unknown_action'}

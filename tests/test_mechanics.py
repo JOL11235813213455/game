@@ -1590,7 +1590,7 @@ m44 = make_map(cols=10, rows=10)
 actor = make_creature(m44, x=5, y=5, stats={Stat.STR: 14, Stat.AGL: 12}, name='Actor')
 dummy = make_creature(m44, x=6, y=5, stats={Stat.VIT: 12, Stat.PER: 10, Stat.LVL: 3}, name='Dummy')
 
-check(f"NUM_ACTIONS = {NUM_ACTIONS}", NUM_ACTIONS == 57)
+check(f"NUM_ACTIONS = {NUM_ACTIONS}", NUM_ACTIONS == 58)
 
 # Move south via dispatch (east is blocked by dummy at 6,5)
 ctx = {'cols': 10, 'rows': 10}
@@ -3393,7 +3393,7 @@ dfr = dispatch(disp_farm2, Action.FARM, {'cols': 8, 'rows': 8})
 check("dispatch FARM succeeds", dfr.get('success'))
 
 # Action counts
-check("NUM_ACTIONS is 57", NUM_ACTIONS == 57)
+check("NUM_ACTIONS is 57", NUM_ACTIONS == 58)
 
 # ==========================================================================
 # Processing recipes (cook / smelt)
@@ -3937,6 +3937,107 @@ if _db_loaded:
     check("creatures.job_key column exists", 'job_key' in creature_cols)
 else:
     check("DB catalog was loadable", False)
+
+# ==========================================================================
+# Birth chain: pair -> egg -> gestation -> hatch -> live creature on map
+# ==========================================================================
+print("\n--- Birth chain tests ---")
+
+from classes.inventory import Egg
+
+# Build a simple two-creature scenario: adult male + adult fertile female,
+# adjacent, same species, neither pregnant.
+bm = make_map(8, 8)
+male = make_creature(bm, x=3, y=3, name='BirthMale', sex='male', age=25,
+                      stats={Stat.STR: 12, Stat.VIT: 12, Stat.CHR: 12})
+female = make_creature(bm, x=3, y=4, name='BirthFemale', sex='female', age=25,
+                        stats={Stat.STR: 10, Stat.VIT: 14, Stat.CHR: 12})
+# Strong sentiment so the proposal isn't refused on relationship grounds
+male.record_interaction(female, 8.0)
+female.record_interaction(male, 8.0)
+
+# Force a pairing (skips willingness contest)
+pair_result = male.force_pairing(female, now=0)
+check("force_pairing completed", pair_result is not None)
+check("female is pregnant after pairing", female.is_pregnant)
+
+# Egg should be in female's inventory and equal to her _pregnancy_egg
+preg_eggs = [i for i in female.inventory.items if isinstance(i, Egg)]
+check("pregnancy egg in female inventory", len(preg_eggs) == 1)
+check("pregnancy egg matches _pregnancy_egg",
+      preg_eggs and preg_eggs[0] is female._pregnancy_egg)
+
+egg = preg_eggs[0]
+check("fresh egg has 0 gestation days", egg.gestation_days == 0)
+check("fresh egg is alive", egg.live)
+check("fresh egg is NOT ready_to_hatch", not egg.ready_to_hatch)
+
+# Tick gestation 30 times — egg should be ready
+for _ in range(egg.gestation_period):
+    egg.tick_gestation(carried_by_mother=True)
+check(f"egg gestation_days reached {egg.gestation_period}",
+      egg.gestation_days >= egg.gestation_period)
+# May be dead from random ~1%/day rolls; if so, hatch returns None
+if egg.live:
+    check("aged egg ready_to_hatch", egg.ready_to_hatch)
+    child = egg.hatch(bm, female.location)
+    check("hatch returns a child", child is not None)
+    if child is not None:
+        check("hatched child is age 0", child.age == 0)
+        check("hatched child has female's species", child.species == female.species)
+        check("hatched child is on the map",
+              child.current_map is bm)
+        check("hatched child has mother_uid set",
+              getattr(child, 'mother_uid', None) == female.uid)
+
+# --- End-to-end via Simulation: pair, advance days, see hatching ---
+# Use a synthetic Simulation directly with our test creatures
+from editor.simulation.headless import Simulation
+sim_arena = {
+    'map': bm,
+    'creatures': [male, female],
+    'cols': 8, 'rows': 8,
+}
+sim = Simulation(sim_arena)
+initial_pop = len(sim.creatures)
+
+# Force a fresh pairing in the sim. We need to:
+#   * clear the female's pregnancy state
+#   * clear the male's pair cooldown (set to 1 day in the previous pairing)
+#   * top off the male's HP/stamina (drained by the previous pairing)
+def _reset_for_pair(m, f):
+    f.is_pregnant = False
+    f._pregnancy_egg = None
+    f.stats.remove_mods_by_source('pregnancy')
+    m._pair_cooldown = 0
+    m.stats.base[Stat.HP_CURR] = m.stats.active[Stat.HP_MAX]()
+    m.stats.base[Stat.CUR_STAMINA] = m.stats.active[Stat.MAX_STAMINA]()
+
+_reset_for_pair(male, female)
+male.force_pairing(female, now=0)
+check("sim: female re-pregnant after second pairing", female.is_pregnant)
+
+# Manually fire the lifecycle pass for 30 days — this is what
+# Simulation.step does on every game-day boundary.
+for _ in range(35):
+    sim._tick_lifecycle_day()
+
+# By now any surviving egg should have hatched and the population grown
+hatched = len(sim.creatures) - initial_pop
+print(f'  (sim ticked 35 days; hatched {hatched} creature(s))')
+# The 1%/day death roll over 30 days = ~26% survival, so a single
+# pairing has a real chance of producing a dead egg. Run ~5 trials
+# until at least one survives, just to make the test reliable.
+trials = 0
+while hatched == 0 and trials < 5:
+    _reset_for_pair(male, female)
+    male.force_pairing(female, now=0)
+    for _ in range(35):
+        sim._tick_lifecycle_day()
+    hatched = len(sim.creatures) - initial_pop
+    trials += 1
+check(f"at least one egg hatched into the simulation (trials={trials+1})",
+      hatched >= 1)
 
 # ==========================================================================
 print(f"\n{'='*50}")
