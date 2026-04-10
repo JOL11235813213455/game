@@ -41,7 +41,7 @@ _SECTION_SIZES = {
     'tile_deep': 21, 'tile_liquid': 25, 'spatial_walls': 25, 'spatial_features': 12,
     'tile_items': MAX_TILE_ITEMS * 9, 'census': 45, 'census_audio': 3,
     'world_time': 13, 'temporal': 14, 'trends': 11, 'time_since': 12,
-    'reward_signals': 17,
+    'reward_signals': 17, 'social_topology': 17,
 }
 # Per-engaged and identity are variable (species/deity count)
 PER_ENGAGED_SIZE = 51  # grew from 45: 4 placeholder zeros replaced + 6 new fields
@@ -995,6 +995,17 @@ def build_observation(creature, cols: int, rows: int,
     # Replace the last-seen cache with only currently-slotted creatures
     # (anyone not seen this tick shouldn't influence next tick's delta)
     creature._last_seen_positions = new_seen
+
+    # ==== SECTION 22b: SOCIAL TOPOLOGY (17) ====
+    # Simple cohesion (6) + Laplacian eigenvalues (4) + rest-of-crowd (7).
+    # See classes/social_topology.py for the math. This gives the NN a
+    # compact read on the structure of the visible social environment:
+    # "am I in a unified group?", "are there factions?", "is anyone
+    # dangerous beyond my top 10?"
+    from classes.social_topology import compute_social_topology
+    slot_creatures_only = [entry[1] for entry in slot_entries]
+    topology = compute_social_topology(creature, visible, slot_creatures_only)
+    obs.extend(topology)
 
     # ==== SECTION 23: WORLD / TIME (13) ====
     if game_clock:
