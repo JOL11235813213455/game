@@ -274,6 +274,25 @@ def _log(tag: str, value: float, step: int):
         _writer.add_scalar(tag, value, step)
 
 
+def hunger_temperature(creature, base: float = 1.0) -> float:
+    """Action sampling temperature, scaled by how hungry the creature is.
+
+    Hunger is in [-1, 1]; only the negative range matters here.
+    A satiated creature samples at the base temperature. As hunger drops,
+    temperature climbs nonlinearly so the policy explores low-probability
+    actions (e.g. STEAL, HARVEST) it would otherwise never try. This is the
+    cheapest fix for the desperation/exploration problem — the NN cannot
+    raise its own temperature, so we do it for it.
+
+      hunger  >=  0.0  -> base
+      hunger  =  -0.5  -> base * 1.35
+      hunger  =  -1.0  -> base * 2.00
+    """
+    h = getattr(creature, 'hunger', 0.0)
+    desperation = max(0.0, -h)         # 0..1
+    return base * (1.0 + desperation ** 0.5)
+
+
 def _creature_final_state(c) -> dict:
     """Capture a creature's final state for analytics."""
     from classes.stats import Stat
@@ -391,7 +410,7 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
                 apply_preset_mask(obs, c.observation_mask)
 
             obs_arr = np.array(obs, dtype=np.float32)
-            action, log_prob, value = net.get_action(obs_arr)
+            action, log_prob, value = net.get_action(obs_arr, temperature=hunger_temperature(c))
 
             # Store for later collection
             tick_data[c.uid] = (obs_arr, action, log_prob, value)
@@ -713,7 +732,7 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             if agent.observation_mask:
                 apply_preset_mask(obs, agent.observation_mask)
             obs_arr = np.array(obs, dtype=np.float32)
-            action, log_prob, value = net.get_action(obs_arr)
+            action, log_prob, value = net.get_action(obs_arr, temperature=hunger_temperature(agent))
 
             target = None
             for obj in WorldObject.on_map(agent.current_map):

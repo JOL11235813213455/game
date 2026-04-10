@@ -2396,10 +2396,10 @@ print("\n=== Gender Competition ===")
 m61 = make_map(cols=10, rows=10)
 male_comp = make_creature(m61, x=5, y=5, name='CompMale', sex='male', age=25,
                           stats={Stat.STR: 14, Stat.CHR: 14, Stat.PER: 14})
-# Add some competitors
-for i in range(3):
-    make_creature(m61, x=6+i, y=5, name=f'RivalM{i}', sex='male', age=25,
-                  stats={Stat.STR: 16, Stat.CHR: 16, Stat.PER: 14})
+# Add some competitors — hold strong refs to prevent WeakSet GC
+_male_rivals = [make_creature(m61, x=6+i, y=5, name=f'RivalM{i}', sex='male', age=25,
+                               stats={Stat.STR: 16, Stat.CHR: 16, Stat.PER: 14})
+                for i in range(3)]
 
 rank = male_comp.attractiveness_rank_nearby()
 check(f"Male rank with 3 stronger rivals: {rank:.2f} (low)", rank < 0.5)
@@ -2407,12 +2407,12 @@ check(f"Male rank with 3 stronger rivals: {rank:.2f} (low)", rank < 0.5)
 eagerness = male_comp.pairing_eagerness()
 check(f"Male eagerness (low rank = high drive): {eagerness:.2f} (positive)", eagerness > 0)
 
-# Female with less attractive rivals
+# Female with less attractive rivals — hold strong refs
 female_comp = make_creature(m61, x=5, y=6, name='CompFemale', sex='female', age=25,
                             stats={Stat.VIT: 16, Stat.CHR: 16, Stat.AGL: 14, Stat.PER: 14})
-for i in range(3):
-    make_creature(m61, x=6+i, y=6, name=f'RivalF{i}', sex='female', age=25,
-                  stats={Stat.VIT: 8, Stat.CHR: 8, Stat.PER: 14})
+_female_rivals = [make_creature(m61, x=6+i, y=6, name=f'RivalF{i}', sex='female', age=25,
+                                 stats={Stat.VIT: 8, Stat.CHR: 8, Stat.PER: 14})
+                  for i in range(3)]
 
 f_rank = female_comp.attractiveness_rank_nearby()
 check(f"Female rank with weaker rivals: {f_rank:.2f} (high)", f_rank > 0.5)

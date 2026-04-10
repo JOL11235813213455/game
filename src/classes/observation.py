@@ -35,7 +35,7 @@ _SECTION_SIZES = {
     'self_base': 14, 'self_derived': 36, 'self_resources': 6,
     'self_combat': 17, 'self_economy': 20, 'self_slots': 14,
     'self_weapon': 15, 'self_inv_texture': 13, 'self_crafting': 6,
-    'self_social': 10, 'self_status': 16, 'self_hunger': 5, 'self_quest': 10,
+    'self_social': 10, 'self_status': 16, 'self_hunger': 6, 'self_quest': 10,
     'self_goal': 21, 'self_movement': 8,
     'self_genetics': 7, 'self_reputation': 6,
     'tile_deep': 21, 'tile_liquid': 25, 'spatial_walls': 25, 'spatial_features': 12,
@@ -404,13 +404,18 @@ def build_observation(creature, cols: int, rows: int,
     obs.append(egg.gestation_days / 30.0 if egg else 0.0)
     obs.append(1.0 if egg and egg.is_abomination else 0.0)
 
-    # ==== SECTION 10b: SELF HUNGER (5) ====
+    # ==== SECTION 10b: SELF HUNGER (6) ====
     hunger = getattr(creature, 'hunger', 0.0)
     obs.append(hunger)                                           # raw: -1 to 1
     obs.append(max(0, hunger))                                   # positive only (satiation)
     obs.append(max(0, -hunger))                                  # negative only (hunger urgency)
     obs.append(1.0 if hunger > 0.5 else 0.0)                    # well-fed flag
     obs.append(1.0 if hunger < -0.5 else 0.0)                   # starving flag
+    # Desperation: nonlinear escalator for sub-zero hunger.
+    # 0.0 at hunger >= 0, ramps quickly toward 1.0 as hunger -> -1.
+    # Gives the policy a salient "panic" signal independent of the linear urgency.
+    desperation = max(0.0, -hunger) ** 0.5
+    obs.append(desperation)
 
     # ==== SECTION 11: SELF QUEST/PROGRESSION (10) ====
     obs.append(len(creature.quest_log.get_active_quests()) / 5.0)
@@ -1083,27 +1088,27 @@ SECTION_RANGES = {
     'self_crafting':    (139, 145),
     'self_social':      (145, 155),
     'self_status':      (155, 171),
-    'self_hunger':      (171, 176),
-    'self_quest':       (176, 186),
-    'self_goal':        (186, 207),
-    'self_movement':    (207, 215),
-    'self_genetics':    (215, 222),
-    'self_identity':    (222, 247),
-    'self_reputation':  (247, 253),
-    'tile_deep':        (253, 274),      # +3 resource floats
-    'tile_liquid':      (274, 299),
-    'spatial_walls':    (299, 324),
-    'spatial_features': (324, 340),     # +4 crowding metrics
-    'tile_items':       (340, 367),
-    'census_visible':   (367, 412),
-    'census_audible':   (412, 415),
-    'per_engaged':      (415, 685),
-    'world_time':       (685, 698),
-    'temporal':         (698, 712),
-    'trends':           (712, 723),
-    'time_since':       (723, 735),
-    'reward_signals':   (735, 752),
-    'transforms':       (752, OBSERVATION_SIZE),
+    'self_hunger':      (171, 177),      # +1 desperation float
+    'self_quest':       (177, 187),
+    'self_goal':        (187, 208),
+    'self_movement':    (208, 216),
+    'self_genetics':    (216, 223),
+    'self_identity':    (223, 248),
+    'self_reputation':  (248, 254),
+    'tile_deep':        (254, 275),      # +3 resource floats
+    'tile_liquid':      (275, 300),
+    'spatial_walls':    (300, 325),
+    'spatial_features': (325, 341),     # +4 crowding metrics
+    'tile_items':       (341, 368),
+    'census_visible':   (368, 413),
+    'census_audible':   (413, 416),
+    'per_engaged':      (416, 686),
+    'world_time':       (686, 699),
+    'temporal':         (699, 713),
+    'trends':           (713, 724),
+    'time_since':       (724, 736),
+    'reward_signals':   (736, 753),
+    'transforms':       (753, OBSERVATION_SIZE),
 }
 
 # Semantic groups for easy mask building
