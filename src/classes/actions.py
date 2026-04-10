@@ -254,10 +254,14 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
                 return {'success': False, 'reason': 'no_spell'}
         return creature.cast_spell(spell, target, now)
 
-    # -- Social --
-    if action == Action.INTIMIDATE:
+    # -- Social (requires sentient target) --
+    if Action.INTIMIDATE <= action <= Action.TALK:
         if target is None:
             return {'success': False, 'reason': 'no_target'}
+        if not getattr(target, 'sentient', True):
+            return {'success': False, 'reason': 'not_sentient'}
+
+    if action == Action.INTIMIDATE:
         return creature.intimidate(target)
 
     if action == Action.DECEIVE:
