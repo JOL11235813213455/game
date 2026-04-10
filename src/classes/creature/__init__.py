@@ -147,7 +147,6 @@ class Creature(
         # Goal state (hierarchical RL)
         self.current_goal: str | None = None      # purpose string e.g. 'trading'
         self.goal_target: tuple | None = None      # (map_name, x, y) destination
-        self.goal_target_zone_id: int | None = None  # zone ID if targeting a zone
         self.goal_started_tick: int = 0
         self.goal_prev_distance: float = 0.0       # for progress reward
 

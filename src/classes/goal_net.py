@@ -100,8 +100,7 @@ class GoalNet:
 # Uses a subset of the full observation: self stats, economy, social summary,
 # spatial memory summary, current goal state
 
-def build_goal_observation(creature, cols: int, rows: int,
-                           zone_registry=None) -> list[float]:
+def build_goal_observation(creature, cols: int, rows: int) -> list[float]:
     """Build a compact observation for goal selection.
 
     Much smaller than the full action observation — goals don't need

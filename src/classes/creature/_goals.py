@@ -29,7 +29,7 @@ class GoalMixin:
         if len(locs) > _MAX_MEMORY_PER_PURPOSE:
             locs.pop(0)
 
-    def update_spatial_memory(self, tick: int = 0, zone_registry=None):
+    def update_spatial_memory(self, tick: int = 0):
         """Scan all visible tiles for purpose and remember their locations.
 
         Creatures learn about purpose tiles they can see, not just the
@@ -51,18 +51,11 @@ class GoalMixin:
                 if tile and getattr(tile, 'purpose', None):
                     self.remember_location(tile.purpose, map_name, tx, ty, tick)
 
-        # Also check zone registry at current location
-        if zone_registry:
-            purposes = zone_registry.get_purposes(map_name, cx, cy, z)
-            for p in purposes:
-                self.remember_location(p, map_name, cx, cy, tick)
-
     def set_goal(self, purpose: str, target_map: str, target_x: int, target_y: int,
-                 zone_id: int = None, tick: int = 0):
+                 tick: int = 0):
         """Set a new goal: go to a location and perform a purpose-aligned action."""
         self.current_goal = purpose
         self.goal_target = (target_map, target_x, target_y)
-        self.goal_target_zone_id = zone_id
         self.goal_started_tick = tick
         # Calculate initial distance for progress tracking
         if getattr(self.current_map, 'name', '') == target_map:
@@ -74,7 +67,6 @@ class GoalMixin:
         """Clear the current goal (completed or abandoned)."""
         self.current_goal = None
         self.goal_target = None
-        self.goal_target_zone_id = None
         self.goal_started_tick = 0
         self.goal_prev_distance = 0.0
 
@@ -124,37 +116,26 @@ class GoalMixin:
             return False
         return self.goal_distance() <= 1.0  # within 1 tile
 
-    def pick_goal_target(self, purpose: str, zone_registry=None) -> tuple | None:
-        """Pick the best known location for a purpose.
+    def pick_goal_target(self, purpose: str) -> tuple | None:
+        """Pick the best known location for a purpose from spatial memory.
 
-        Prefers: zones on current map > remembered tiles on current map >
-                 zones on other maps > remembered tiles on other maps.
-        Returns (map_name, x, y, zone_id_or_none) or None.
+        Prefers current map (closest). Falls back to other maps.
+        Returns (map_name, x, y) or None.
         """
         map_name = getattr(self.current_map, 'name', '') or ''
 
-        # Try zone registry first (most reliable)
-        if zone_registry:
-            zone, dist = zone_registry.get_nearest_zone(
-                map_name, purpose, self.location.x, self.location.y)
-            if zone is not None:
-                cx, cy = zone_registry.get_center(zone)
-                return (map_name, int(cx), int(cy), zone.id)
-
-        # Try spatial memory
         locs = self.known_locations.get(purpose, [])
-        # Prefer current map
+        # Prefer current map, closest first
         current_map_locs = [(mn, x, y, t) for mn, x, y, t in locs if mn == map_name]
         if current_map_locs:
-            # Pick closest
             best = min(current_map_locs,
                        key=lambda l: abs(l[1] - self.location.x) + abs(l[2] - self.location.y))
-            return (best[0], best[1], best[2], None)
+            return (best[0], best[1], best[2])
 
-        # Other maps
+        # Other maps — most recently discovered
         if locs:
-            loc = locs[-1]  # most recently discovered
-            return (loc[0], loc[1], loc[2], None)
+            loc = locs[-1]
+            return (loc[0], loc[1], loc[2])
 
         return None
 

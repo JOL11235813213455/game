@@ -371,9 +371,7 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
                 # Set goal on creature
                 target_info = c.pick_goal_target(purpose)
                 if target_info:
-                    c.set_goal(purpose, *target_info[:3],
-                               zone_id=target_info[3] if len(target_info) > 3 else None,
-                               tick=sim.now)
+                    c.set_goal(purpose, *target_info, tick=sim.now)
                 else:
                     c.set_goal(purpose, getattr(sim.game_map, 'name', ''),
                                c.location.x, c.location.y, tick=sim.now)
@@ -699,9 +697,7 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             purpose = TILE_PURPOSES[g_idx]
             target_info = agent.pick_goal_target(purpose)
             if target_info:
-                agent.set_goal(purpose, *target_info[:3],
-                               zone_id=target_info[3] if len(target_info) > 3 else None,
-                               tick=sim.now)
+                agent.set_goal(purpose, *target_info, tick=sim.now)
             else:
                 agent.set_goal(purpose, getattr(sim.game_map, 'name', ''),
                                agent.location.x, agent.location.y, tick=sim.now)
