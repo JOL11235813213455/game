@@ -195,11 +195,19 @@ _DIRS = {
 
 
 def dispatch(creature, action: int, context: dict) -> dict:
-    """Execute an action for a creature. Records action in god counters."""
+    """Execute an action for a creature. Records action in god counters
+    and bumps the creature's failed_actions counter on failure so the
+    'failed_actions' reward signal has data to penalize.
+    """
     result = _dispatch_inner(creature, action, context)
-    # Record in god system
-    if result.get('success', result.get('hit', False)):
+    succeeded = result.get('success', result.get('hit', False))
+    if succeeded:
         _record_god_action(action)
+    else:
+        # Failed action: bump the counter so reward.py can penalize.
+        # Reward scale is per-stage; the curriculum mask decides
+        # whether the penalty actually fires.
+        creature.failed_actions = getattr(creature, 'failed_actions', 0) + 1
     return result
 
 

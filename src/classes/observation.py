@@ -41,7 +41,7 @@ _SECTION_SIZES = {
     'tile_deep': 21, 'tile_liquid': 25, 'spatial_walls': 25, 'spatial_features': 12,
     'tile_items': MAX_TILE_ITEMS * 9, 'census': 45, 'census_audio': 3,
     'world_time': 13, 'temporal': 14, 'trends': 11, 'time_since': 12,
-    'reward_signals': 17, 'social_topology': 17,
+    'reward_signals': 17, 'social_topology': 17, 'water_awareness': 5,
 }
 # Per-engaged and identity are variable (species/deity count)
 PER_ENGAGED_SIZE = 51  # grew from 45: 4 placeholder zeros replaced + 6 new fields
@@ -1006,6 +1006,52 @@ def build_observation(creature, cols: int, rows: int,
     slot_creatures_only = [entry[1] for entry in slot_entries]
     topology = compute_social_topology(creature, visible, slot_creatures_only)
     obs.extend(topology)
+
+    # ==== SECTION 22c: WATER AWARENESS (5) ====
+    # For non-swimmers, water is deadly and we want a strong signal
+    # that the NN can learn to avoid. Four floats describe the
+    # spatial gradient; a fifth is a "I am in water right now" flag.
+    #
+    #   nearest_water_dist   : Manhattan distance to nearest water
+    #                          tile in sight. Normalized by sight
+    #                          range. 0 = I am standing on water.
+    #                          1.0 = no water visible.
+    #   nearest_water_dx     : unit-vector x component toward water
+    #                          (0 if no water visible)
+    #   nearest_water_dy     : unit-vector y component
+    #   water_danger_flag    : 1 if I am on water AND I can't swim
+    #                          (about to drown)
+    #   can_swim             : creature's swim capability, so the
+    #                          NN learns "distance to water matters
+    #                          only if can_swim == 0"
+    nearest_water_dist = 1.0  # 1.0 = no water in sight (fallback)
+    water_dx = 0.0
+    water_dy = 0.0
+    min_d = None
+    best = None
+    for ddx in range(-sight, sight + 1):
+        for ddy in range(-sight, sight + 1):
+            if abs(ddx) + abs(ddy) > sight:
+                continue
+            pt = game_map.tiles.get(MapKey(cx + ddx, cy + ddy, creature.location.z))
+            if pt and getattr(pt, 'liquid', False):
+                d = abs(ddx) + abs(ddy)
+                if min_d is None or d < min_d:
+                    min_d = d
+                    best = (ddx, ddy)
+    if min_d is not None:
+        nearest_water_dist = min_d / max(1, sight)
+        if best is not None and (best[0] != 0 or best[1] != 0):
+            mag = max(1, abs(best[0]) + abs(best[1]))
+            water_dx = best[0] / mag
+            water_dy = best[1] / mag
+    obs.append(nearest_water_dist)
+    obs.append(water_dx)
+    obs.append(water_dy)
+    can_swim = 1.0 if getattr(creature, 'can_swim', False) else 0.0
+    in_water = 1.0 if (tile and getattr(tile, 'liquid', False)) else 0.0
+    obs.append(in_water * (1.0 - can_swim))  # water_danger_flag
+    obs.append(can_swim)
 
     # ==== SECTION 23: WORLD / TIME (13) ====
     if game_clock:

@@ -835,19 +835,27 @@ def seed():
         )
 
     # Stage 1: Wander — learn to move purposefully
+    # Failed actions are penalized from stage 1 because wall-bashing
+    # is the single biggest form of wasted movement. Water danger is
+    # also on from day one so non-swimmers learn water is death.
     _stage(1, 'Wander',
            'Learn to move and explore. No hunger pressure, no combat targets, '
-           'no economy. Reward only for visiting new tiles and meeting other creatures.',
-           {'exploration': 1.0, 'hp': 0.5},
+           'no economy. Reward only for visiting new tiles and meeting other '
+           'creatures. Failed actions penalized to discourage wall-bashing. '
+           'Water danger penalized so non-swimmers learn to stay away.',
+           {'exploration': 1.0, 'hp': 0.5,
+            'failed_actions': 0.5, 'water_danger': 1.0},
            hunger=False, combat=False, gestation=False,
            mappo=30000, es_gens=0, es_vars=20, es_steps=1000, ppo=30000)
 
     # Stage 2: Forage — pick stuff up
     _stage(2, 'Forage',
            'Learn to pick things up. Surface gold and items reward inventory growth. '
-           'Still no hunger or combat — focus is purely on grab-and-go.',
+           'Still no hunger or combat — focus is purely on grab-and-go. '
+           'Water danger still active (foragers must avoid the river).',
            {'exploration': 0.4, 'hp': 0.3,
-            'gold': 1.0, 'inventory': 1.0},
+            'gold': 1.0, 'inventory': 1.0,
+            'failed_actions': 0.5, 'water_danger': 1.0},
            hunger=False, combat=False, gestation=False,
            mappo=30000, es_gens=0, es_vars=20, es_steps=1000, ppo=50000,
            resume=1)
@@ -858,7 +866,8 @@ def seed():
            'Foraging skills carry over but now matter for survival.',
            {'exploration': 0.3, 'hp': 0.3,
             'gold': 0.5, 'inventory': 0.5,
-            'hunger': 1.0},
+            'hunger': 1.0,
+            'failed_actions': 0.5, 'water_danger': 1.0},
            hunger=True, combat=False, gestation=False,
            mappo=30000, es_gens=0, es_vars=20, es_steps=1000, ppo=80000,
            resume=2)
@@ -873,7 +882,8 @@ def seed():
             'hunger': 0.7,
             'wage': 1.0,
             'goal_progress': 0.5, 'goal_completed': 1.0,
-            'purpose_proximity': 0.5},
+            'purpose_proximity': 0.5,
+            'failed_actions': 0.5, 'water_danger': 0.7},
            hunger=True, combat=False, gestation=False,
            mappo=30000, es_gens=0, es_vars=20, es_steps=1000, ppo=80000,
            resume=3)
@@ -888,7 +898,8 @@ def seed():
             'hunger': 0.7,
             'wage': 0.7, 'trade': 1.0,
             'goal_progress': 0.5, 'goal_completed': 1.0,
-            'purpose_proximity': 0.5},
+            'purpose_proximity': 0.5,
+            'failed_actions': 0.5, 'water_danger': 0.5},
            hunger=True, combat=False, gestation=False,
            mappo=30000, es_gens=15, es_vars=30, es_steps=1500, ppo=80000,
            resume=4)
@@ -911,7 +922,8 @@ def seed():
             'goal_progress': 0.5, 'goal_completed': 1.0,
             'purpose_proximity': 0.5,
             'reputation': 1.0, 'allies': 1.0,
-            'failed_actions': 1.0, 'fatigue': 1.0, 'crowding': 1.0},
+            'failed_actions': 1.0, 'fatigue': 1.0, 'crowding': 1.0,
+            'water_danger': 0.5},
            hunger=True, combat=False, gestation=False,
            mappo=30000, es_gens=10, es_vars=30, es_steps=1500, ppo=80000,
            resume=5)
@@ -933,7 +945,8 @@ def seed():
             'purpose_proximity': 0.5,
             'kills': 1.0, 'reputation': 1.0, 'allies': 0.7,
             'failed_actions': 1.0, 'fatigue': 1.0, 'crowding': 1.0,
-            'life_goals': 1.0, 'piety': 0.5, 'quests': 0.5, 'xp': 0.5},
+            'life_goals': 1.0, 'piety': 0.5, 'quests': 0.5, 'xp': 0.5,
+            'water_danger': 0.5},
            hunger=True, combat=True, gestation=True,
            mappo=30000, es_gens=10, es_vars=30, es_steps=1500, ppo=80000,
            resume=6)

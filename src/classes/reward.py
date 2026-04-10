@@ -24,6 +24,15 @@ def _sln(x: float) -> float:
     return math.copysign(math.log(abs(x) + 1), x)
 
 
+def _current_tile_liquid(creature) -> bool:
+    """Return True if the creature is standing on a liquid tile."""
+    try:
+        tile = creature.current_map.tiles.get(creature.location)
+        return bool(tile and getattr(tile, 'liquid', False))
+    except Exception:
+        return False
+
+
 def _resolve_action_purpose(creature, action: int) -> str | None:
     """Return the purpose string an action should count toward *right now*.
 
@@ -152,6 +161,22 @@ def compute_reward(creature, prev: dict, curr: dict,
 
     nearby = curr.get('nearby_count', 0)
     signals['crowding'] = -(nearby - 4) * 0.3 if nearby >= 5 else 0.0
+
+    # Water danger: steep penalty for standing on deep water without
+    # swimming. Anticipatory signal so non-swimmers learn distance to
+    # water matters; drowning damage already shows up in the hp signal.
+    if curr.get('in_liquid', False) and not curr.get('can_swim', False):
+        # Standing on water and can't swim. Steep penalty so the NN
+        # feels this independently of the HP drain that's already
+        # hitting the hp signal.
+        signals['water_danger'] = -3.0
+    elif (curr.get('nearest_water_dist', 1.0) < 0.3
+          and not curr.get('can_swim', False)):
+        # Close to water without swim ability — mild warning penalty
+        # that scales with proximity. At 0.3 normalized (~2 tiles)
+        # penalty is -0.1; at 0.1 (~1 tile) -0.3.
+        proximity = 1.0 - curr.get('nearest_water_dist', 1.0)
+        signals['water_danger'] = -proximity * 1.0
 
     # Wage earned since last tick — rewards consistent job execution.
     wage_delta = curr.get('wage_accumulated', 0.0) - prev.get('wage_accumulated', 0.0)
@@ -347,6 +372,9 @@ def make_reward_snapshot(creature) -> dict:
         'failed_actions': getattr(creature, 'failed_actions', 0),
         'fatigue': getattr(creature, '_fatigue_level', 0),
         'hunger': getattr(creature, 'hunger', 0.0),
+        'in_liquid': _current_tile_liquid(creature),
+        'can_swim': getattr(creature, 'can_swim', False),
+        'nearest_water_dist': 1.0,  # filled by observation builder if needed
         'nearby_count': nearby_count,
         'wage_accumulated': getattr(creature, '_wage_accumulated', 0.0),
         'trade_surplus': getattr(creature, '_trade_surplus_accumulated', 0.0),
