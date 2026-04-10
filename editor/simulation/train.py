@@ -292,8 +292,12 @@ def _creature_final_state(c) -> dict:
 
 def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
               arena_kwargs: dict = None, rollout_len: int = 4096,
-              sink=None) -> TorchCreatureNet:
-    """Phase 1: Multi-agent PPO — all creatures share weights."""
+              sink=None, goal_net=None, goal_ppo=None) -> TorchCreatureNet:
+    """Phase 1: Multi-agent PPO — all creatures share weights.
+
+    If goal_net is provided, runs hierarchical goal selection every
+    GOAL_INTERVAL steps for each creature.
+    """
     print(f'\n=== MAPPO Phase ({steps} steps) ===')
     arena_kwargs = arena_kwargs or {
         'cols': 25, 'rows': 25, 'num_creatures': 16,
@@ -302,6 +306,8 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
                       'feral', 'impulsive', 'nearsighted', 'paranoid'],
     }
     buffer = RolloutBuffer()
+    goal_buffer = RolloutBuffer() if goal_net else None
+    GOAL_INTERVAL = 50  # re-evaluate goals every 50 action steps
 
     episode_rewards = []
     arena = generate_arena(**arena_kwargs)
@@ -318,23 +324,56 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
     trail_actions = []  # list of (step, action_id) for trailing window
     TRAIL_WINDOW = 20   # 20 steps = 10 seconds at 500ms ticks
     step_rewards = []   # recent step rewards for rolling avg
+    # Goal tracking per creature: {uid: (goal_obs, goal_idx, log_prob, value, cumul_reward)}
+    _goal_states = {}
 
     from collections import deque
     from classes.observation import build_observation, make_snapshot
-    from classes.actions import dispatch, Action
+    from classes.actions import dispatch, Action, TILE_PURPOSES
     from classes.world_object import WorldObject
     from classes.creature import Creature
     from classes.reward import compute_reward, make_reward_snapshot
     from classes.temporal import make_history_snapshot
+    from classes.goal_net import build_goal_observation
 
     for step in range(steps):
         # Store per-creature action data for this tick
         tick_data = {}  # uid → (obs_arr, action, log_prob, value)
 
+        # Goal selection (hierarchical): every GOAL_INTERVAL steps
+        if goal_net and step % GOAL_INTERVAL == 0:
+            for c in sim.creatures:
+                if not c.is_alive:
+                    continue
+                # Collect goal reward from previous goal period
+                gs = _goal_states.get(c.uid)
+                if gs and goal_buffer:
+                    g_obs, g_idx, g_lp, g_val, g_rew = gs
+                    goal_buffer.store(g_obs, g_idx, g_rew, g_val, g_lp, not c.is_alive)
+                # Select new goal
+                goal_obs = build_goal_observation(c, sim.cols, sim.rows)
+                goal_obs_arr = np.array(goal_obs, dtype=np.float32)
+                known = set(c.known_locations.keys()) if c.known_locations else set()
+                g_idx, g_lp, g_val = goal_net.get_goal(goal_obs_arr, known_purposes=known)
+                purpose = TILE_PURPOSES[g_idx]
+                # Set goal on creature
+                target_info = c.pick_goal_target(purpose)
+                if target_info:
+                    c.set_goal(purpose, *target_info[:3],
+                               zone_id=target_info[3] if len(target_info) > 3 else None,
+                               tick=sim.now)
+                else:
+                    c.set_goal(purpose, getattr(sim.game_map, 'name', ''),
+                               c.location.x, c.location.y, tick=sim.now)
+                _goal_states[c.uid] = (goal_obs_arr, g_idx, g_lp, g_val, 0.0)
+
         # Each creature acts using the shared net
         for c in sim.creatures:
             if not c.is_alive:
                 continue
+
+            # Update spatial memory
+            c.update_spatial_memory(sim.now)
 
             obs = build_observation(c, sim.cols, sim.rows,
                                     world_data=sim.world_data)
@@ -381,7 +420,8 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             prev_rew = sim._reward_snapshots.get(c.uid)
             curr_rew = make_reward_snapshot(c)
             if prev_rew:
-                reward, signals = compute_reward(c, prev_rew, curr_rew, breakdown=True)
+                reward, signals = compute_reward(c, prev_rew, curr_rew,
+                                                 breakdown=True, last_action=action)
             else:
                 reward, signals = 0.0, {}
             sim._reward_snapshots[c.uid] = curr_rew
@@ -397,6 +437,11 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
                 step_rewards = step_rewards[-500:]
             ep_steps += 1
 
+            # Accumulate reward for goal model
+            if c.uid in _goal_states:
+                gs = _goal_states[c.uid]
+                _goal_states[c.uid] = (gs[0], gs[1], gs[2], gs[3], gs[4] + reward)
+
             if sink:
                 sink.record_step(c.uid, action, reward, signals,
                                  creature_name=c.name or '', alive=c.is_alive)
@@ -411,6 +456,13 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             if sink:
                 sink.record_training_update(info['entropy'], info['value_loss'],
                                             info['policy_loss'])
+
+        # Goal PPO update (goal buffer fills slower — every GOAL_INTERVAL steps)
+        if goal_buffer and goal_ppo and len(goal_buffer) >= max(64, rollout_len // GOAL_INTERVAL):
+            g_info = goal_ppo.update(*goal_buffer.get())
+            goal_buffer.clear()
+            _log('mappo/goal_policy_loss', g_info['policy_loss'], step)
+            _log('mappo/goal_entropy', g_info['entropy'], step)
 
         # Write state for live viewer (every 10 steps to avoid IO spam)
         if step % 10 == 0:
@@ -569,7 +621,7 @@ def run_es(net: TorchCreatureNet, generations: int = 50,
 def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             checkpoint_dir: Path = None,
             arena_kwargs: dict = None, rollout_len: int = 2048,
-            sink=None) -> TorchCreatureNet:
+            sink=None, goal_net=None, goal_ppo=None) -> TorchCreatureNet:
     """Phase 3: Single-agent PPO against diverse opponents."""
     print(f'\n=== PPO Phase ({steps} steps) ===')
     arena_kwargs = arena_kwargs or {
@@ -821,7 +873,14 @@ def train(cycles: int = 3, mappo_steps: int = 100000,
             net = _load_state_into_net(net, saved_state)
 
     ppo = PPO(net, lr=lr)
-    print(f'  Net params: {net.param_count():,}')
+
+    # Goal model (hierarchical)
+    from editor.simulation.torch_net import TorchGoalNet
+    from classes.goal_net import GOAL_OBSERVATION_SIZE
+    goal_net = TorchGoalNet(input_size=GOAL_OBSERVATION_SIZE)
+    goal_ppo = PPO(goal_net, lr=lr)
+    print(f'  Action net params: {net.param_count():,}')
+    print(f'  Goal net params: {goal_net.param_count():,}')
     print(f'  Arena: {arena_cols}x{arena_rows}, {num_creatures} creatures')
     print()
 
@@ -870,7 +929,7 @@ def train(cycles: int = 3, mappo_steps: int = 100000,
         # Phase 1: MAPPO
         mappo_t0 = time.time()
         net = run_mappo(net, ppo, steps=mappo_steps, arena_kwargs=arena_kwargs,
-                        sink=sink)
+                        sink=sink, goal_net=goal_net, goal_ppo=goal_ppo)
         sink.end_phase('MAPPO', cycle + 1, 0, mappo_steps,
                        time.time() - mappo_t0)
         net.export_to_numpy(SAVE_DIR / f'mappo_cycle{cycle+1}.npz')
@@ -887,7 +946,8 @@ def train(cycles: int = 3, mappo_steps: int = 100000,
         ppo_t0 = time.time()
         ppo = PPO(net, lr=lr)  # fresh optimizer
         net = run_ppo(net, ppo, steps=ppo_steps, checkpoint_dir=SAVE_DIR,
-                      arena_kwargs=arena_kwargs, sink=sink)
+                      arena_kwargs=arena_kwargs, sink=sink,
+                      goal_net=goal_net, goal_ppo=goal_ppo)
         sink.end_phase('PPO', cycle + 1, mappo_steps, mappo_steps + ppo_steps,
                        time.time() - ppo_t0)
 

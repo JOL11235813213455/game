@@ -249,6 +249,23 @@ def generate_arena(cols: int = 20, rows: int = 20,
             tiles[MapKey(x, y, 0)] = Tile(walkable=walkable)
 
     tiles[MapKey(0, 0, 0)] = Tile(walkable=True)
+
+    # Scatter purpose tiles — creates small clusters of purposeful areas
+    from classes.actions import TILE_PURPOSES
+    used_purposes = random.sample(TILE_PURPOSES,
+                                  min(6, len(TILE_PURPOSES)))
+    walkable_keys = [k for k, t in tiles.items() if t.walkable]
+    for purpose in used_purposes:
+        if not walkable_keys:
+            break
+        center = random.choice(walkable_keys)
+        # Small 3x3 cluster
+        for dx in range(-1, 2):
+            for dy in range(-1, 2):
+                pk = MapKey(center.x + dx, center.y + dy, 0)
+                if pk in tiles and tiles[pk].walkable:
+                    tiles[pk].purpose = purpose
+
     game_map = Map(tile_set=tiles, entrance=(0, 0),
                    x_max=cols, y_max=rows)
 

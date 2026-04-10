@@ -30,23 +30,32 @@ class GoalMixin:
             locs.pop(0)
 
     def update_spatial_memory(self, tick: int = 0, zone_registry=None):
-        """Check current location against purpose zones and tile purpose.
+        """Scan all visible tiles for purpose and remember their locations.
 
-        Called each tick to build up the creature's spatial knowledge.
+        Creatures learn about purpose tiles they can see, not just the
+        tile they're standing on. This means seeing a market from 5 tiles
+        away is enough to remember where it is.
         """
-        tile = self.current_map.tiles.get(self.location)
+        from classes.stats import Stat
+        from classes.maps import MapKey
         map_name = getattr(self.current_map, 'name', '') or ''
-        x, y, z = self.location.x, self.location.y, self.location.z
+        cx, cy, z = self.location.x, self.location.y, self.location.z
+        sight = max(1, self.stats.active[Stat.SIGHT_RANGE]())
 
-        # Check tile-level purpose
-        if tile and getattr(tile, 'purpose', None):
-            self.remember_location(tile.purpose, map_name, x, y, tick)
+        for dx in range(-sight, sight + 1):
+            for dy in range(-sight, sight + 1):
+                if abs(dx) + abs(dy) > sight:
+                    continue
+                tx, ty = cx + dx, cy + dy
+                tile = self.current_map.tiles.get(MapKey(tx, ty, z))
+                if tile and getattr(tile, 'purpose', None):
+                    self.remember_location(tile.purpose, map_name, tx, ty, tick)
 
-        # Check zone registry
+        # Also check zone registry at current location
         if zone_registry:
-            purposes = zone_registry.get_purposes(map_name, x, y, z)
+            purposes = zone_registry.get_purposes(map_name, cx, cy, z)
             for p in purposes:
-                self.remember_location(p, map_name, x, y, tick)
+                self.remember_location(p, map_name, cx, cy, tick)
 
     def set_goal(self, purpose: str, target_map: str, target_x: int, target_y: int,
                  zone_id: int = None, tick: int = 0):
