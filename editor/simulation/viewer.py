@@ -139,8 +139,16 @@ def run_viewer(scenario: str = 'arena', cols: int = 25, rows: int = 25,
                 if event.key == pygame.K_SPACE:
                     paused = not paused
                 elif event.key == pygame.K_PLUS or event.key == pygame.K_EQUALS:
-                    sim_speed = min(10.0, sim_speed * 1.5)
+                    cell_size = min(80, cell_size + 2)
+                    screen = pygame.display.set_mode(
+                        (cols * cell_size + 300, rows * cell_size))
                 elif event.key == pygame.K_MINUS:
+                    cell_size = max(4, cell_size - 2)
+                    screen = pygame.display.set_mode(
+                        (cols * cell_size + 300, rows * cell_size))
+                elif event.key == pygame.K_RIGHTBRACKET:
+                    sim_speed = min(10.0, sim_speed * 1.5)
+                elif event.key == pygame.K_LEFTBRACKET:
                     sim_speed = max(0.1, sim_speed / 1.5)
                 elif event.key == pygame.K_r:
                     # Reset
@@ -155,7 +163,13 @@ def run_viewer(scenario: str = 'arena', cols: int = 25, rows: int = 25,
                         c.register_tick('behavior', tick_ms, c._do_behavior)
                     game_map = arena['map']
                     selected = None
-            elif event.type == pygame.MOUSEBUTTONDOWN:
+            elif event.type == pygame.MOUSEWHEEL:
+                # Wheel up = zoom in, wheel down = zoom out
+                step = 2 if event.y > 0 else -2
+                cell_size = max(4, min(80, cell_size + step))
+                screen = pygame.display.set_mode(
+                    (cols * cell_size + 300, rows * cell_size))
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 mx, my = event.pos
                 tx = mx // cell_size
                 ty = my // cell_size
@@ -352,7 +366,18 @@ def run_training_viewer(cell_size: int = 20):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-            elif event.type == pygame.MOUSEBUTTONDOWN:
+            elif event.type == pygame.KEYDOWN:
+                # Zoom: + grows the cell, - shrinks it. The render
+                # path below recomputes window size from cell_size
+                # every frame, so we just have to clamp.
+                if event.key == pygame.K_PLUS or event.key == pygame.K_EQUALS:
+                    cell_size = min(80, cell_size + 2)
+                elif event.key == pygame.K_MINUS:
+                    cell_size = max(4, cell_size - 2)
+            elif event.type == pygame.MOUSEWHEEL:
+                step = 2 if event.y > 0 else -2
+                cell_size = max(4, min(80, cell_size + step))
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 mx, my = event.pos
                 tx = mx // cell_size
                 ty = my // cell_size
