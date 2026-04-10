@@ -279,18 +279,22 @@ def hunger_temperature(creature, base: float = 1.0) -> float:
 
     Hunger is in [-1, 1]; only the negative range matters here.
     A satiated creature samples at the base temperature. As hunger drops,
-    temperature climbs nonlinearly so the policy explores low-probability
-    actions (e.g. STEAL, HARVEST) it would otherwise never try. This is the
-    cheapest fix for the desperation/exploration problem — the NN cannot
-    raise its own temperature, so we do it for it.
+    temperature climbs LINEARLY so exploration only opens up modestly,
+    even at full starvation. The previous sqrt-shaped curve ramped too
+    fast (1.5x at hunger=-0.25, 2x at hunger=-1.0) and combined with a
+    too-low PPO entropy coefficient drove a policy collapse: every
+    creature locked onto a single hostile action and the population
+    crashed every episode.
 
-      hunger  >=  0.0  -> base
-      hunger  =  -0.5  -> base * 1.35
-      hunger  =  -1.0  -> base * 2.00
+      hunger  >=   0.0  -> base * 1.00 (no boost while satiated)
+      hunger  =  -0.25  -> base * 1.125
+      hunger  =   -0.5  -> base * 1.25
+      hunger  =  -0.75  -> base * 1.375
+      hunger  =   -1.0  -> base * 1.50  (max ramp at full starvation)
     """
     h = getattr(creature, 'hunger', 0.0)
     desperation = max(0.0, -h)         # 0..1
-    return base * (1.0 + desperation ** 0.5)
+    return base * (1.0 + desperation * 0.5)
 
 
 def _creature_final_state(c) -> dict:
