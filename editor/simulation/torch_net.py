@@ -121,6 +121,82 @@ class TorchCreatureNet(nn.Module):
         return sum(p.numel() for p in self.parameters())
 
 
+class TorchGoalNet(nn.Module):
+    """PyTorch goal selection network for hierarchical RL training.
+
+    Smaller than the action net — goals are higher-level, slower decisions.
+    Input: goal observation (compact creature state + spatial memory summary)
+    Output: goal logits (probability over purposes) + goal value
+    """
+
+    def __init__(self, input_size: int = None, h1: int = 256, h2: int = 128,
+                 output_size: int = None):
+        super().__init__()
+        from classes.goal_net import GOAL_OBSERVATION_SIZE
+        from classes.actions import NUM_PURPOSES
+        if input_size is None:
+            input_size = GOAL_OBSERVATION_SIZE
+        if output_size is None:
+            output_size = NUM_PURPOSES
+        self.fc1 = nn.Linear(input_size, h1)
+        self.fc2 = nn.Linear(h1, h2)
+        self.goal_head = nn.Linear(h2, output_size)
+        self.value_head = nn.Linear(h2, 1)
+
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        return self.goal_head(x), self.value_head(x)
+
+    def get_goal(self, obs: np.ndarray, known_purposes: set = None,
+                 temperature: float = 1.0) -> tuple[int, float, float]:
+        """Select a goal. Returns (goal_idx, log_prob, value)."""
+        from classes.actions import TILE_PURPOSES
+        with torch.no_grad():
+            x = torch.FloatTensor(obs).unsqueeze(0)
+            logits, value = self.forward(x)
+            logits = logits.squeeze(0)
+
+            # Mask unknown purposes
+            if known_purposes is not None:
+                for i, p in enumerate(TILE_PURPOSES):
+                    if p not in known_purposes and p != 'exploring':
+                        logits[i] -= 100.0
+
+            if temperature != 1.0:
+                logits = logits / max(0.01, temperature)
+
+            probs = F.softmax(logits, dim=-1)
+            dist = torch.distributions.Categorical(probs)
+            goal = dist.sample()
+            return goal.item(), dist.log_prob(goal).item(), value.item()
+
+    def evaluate_goals(self, obs: torch.Tensor, goals: torch.Tensor):
+        """Evaluate goals for PPO update. Returns (log_probs, values, entropy)."""
+        logits, values = self.forward(obs)
+        probs = F.softmax(logits, dim=-1)
+        dist = torch.distributions.Categorical(probs)
+        log_probs = dist.log_prob(goals)
+        entropy = dist.entropy()
+        return log_probs, values.squeeze(-1), entropy
+
+    def export_to_numpy(self, path):
+        """Export weights for GoalNet runtime inference."""
+        state = self.state_dict()
+        np_weights = {
+            'gw1': state['fc1.weight'].T.numpy(),
+            'gb1': state['fc1.bias'].numpy(),
+            'gw2': state['fc2.weight'].T.numpy(),
+            'gb2': state['fc2.bias'].numpy(),
+            'gw_goal': state['goal_head.weight'].T.numpy(),
+            'gb_goal': state['goal_head.bias'].numpy(),
+        }
+        np.savez(str(path), **np_weights)
+
+    def param_count(self) -> int:
+        return sum(p.numel() for p in self.parameters())
+
+
 class PPO:
     """Proximal Policy Optimization with proper PyTorch autograd."""
 

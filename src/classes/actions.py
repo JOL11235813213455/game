@@ -86,7 +86,9 @@ TILE_PURPOSES = (
     'trading', 'farming', 'hunting', 'worship', 'eating',
     'sleeping', 'pairing', 'crafting', 'mining', 'fishing',
     'gathering', 'training', 'healing', 'guarding', 'socializing',
+    'gossiping', 'exploring',
 )
+NUM_PURPOSES = len(TILE_PURPOSES)
 
 # Action → tile purpose alignment
 # When an action is performed on a tile whose purpose matches,
@@ -102,7 +104,7 @@ ACTION_PURPOSE = {
     Action.INTIMIDATE: 'socializing',
     Action.DECEIVE: 'socializing',
     Action.TALK: 'socializing',
-    Action.SHARE_RUMOR: 'socializing',
+    Action.SHARE_RUMOR: 'gossiping',
     Action.SLEEP: 'sleeping',
     Action.GUARD: 'guarding',
     Action.SEARCH: 'gathering',
@@ -115,12 +117,17 @@ ACTION_PURPOSE = {
 }
 
 
-def action_aligned_with_tile(action: int, tile) -> bool:
-    """Return True if the action matches the tile's purpose."""
-    purpose = getattr(tile, 'purpose', None)
-    if purpose is None:
+def action_aligned_with_tile(action: int, tile, zone_purposes: set = None) -> bool:
+    """Return True if the action matches the tile's purpose or zone purposes."""
+    aligned_purpose = ACTION_PURPOSE.get(action)
+    if aligned_purpose is None:
         return False
-    return ACTION_PURPOSE.get(action) == purpose
+    # Check zone purposes first (primary)
+    if zone_purposes and aligned_purpose in zone_purposes:
+        return True
+    # Fallback to tile-level purpose
+    purpose = getattr(tile, 'purpose', None)
+    return purpose == aligned_purpose
 
 
 # Action → god-tracking name

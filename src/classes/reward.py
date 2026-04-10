@@ -119,14 +119,27 @@ def compute_reward(creature, prev: dict, curr: dict,
     nearby = curr.get('nearby_count', 0)
     signals['crowding'] = -(nearby - 4) * 0.3 if nearby >= 5 else 0.0
 
+    # Goal progress: reward for moving closer to goal target
+    if hasattr(creature, 'goal_target') and creature.goal_target is not None:
+        progress = creature.goal_progress()
+        signals['goal_progress'] = progress * 0.3  # small but consistent
+
+        # At-goal bonus: performing aligned action at destination
+        if creature.at_goal() and last_action is not None:
+            from classes.actions import ACTION_PURPOSE
+            action_purpose = ACTION_PURPOSE.get(last_action)
+            if action_purpose and action_purpose == creature.current_goal:
+                signals['goal_completed'] = 3.0
+
     total = sum(signals.values())
 
     # Purpose alignment: double reward when action matches tile purpose
     if last_action is not None and total > 0:
         from classes.actions import action_aligned_with_tile
         tile = creature.current_map.tiles.get(creature.location)
-        if tile and action_aligned_with_tile(last_action, tile):
-            signals['purpose_bonus'] = total  # double the positive reward
+        zone_purposes = curr.get('zone_purposes')
+        if tile and action_aligned_with_tile(last_action, tile, zone_purposes):
+            signals['purpose_bonus'] = total
             total *= 2.0
 
     return (total, signals) if breakdown else total
@@ -185,9 +198,22 @@ def make_reward_snapshot(creature) -> dict:
     except Exception:
         pass
 
+    # Zone purposes at current location
+    zone_purposes = set()
+    try:
+        tile_purpose = None
+        tile = creature.current_map.tiles.get(creature.location)
+        if tile:
+            tile_purpose = getattr(tile, 'purpose', None)
+        if tile_purpose:
+            zone_purposes.add(tile_purpose)
+    except Exception:
+        pass
+
     return {
         'alive': creature.is_alive,
         'hp_ratio': stats.active[Stat.HP_CURR]() / hp_max,
+        'zone_purposes': zone_purposes,
         'gold': creature.gold,
         'debt': debt,
         'disposable': disposable,

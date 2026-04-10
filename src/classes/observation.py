@@ -35,7 +35,8 @@ _SECTION_SIZES = {
     'self_base': 14, 'self_derived': 36, 'self_resources': 6,
     'self_combat': 17, 'self_economy': 20, 'self_slots': 14,
     'self_weapon': 15, 'self_inv_texture': 13, 'self_crafting': 6,
-    'self_social': 10, 'self_status': 16, 'self_quest': 10, 'self_movement': 8,
+    'self_social': 10, 'self_status': 16, 'self_quest': 10,
+    'self_goal': 21, 'self_movement': 8,
     'self_genetics': 7, 'self_reputation': 6,
     'tile_deep': 18, 'tile_liquid': 25, 'spatial_walls': 25, 'spatial_features': 12,
     'tile_items': MAX_TILE_ITEMS * 9, 'census': 45, 'census_audio': 3,
@@ -420,6 +421,20 @@ def build_observation(creature, cols: int, rows: int,
     obs.append(creature.life_goal_attainment / 10.0)
     obs.append(creature.failed_actions / 10.0)
     obs.append(getattr(creature, '_tiles_explored', 0) / 100.0)
+
+    # ==== SECTION 11b: SELF GOAL STATE (NUM_PURPOSES + 4) ====
+    from classes.actions import TILE_PURPOSES as _PURPOSES
+    # Goal one-hot
+    curr_goal = getattr(creature, 'current_goal', None)
+    for p in _PURPOSES:
+        obs.append(1.0 if curr_goal == p else 0.0)
+    # Goal distance and direction
+    goal_dist = creature.goal_distance() if hasattr(creature, 'goal_distance') else float('inf')
+    obs.append(min(goal_dist, 50) / 50.0)
+    goal_dir = creature.direction_to_goal() if hasattr(creature, 'direction_to_goal') else (0, 0)
+    obs.append(goal_dir[0])  # dx normalized to -1/0/1
+    obs.append(goal_dir[1])  # dy normalized to -1/0/1
+    obs.append(1.0 if hasattr(creature, 'at_goal') and creature.at_goal() else 0.0)
 
     # ==== SECTION 12: SELF MOVEMENT/POSITION (8) ====
     cx, cy = creature.location.x, creature.location.y
@@ -1030,24 +1045,25 @@ SECTION_RANGES = {
     'self_social':      (145, 155),
     'self_status':      (155, 171),
     'self_quest':       (171, 181),
-    'self_movement':    (181, 189),
-    'self_genetics':    (189, 196),
-    'self_identity':    (196, 221),
-    'self_reputation':  (221, 227),
-    'tile_deep':        (227, 245),
-    'tile_liquid':      (245, 270),
-    'spatial_walls':    (270, 295),
-    'spatial_features': (295, 311),     # +4 crowding metrics
-    'tile_items':       (311, 338),
-    'census_visible':   (338, 383),
-    'census_audible':   (383, 386),
-    'per_engaged':      (386, 656),
-    'world_time':       (656, 669),
-    'temporal':         (669, 683),
-    'trends':           (683, 694),
-    'time_since':       (694, 706),
-    'reward_signals':   (706, 723),
-    'transforms':       (723, OBSERVATION_SIZE),
+    'self_goal':        (181, 202),
+    'self_movement':    (202, 210),
+    'self_genetics':    (210, 217),
+    'self_identity':    (217, 242),
+    'self_reputation':  (242, 248),
+    'tile_deep':        (248, 266),
+    'tile_liquid':      (266, 291),
+    'spatial_walls':    (291, 316),
+    'spatial_features': (316, 332),     # +4 crowding metrics
+    'tile_items':       (332, 359),
+    'census_visible':   (359, 404),
+    'census_audible':   (404, 407),
+    'per_engaged':      (407, 677),
+    'world_time':       (677, 690),
+    'temporal':         (690, 704),
+    'trends':           (704, 715),
+    'time_since':       (715, 727),
+    'reward_signals':   (727, 744),
+    'transforms':       (744, OBSERVATION_SIZE),
 }
 
 # Semantic groups for easy mask building
@@ -1061,7 +1077,7 @@ SECTION_GROUPS = {
     'economy': ['self_economy', 'self_inv_texture', 'self_crafting', 'self_slots'],
     'religion': ['world_time'],  # god balances are in world_time + transforms
     'memory': ['temporal', 'trends', 'time_since'],
-    'quest': ['self_quest'],
+    'quest': ['self_quest', 'self_goal'],
     'spatial': ['self_movement', 'spatial_walls', 'spatial_features', 'tile_deep', 'tile_liquid'],
     'reproduction': ['self_status', 'self_genetics'],
 }
