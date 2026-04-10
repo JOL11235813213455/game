@@ -5,6 +5,10 @@ from __future__ import annotations
 # Max remembered locations per purpose
 _MAX_MEMORY_PER_PURPOSE = 10
 
+# Rough cost estimate per map transition for distance calculations.
+# Represents "how many tiles of walking" one map hop is worth.
+_MAP_TRANSITION_COST = 50
+
 
 class GoalMixin:
     """Goal-setting, spatial memory, and pathfinding for Creature."""
@@ -65,20 +69,39 @@ class GoalMixin:
         self.goal_started_tick = 0
         self.goal_prev_distance = 0.0
 
-    def goal_distance(self) -> float:
-        """Manhattan distance to current goal target. Returns inf if no goal or cross-map."""
+    def goal_distance(self, map_graph=None) -> float:
+        """Manhattan distance to current goal target.
+
+        If goal is on a different map and map_graph is provided,
+        computes: distance_to_exit_tile + map_transitions * _MAP_TRANSITION_COST.
+        Returns inf if no goal, or if cross-map with no path.
+        """
         if self.goal_target is None:
             return float('inf')
         target_map, tx, ty = self.goal_target
-        if getattr(self.current_map, 'name', '') != target_map:
-            return 100.0  # cross-map placeholder
-        return abs(self.location.x - tx) + abs(self.location.y - ty)
+        cur_map_name = getattr(self.current_map, 'name', '') or ''
 
-    def goal_progress(self) -> float:
+        if cur_map_name == target_map:
+            return abs(self.location.x - tx) + abs(self.location.y - ty)
+
+        # Cross-map: use map_graph if available
+        if map_graph is not None:
+            route = self._cross_map_exit_info(target_map, map_graph)
+            if route is not None:
+                exit_x, exit_y, remaining_transitions = route
+                dist_to_exit = abs(self.location.x - exit_x) + abs(self.location.y - exit_y)
+                return dist_to_exit + remaining_transitions * _MAP_TRANSITION_COST
+            # No path found
+            return float('inf')
+
+        # Fallback: rough cross-map placeholder
+        return 100.0
+
+    def goal_progress(self, map_graph=None) -> float:
         """Distance decrease since last check. Positive = getting closer."""
         if self.goal_target is None:
             return 0.0
-        current_dist = self.goal_distance()
+        current_dist = self.goal_distance(map_graph)
         progress = self.goal_prev_distance - current_dist
         self.goal_prev_distance = current_dist
         return progress
@@ -126,13 +149,36 @@ class GoalMixin:
 
         return None
 
-    def direction_to_goal(self) -> tuple[int, int]:
-        """Return (dx, dy) unit vector toward goal. (0,0) if no goal or at goal."""
+    def direction_to_goal(self, map_graph=None) -> tuple[int, int]:
+        """Return (dx, dy) unit vector toward goal. (0,0) if no goal or at goal.
+
+        If the goal is on a different map and map_graph is provided,
+        returns direction toward the exit tile that leads closer to the
+        target map, rather than the final destination coordinates.
+        """
         if self.goal_target is None:
             return (0, 0)
         target_map, tx, ty = self.goal_target
-        if getattr(self.current_map, 'name', '') != target_map:
-            return (0, 0)  # cross-map -- needs map graph
+        cur_map_name = getattr(self.current_map, 'name', '') or ''
+
+        if cur_map_name != target_map and map_graph is not None:
+            # Cross-map: navigate toward the exit tile
+            route = self._cross_map_exit_info(target_map, map_graph)
+            if route is not None:
+                exit_x, exit_y, _ = route
+                dx = exit_x - self.location.x
+                dy = exit_y - self.location.y
+                if dx == 0 and dy == 0:
+                    return (0, 0)
+                ndx = (1 if dx > 0 else (-1 if dx < 0 else 0))
+                ndy = (1 if dy > 0 else (-1 if dy < 0 else 0))
+                return (ndx, ndy)
+            # No path through map graph
+            return (0, 0)
+
+        if cur_map_name != target_map:
+            return (0, 0)  # cross-map without graph -- can't navigate
+
         dx = tx - self.location.x
         dy = ty - self.location.y
         if dx == 0 and dy == 0:
@@ -141,3 +187,49 @@ class GoalMixin:
         ndx = (1 if dx > 0 else (-1 if dx < 0 else 0))
         ndy = (1 if dy > 0 else (-1 if dy < 0 else 0))
         return (ndx, ndy)
+
+    def plan_cross_map_route(self, target_map: str, map_graph) -> tuple | None:
+        """Plan a route to another map using the map graph.
+
+        Returns the next step: (exit_x, exit_y) on current map to reach
+        the linking tile that gets us closer to target_map.
+        Returns None if no path exists or already on target map.
+        """
+        route = self._cross_map_exit_info(target_map, map_graph)
+        if route is None:
+            return None
+        exit_x, exit_y, _ = route
+        return (exit_x, exit_y)
+
+    def _cross_map_exit_info(self, target_map: str, map_graph) -> tuple | None:
+        """Internal: find exit tile info for cross-map navigation.
+
+        Returns (exit_x, exit_y, remaining_transitions) or None.
+        exit_x/exit_y are coordinates on the current map of the linking
+        tile that leads toward target_map.
+        remaining_transitions is how many more map hops after this one.
+        """
+        cur_map_name = getattr(self.current_map, 'name', '') or ''
+        if cur_map_name == target_map:
+            return None
+
+        detailed = map_graph.find_path_detailed(cur_map_name, target_map)
+        if not detailed:
+            return None
+
+        # First step: (current_map, exit_x, exit_y, next_map, entry_x, entry_y)
+        first_step = detailed[0]
+        exit_x, exit_y = first_step[1], first_step[2]
+        remaining_transitions = len(detailed)
+
+        # If there are multiple connections to the same next map, pick closest
+        next_map = first_step[3]
+        conns = map_graph.get_connections(cur_map_name)
+        candidates = [(sx, sy) for dm, sx, sy, _, _ in conns if dm == next_map]
+        if len(candidates) > 1:
+            # Pick the exit tile closest to creature's current position
+            best = min(candidates,
+                       key=lambda c: abs(c[0] - self.location.x) + abs(c[1] - self.location.y))
+            exit_x, exit_y = best
+
+        return (exit_x, exit_y, remaining_transitions)

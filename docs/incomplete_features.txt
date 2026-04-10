@@ -116,11 +116,23 @@ SPATIAL MEMORY & GOALS (classes/creature/_goals.py)
 - set_goal/clear_goal: hierarchical RL goal tracking (purpose, target, zone_id, tick)
 - goal_distance/goal_progress/at_goal: Manhattan distance tracking and progress delta
 - pick_goal_target: selects best known location for a purpose (current map > other map)
-- direction_to_goal: unit vector toward goal target
+- direction_to_goal: unit vector toward goal target, cross-map aware via map_graph
+- plan_cross_map_route(): returns (exit_x, exit_y) of linking tile toward target map
+- Cross-map distance: exit_tile_dist + transitions * 50 (when map_graph provided)
 - NOT YET: zone_registry integration (no ZoneRegistry class exists)
-- NOT YET: cross-map pathfinding (returns 100.0 placeholder distance)
 - NOT YET: goal selection by RL policy (goal is set manually, not by neural net)
 - NOT YET: wired into observation space or reward function
+
+MAP GRAPH (classes/map_graph.py)
+- MapGraph: graph of map connections for cross-map pathfinding
+- build_from_maps(): scans loaded MAPS dict for linked tiles
+- build_from_db(): reads tile_sets/maps tables directly from game.db
+- get_connections(): returns all exit links from a map
+- find_path(): BFS shortest path (list of map names)
+- find_path_detailed(): BFS with full coordinate info per transition
+- distance(): number of map hops between two maps (-1 if unreachable)
+- NOT YET: behavior module that uses map_graph for NPC cross-map travel
+- NOT YET: map_graph built automatically on game load or DB change
 
 NPC BEHAVIOR (classes/creature.py)
 - NPC subclass removed; all creatures use Creature with behavior modules
