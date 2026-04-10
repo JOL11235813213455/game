@@ -89,7 +89,15 @@ def _signed_sq(x):
 
 
 def _pos_transforms(x, norm=1.0):
-    """Return [raw, ln, sqrt, sq] for a positive value. Normalized by norm."""
+    """Return [raw, ln, sqrt, sq] for a positive value. Normalized by norm.
+
+    Hardened against negative inputs: ``hp_cur``, ``gold``, etc. can
+    briefly be negative on damage/over-pay before subsequent logic
+    clamps them. ``math.log`` of a non-positive number raises
+    ValueError, which would crash the entire training process during
+    the next observation build.
+    """
+    x = max(0.0, x)
     v = x / norm if norm > 0 else x
     return [
         v,                                         # raw normalized
@@ -119,7 +127,15 @@ def _signed_transforms(x, scale=10.0):
 
 
 def _dist_transforms(d, max_d):
-    """Return [raw, ln, recip] for a distance value."""
+    """Return [raw, ln, recip] for a distance value.
+
+    Hardened against negative inputs: distance computations should
+    never go below zero, but a degenerate setup (e.g. computing
+    distance to a creature whose location is None) could pass a
+    negative or NaN value through. ``math.log`` of a non-positive
+    number crashes the training process.
+    """
+    d = max(0.0, d)
     norm = d / max(1, max_d)
     return [
         norm,                                      # raw normalized
@@ -470,7 +486,7 @@ def build_observation(creature, cols: int, rows: int,
     # Job purpose one-hot compressed to 1 float: is tile matching creature's job purpose?
     obs.append(1.0 if (job and _tp == job.purpose) else 0.0)
     # Wage bank (ln-transformed so it scales gently)
-    obs.append(math.log(1 + getattr(creature, '_wage_accumulated', 0.0)) / 5.0)
+    obs.append(math.log(1 + max(0.0, getattr(creature, '_wage_accumulated', 0.0))) / 5.0)
     # Sleep pressure: 1 if in sleep hours, 0 otherwise
     obs.append(1.0 if activity == 'sleep' else 0.0)
     # Schedule variance marker: creature has a non-default schedule (future: night shift, etc.)
