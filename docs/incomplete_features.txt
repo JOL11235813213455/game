@@ -119,9 +119,15 @@ SPATIAL MEMORY & GOALS (classes/creature/_goals.py)
 - direction_to_goal: unit vector toward goal target, cross-map aware via map_graph
 - plan_cross_map_route(): returns (exit_x, exit_y) of linking tile toward target map
 - Cross-map distance: exit_tile_dist + transitions * 50 (when map_graph provided)
-- NOT YET: zone_registry integration (no ZoneRegistry class exists)
-- NOT YET: goal selection by RL policy (goal is set manually, not by neural net)
-- NOT YET: wired into observation space or reward function
+- PurposeZoneRegistry (classes/purpose_zones.py): fast zone lookup, nearest zone, auto-load from DB
+- GoalNet (classes/goal_net.py): 75→256→128→17 purposes, selects goals via RL policy
+- TorchGoalNet: training version with PPO, wired into MAPPO + PPO training loops
+- Goal observation in action model (self_goal section: 21 floats)
+- Goal-conditioned reward: progress (+0.3/tile closer), completion (+3.0)
+- Purpose proximity reward: reward^(1+1/d) near purpose tiles, -0.25 away
+- update_spatial_memory scans all visible tiles (sight range), not just current tile
+- Goal + action weights saved together in nn_models (goal_weights BLOB column)
+- NOT YET: goal model resume with dimension remapping (currently loads strict)
 
 MAP GRAPH (classes/map_graph.py)
 - MapGraph: graph of map connections for cross-map pathfinding
@@ -131,8 +137,8 @@ MAP GRAPH (classes/map_graph.py)
 - find_path(): BFS shortest path (list of map names)
 - find_path_detailed(): BFS with full coordinate info per transition
 - distance(): number of map hops between two maps (-1 if unreachable)
+- MAP_GRAPH auto-built on game load (data/db.py) from MAPS dict
 - NOT YET: behavior module that uses map_graph for NPC cross-map travel
-- NOT YET: map_graph built automatically on game load or DB change
 
 NPC BEHAVIOR (classes/creature.py)
 - NPC subclass removed; all creatures use Creature with behavior modules

@@ -308,6 +308,9 @@ CREATE TABLE IF NOT EXISTS nn_models (
     notes            TEXT NOT NULL DEFAULT '',
     obs_schema_id    INTEGER,
     act_schema_id    INTEGER,
+    goal_weights     BLOB,
+    goal_obs_size    INTEGER,
+    num_purposes     INTEGER,
     UNIQUE(name, version)
 );
 CREATE TABLE IF NOT EXISTS item_frames (

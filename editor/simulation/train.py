@@ -162,18 +162,29 @@ def _save_model_to_db(net: TorchCreatureNet, name: str, parent_version: int | No
                       training_params: dict, training_stats: dict,
                       training_seconds: float, notes: str = '',
                       obs_schema_id: int | None = None,
-                      act_schema_id: int | None = None) -> int:
+                      act_schema_id: int | None = None,
+                      goal_net=None) -> int:
     """Save model weights + metadata to nn_models table. Returns new version number."""
     import sqlite3, json, io
     from datetime import datetime
+    from classes.actions import NUM_PURPOSES
 
-    # Serialize state_dict to bytes
+    # Serialize action net state_dict to bytes
     buf = io.BytesIO()
     torch.save(net.state_dict(), buf)
     weights_blob = buf.getvalue()
 
+    # Serialize goal net if provided
+    goal_blob = None
+    goal_obs_size = None
+    if goal_net is not None:
+        gbuf = io.BytesIO()
+        torch.save(goal_net.state_dict(), gbuf)
+        goal_blob = gbuf.getvalue()
+        from classes.goal_net import GOAL_OBSERVATION_SIZE
+        goal_obs_size = GOAL_OBSERVATION_SIZE
+
     con = sqlite3.connect(DB_PATH)
-    # Get next version for this name
     row = con.execute('SELECT COALESCE(MAX(version), 0) FROM nn_models WHERE name = ?',
                       (name,)).fetchone()
     version = row[0] + 1
@@ -181,13 +192,14 @@ def _save_model_to_db(net: TorchCreatureNet, name: str, parent_version: int | No
     con.execute('''INSERT INTO nn_models
         (name, version, parent_version, weights, observation_size, num_actions,
          training_params, training_stats, training_seconds, created_at, notes,
-         obs_schema_id, act_schema_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+         obs_schema_id, act_schema_id, goal_weights, goal_obs_size, num_purposes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
         (name, version, parent_version, weights_blob,
          OBSERVATION_SIZE, NUM_ACTIONS,
          json.dumps(training_params), json.dumps(training_stats),
          training_seconds, datetime.utcnow().isoformat(sep=' ', timespec='seconds'),
-         notes, obs_schema_id, act_schema_id))
+         notes, obs_schema_id, act_schema_id,
+         goal_blob, goal_obs_size, NUM_PURPOSES))
     con.commit()
     con.close()
     print(f'  Saved to DB: {name} v{version}')
@@ -663,10 +675,41 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
     ppo_trail_actions = []
     PPO_TRAIL_WINDOW = 20
     ppo_step_rewards = []
+    GOAL_INTERVAL = 50
+    goal_buffer = RolloutBuffer() if goal_net else None
+    _goal_state = None  # (goal_obs, goal_idx, log_prob, value, cumul_reward)
+
+    from classes.observation import build_observation
+    from classes.actions import dispatch, Action as ActionEnum, TILE_PURPOSES
+    from classes.world_object import WorldObject
+    from classes.creature import Creature
+    from classes.goal_net import build_goal_observation
 
     for step in range(steps):
+        # Goal selection for the agent
+        if goal_net and agent.is_alive and step % GOAL_INTERVAL == 0:
+            # Collect previous goal reward
+            if _goal_state and goal_buffer:
+                gs = _goal_state
+                goal_buffer.store(gs[0], gs[1], gs[4], gs[3], gs[2], not agent.is_alive)
+            goal_obs = build_goal_observation(agent, sim.cols, sim.rows)
+            goal_obs_arr = np.array(goal_obs, dtype=np.float32)
+            known = set(agent.known_locations.keys()) if agent.known_locations else set()
+            g_idx, g_lp, g_val = goal_net.get_goal(goal_obs_arr, known_purposes=known)
+            purpose = TILE_PURPOSES[g_idx]
+            target_info = agent.pick_goal_target(purpose)
+            if target_info:
+                agent.set_goal(purpose, *target_info[:3],
+                               zone_id=target_info[3] if len(target_info) > 3 else None,
+                               tick=sim.now)
+            else:
+                agent.set_goal(purpose, getattr(sim.game_map, 'name', ''),
+                               agent.location.x, agent.location.y, tick=sim.now)
+            _goal_state = (goal_obs_arr, g_idx, g_lp, g_val, 0.0)
+
         if agent.is_alive:
-            from classes.observation import build_observation
+            agent.update_spatial_memory(sim.now)
+
             obs = build_observation(agent, sim.cols, sim.rows,
                                     world_data=sim.world_data)
             if agent.observation_mask:
@@ -674,9 +717,6 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             obs_arr = np.array(obs, dtype=np.float32)
             action, log_prob, value = net.get_action(obs_arr)
 
-            from classes.actions import dispatch, Action as ActionEnum
-            from classes.world_object import WorldObject
-            from classes.creature import Creature
             target = None
             for obj in WorldObject.on_map(agent.current_map):
                 if isinstance(obj, Creature) and obj is not agent and obj.is_alive:
@@ -706,8 +746,10 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
         from classes.temporal import make_history_snapshot
         prev_rew = sim._reward_snapshots.get(agent.uid)
         curr_rew = make_reward_snapshot(agent)
+        last_act = action if agent.is_alive else None
         if prev_rew:
-            reward, signals = compute_reward(agent, prev_rew, curr_rew, breakdown=True)
+            reward, signals = compute_reward(agent, prev_rew, curr_rew,
+                                             breakdown=True, last_action=last_act)
         else:
             reward, signals = 0.0, {}
         sim._reward_snapshots[agent.uid] = curr_rew
@@ -727,6 +769,11 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             buffer.store(obs_arr, action, reward, value, log_prob,
                          not agent.is_alive)
 
+        # Accumulate reward for goal model
+        if _goal_state:
+            gs = _goal_state
+            _goal_state = (gs[0], gs[1], gs[2], gs[3], gs[4] + reward)
+
         # PPO update
         if len(buffer) >= rollout_len:
             info = ppo.update(*buffer.get())
@@ -737,6 +784,13 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             if sink:
                 sink.record_training_update(info['entropy'], info['value_loss'],
                                             info['policy_loss'])
+
+        # Goal PPO update
+        if goal_buffer and goal_ppo and len(goal_buffer) >= max(64, rollout_len // GOAL_INTERVAL):
+            g_info = goal_ppo.update(*goal_buffer.get())
+            goal_buffer.clear()
+            _log('ppo/goal_policy_loss', g_info['policy_loss'], step)
+            _log('ppo/goal_entropy', g_info['entropy'], step)
 
         # Write state for live viewer
         if step % 10 == 0:
@@ -878,6 +932,24 @@ def train(cycles: int = 3, mappo_steps: int = 100000,
     from editor.simulation.torch_net import TorchGoalNet
     from classes.goal_net import GOAL_OBSERVATION_SIZE
     goal_net = TorchGoalNet(input_size=GOAL_OBSERVATION_SIZE)
+
+    # Load goal weights if resuming from DB
+    if resume_from and ':' in resume_from and parent_version is not None:
+        try:
+            import sqlite3 as _sq, io as _io
+            _con = _sq.connect(DB_PATH)
+            _row = _con.execute(
+                'SELECT goal_weights FROM nn_models WHERE name = ? AND version = ?',
+                (resume_from.split(':')[0], parent_version)).fetchone()
+            _con.close()
+            if _row and _row[0]:
+                _gbuf = _io.BytesIO(_row[0])
+                goal_state = torch.load(_gbuf, weights_only=True)
+                goal_net.load_state_dict(goal_state, strict=False)
+                print(f'  Goal net resumed from DB')
+        except Exception as e:
+            print(f'  Goal net: fresh init ({e})')
+
     goal_ppo = PPO(goal_net, lr=lr)
     print(f'  Action net params: {net.param_count():,}')
     print(f'  Goal net params: {goal_net.param_count():,}')
@@ -968,6 +1040,7 @@ def train(cycles: int = 3, mappo_steps: int = 100000,
         net, model_name, parent_version,
         training_params, training_stats, total_seconds,
         obs_schema_id=obs_schema_id, act_schema_id=act_schema_id,
+        goal_net=goal_net,
     )
 
     # Create training_runs record and summarize sink to training.db
@@ -995,8 +1068,10 @@ def train(cycles: int = 3, mappo_steps: int = 100000,
 
     # Export .npz for runtime use
     net.export_to_numpy(SAVE_DIR / 'final.npz')
+    goal_net.export_to_numpy(SAVE_DIR / 'goal_final.npz')
     root_models = Path(__file__).parent.parent / 'models'
     net.export_to_numpy(root_models / 'latest.npz')
+    goal_net.export_to_numpy(root_models / 'goal_latest.npz')
 
     if _writer:
         _writer.close()

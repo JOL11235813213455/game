@@ -26,6 +26,8 @@ ITEMS:       dict[str, Item] = {}
 SPRITE_DATA: dict[str, dict] = {}
 TILE_TEMPLATES: dict[str, dict] = {}
 MAPS:  dict[str, object] = {}
+MAP_GRAPH = None  # MapGraph instance, built after maps are loaded
+ITEM_FRAMES: dict[str, dict] = {}  # frame_key → {recipe, output_item_key, auto_pop, ...}
 STRUCTURES: dict[str, 'Structure'] = {}  # key → Structure instance (templates from DB)
 ANIMATIONS: dict[str, dict] = {}    # name → {target_type, frames: [{sprite_name, duration_ms}]}
 ANIM_BINDINGS: dict[tuple, str] = {}  # (target_name, behavior) → animation_name
@@ -194,6 +196,9 @@ def _migrate(con: sqlite3.Connection) -> None:
         "ALTER TABLE creatures ADD COLUMN model_version INTEGER",
         "ALTER TABLE nn_models ADD COLUMN obs_schema_id INTEGER",
         "ALTER TABLE nn_models ADD COLUMN act_schema_id INTEGER",
+        "ALTER TABLE nn_models ADD COLUMN goal_weights BLOB",
+        "ALTER TABLE nn_models ADD COLUMN goal_obs_size INTEGER",
+        "ALTER TABLE nn_models ADD COLUMN num_purposes INTEGER",
         "ALTER TABLE tile_templates ADD COLUMN liquid INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE tile_templates ADD COLUMN flow_direction TEXT",
         "ALTER TABLE tile_templates ADD COLUMN flow_speed REAL NOT NULL DEFAULT 0.0",
@@ -454,8 +459,19 @@ def load(db_path: Path = _DB_PATH) -> None:
         _load_maps(con)
         _load_animations(con)
         _load_composites(con)
+        _load_item_frames(con)
     finally:
         con.close()
+
+    # Build map connectivity graph after all maps are loaded
+    global MAP_GRAPH
+    try:
+        from classes.map_graph import MapGraph
+        MAP_GRAPH = MapGraph()
+        MAP_GRAPH.build_from_maps(MAPS)
+    except Exception:
+        MAP_GRAPH = None
+
     _loaded = True
 
 
@@ -876,6 +892,31 @@ def _load_sprites(con: sqlite3.Connection) -> None:
             ,'width':       r['width']
             ,'height':      r['height']
             ,'action_point': (apx, apy) if apx is not None and apy is not None else None
+        }
+
+
+def _load_item_frames(con: sqlite3.Connection) -> None:
+    """Load item frame blueprints and their recipes."""
+    global ITEM_FRAMES
+    ITEM_FRAMES.clear()
+    try:
+        frames = con.execute('SELECT * FROM item_frames').fetchall()
+    except Exception:
+        return  # table may not exist yet
+
+    for r in frames:
+        recipe = {}
+        for ing in con.execute(
+                'SELECT ingredient_key, quantity FROM item_frame_recipe WHERE frame_key = ?',
+                (r['key'],)).fetchall():
+            recipe[ing['ingredient_key']] = ing['quantity']
+        ITEM_FRAMES[r['key']] = {
+            'name': r['name'],
+            'description': r['description'] if r['description'] else '',
+            'output_item_key': r['output_item_key'],
+            'auto_pop': bool(r['auto_pop']),
+            'composite_name': r['composite_name'],
+            'recipe': recipe,
         }
 
 
