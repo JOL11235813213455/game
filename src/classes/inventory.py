@@ -418,15 +418,24 @@ class Egg(Item):
 
 
 class ItemFrame(Item):
-    """Crafting frame: holds a recipe and ingredient inventory.
+    """Crafting frame: holds a recipe and an inventory of ingredient parts.
 
-    When all ingredients are present in the required quantities,
-    the frame produces the output item. The frame and all ingredients
-    are then destroyed, and the output item is placed in the owner's
-    inventory.
+    The frame IS the item when complete — a sword frame with blade, hilt,
+    and pommel becomes the usable sword. Parts retain their individual
+    crafter_uid, and multi-crafter items are intrinsically more valuable.
 
-    If auto_pop is True, picking up any matching ingredient will
-    auto-create this frame in the creature's inventory.
+    Two completion behaviors (controlled by `consumable_output`):
+    - False (default): the frame itself becomes the finished item. Stats,
+      buffs, equip slots all come from the frame's own properties.
+      Disassembly pops parts back into owner inventory.
+    - True (food/potions): produces a consumable output, destroys all
+      ingredients and the frame itself.
+
+    If auto_pop is True, picking up any matching ingredient auto-creates
+    the frame in the creature's inventory.
+
+    When items are spawned from DB with a recipe, they spawn as a
+    complete ItemFrame with all parts already inside.
     """
     z_index = 2
     collision = False
@@ -435,8 +444,9 @@ class ItemFrame(Item):
         self,
         frame_key: str = '',
         recipe: dict = None,
-        output_item_factory: callable = None,
         auto_pop: bool = False,
+        consumable_output: bool = False,
+        output_item_factory: callable = None,
         composite_name: str = None,
         **kwargs,
     ):
@@ -448,20 +458,21 @@ class ItemFrame(Item):
         self.frame_key = frame_key
         # recipe: {item_key: required_count}
         self.recipe: dict[str, int] = recipe or {}
-        # internal inventory holding ingredients added so far
+        # internal inventory holding ingredient parts
         self.ingredients: Inventory = Inventory()
-        # callable that produces the output Item when crafting completes
-        self._output_factory = output_item_factory
         self.auto_pop = auto_pop
         self.composite_name = composite_name
+        # consumable_output: if True, crafting produces a separate item and
+        # destroys the frame + ingredients (food, potions).
+        # If False, the frame itself IS the finished item.
+        self.consumable_output = consumable_output
+        self._output_factory = output_item_factory
 
     @property
     def is_complete(self) -> bool:
-        """True when all recipe ingredients are present in required quantities."""
+        """True when all recipe ingredients are present."""
         for item_key, needed in self.recipe.items():
-            count = sum(1 for i in self.ingredients.items
-                        if getattr(i, 'name', '') == item_key
-                        or getattr(i, 'key', '') == item_key)
+            count = self._count_ingredient(item_key)
             if count < needed:
                 return False
         return True
@@ -474,11 +485,55 @@ class ItemFrame(Item):
         total_needed = sum(self.recipe.values())
         total_have = 0
         for item_key, needed in self.recipe.items():
-            have = sum(1 for i in self.ingredients.items
-                       if getattr(i, 'name', '') == item_key
-                       or getattr(i, 'key', '') == item_key)
-            total_have += min(have, needed)
+            total_have += min(self._count_ingredient(item_key), needed)
         return total_have / max(1, total_needed)
+
+    @property
+    def crafter_uids(self) -> set[int]:
+        """Set of unique crafter UIDs across all ingredient parts."""
+        uids = set()
+        for item in self.ingredients.items:
+            uid = getattr(item, 'crafter_uid', None)
+            if uid is not None:
+                uids.add(uid)
+        return uids
+
+    @property
+    def multi_crafter_bonus(self) -> float:
+        """Value multiplier from multiple unique crafters.
+
+        Each additional unique crafter adds 10% to item value.
+        A solo-crafted item = 1.0x. Two crafters = 1.1x. Three = 1.2x.
+        """
+        n = len(self.crafter_uids)
+        return 1.0 + max(0, n - 1) * 0.1
+
+    @property
+    def value(self) -> float:
+        """Total value: sum of parts × multi-crafter bonus."""
+        parts_value = sum(getattr(i, 'value', 0) for i in self.ingredients.items)
+        base = self._base_value if hasattr(self, '_base_value') else super().value
+        return (parts_value + base) * self.multi_crafter_bonus
+
+    @value.setter
+    def value(self, v):
+        self._base_value = v
+
+    @property
+    def weight(self) -> float:
+        """Total weight: frame weight + all parts."""
+        parts_weight = sum(getattr(i, 'weight', 0) for i in self.ingredients.items)
+        base = self._base_weight if hasattr(self, '_base_weight') else 0.1
+        return parts_weight + base
+
+    @weight.setter
+    def weight(self, v):
+        self._base_weight = v
+
+    def _count_ingredient(self, item_key: str) -> int:
+        return sum(1 for i in self.ingredients.items
+                   if getattr(i, 'name', '') == item_key
+                   or getattr(i, 'key', '') == item_key)
 
     def add_ingredient(self, item) -> bool:
         """Add an item to the frame's ingredient inventory.
@@ -488,29 +543,39 @@ class ItemFrame(Item):
         item_id = getattr(item, 'key', '') or getattr(item, 'name', '')
         if item_id not in self.recipe:
             return False
-        # Check if we already have enough of this ingredient
         needed = self.recipe[item_id]
-        have = sum(1 for i in self.ingredients.items
-                   if getattr(i, 'name', '') == item_id
-                   or getattr(i, 'key', '') == item_id)
-        if have >= needed:
+        if self._count_ingredient(item_id) >= needed:
             return False
         self.ingredients.items.append(item)
         return True
 
-    def try_complete(self, owner) -> Item | None:
-        """If recipe is complete, produce the output and self-destruct.
+    def remove_ingredient(self, item) -> bool:
+        """Remove an ingredient from the frame back to caller.
 
-        Args:
-            owner: the Creature whose inventory contains this frame
+        Returns True if removed.
+        """
+        if item in self.ingredients.items:
+            self.ingredients.items.remove(item)
+            return True
+        return False
 
-        Returns:
-            The crafted output Item, or None if not complete.
+    def try_complete(self, owner) -> 'Item | None':
+        """Attempt to finalize crafting.
+
+        For consumable_output frames: produces output item, destroys
+        ingredients and frame, returns the output.
+
+        For non-consumable frames: the frame itself IS the finished item.
+        Returns self (caller should NOT destroy it).
         """
         if not self.is_complete:
             return None
 
-        # Produce the output item
+        if not self.consumable_output:
+            # Frame IS the item — nothing to produce or destroy
+            return self
+
+        # Consumable path: produce output, destroy everything
         output = None
         if self._output_factory:
             output = self._output_factory()
@@ -521,39 +586,32 @@ class ItemFrame(Item):
         from classes.stats import Stat
         craft_quality = owner.stats.active[Stat.CRAFT_QUALITY]()
         if hasattr(output, 'durability_max') and output.durability_max > 0:
-            # Quality bonus: +5% durability per craft quality point
             bonus = max(0, craft_quality) * 0.05
             output.durability_max = int(output.durability_max * (1 + bonus))
             output.durability_current = output.durability_max
-        if hasattr(output, 'damage') and output.damage > 0:
-            # Quality bonus: +2% damage per craft quality point
-            bonus = max(0, craft_quality) * 0.02
-            output.damage = output.damage * (1 + bonus)
 
-        # Stamp crafter
+        # Stamp crafter (use all unique crafter UIDs as a set)
         output.crafter_uid = owner.uid
 
-        # Destroy all ingredients
+        # Destroy all ingredients and frame
         self.ingredients.items.clear()
-
-        # Place output in owner's inventory
         owner.inventory.items.append(output)
-
-        # Self-destruct: remove from owner's inventory
         if self in owner.inventory.items:
             owner.inventory.items.remove(self)
 
         return output
 
-    def remove_ingredient(self, item) -> bool:
-        """Remove an ingredient from the frame (disassembly path).
+    def disassemble_into(self, owner_inventory: 'Inventory') -> list:
+        """Pop all parts out of frame into the target inventory.
 
-        Returns True if removed.
+        Frame remains in place (now incomplete/empty).
+        Returns list of items moved out.
         """
-        if item in self.ingredients.items:
-            self.ingredients.items.remove(item)
-            return True
-        return False
+        moved = list(self.ingredients.items)
+        for item in moved:
+            owner_inventory.items.append(item)
+        self.ingredients.items.clear()
+        return moved
 
 
 CLASS_MAP: dict[str, type] = {

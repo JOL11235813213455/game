@@ -354,12 +354,13 @@ def build_observation(creature, cols: int, rows: int,
     can_craft = any(f.is_complete for f in frames_in_inv)
     has_shovel = any(getattr(i, 'name', '').lower() in ('shovel', 'spade', 'pickaxe')
                      for i in creature.inventory.items + list(set(creature.equipment.values())))
-    has_disassemblable = any(getattr(i, 'disassemblable', False) for i in creature.inventory.items)
+    can_disassemble = any(isinstance(i, _ItemFrame) and i.ingredients.items
+                          for i in creature.inventory.items)
     obs.append(1.0 if has_frame else 0.0)
     obs.append(best_completion)
     obs.append(1.0 if can_craft else 0.0)
     obs.append(1.0 if has_shovel else 0.0)
-    obs.append(1.0 if has_disassemblable else 0.0)
+    obs.append(1.0 if can_disassemble else 0.0)
     obs.append(s[Stat.CRAFT_QUALITY]() / 10.0)
 
     # ==== SECTION 9: SELF SOCIAL CAPITAL (10) ====

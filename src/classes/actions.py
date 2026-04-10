@@ -346,9 +346,10 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
 
     if action == Action.DISASSEMBLE:
         if item is None:
-            # Auto-select first disassemblable item
+            # Auto-select first ItemFrame with ingredients
+            from classes.inventory import ItemFrame as _IF
             for inv_item in creature.inventory.items:
-                if getattr(inv_item, 'disassemblable', False):
+                if isinstance(inv_item, _IF) and inv_item.ingredients.items:
                     item = inv_item
                     break
             if item is None:
