@@ -371,6 +371,10 @@ class SqlTab(ttk.Frame):
         ('quests', 'giver', 'creatures', 'key'),
         ('quest_steps', 'quest_name', 'quests', 'name'),
         ('gods', 'opposed_god', 'gods', 'name'),
+        ('item_frames', 'output_item_key', 'items', 'key'),
+        ('item_frame_recipe', 'frame_key', 'item_frames', 'key'),
+        ('item_frame_recipe', 'ingredient_key', 'items', 'key'),
+        ('items', 'item_frame', 'item_frames', 'key'),
     ]
 
     # Clusters: groups of related tables laid out together
@@ -402,7 +406,7 @@ class SqlTab(ttk.Frame):
         {
             'label': 'Items',
             'color': '#1a2a2a',
-            'tables': ['items', 'item_slots'],
+            'tables': ['items', 'item_slots', 'item_frames', 'item_frame_recipe'],
         },
         {
             'label': 'Spells',
@@ -852,6 +856,19 @@ class SqlTab(ttk.Frame):
             ('items', 'collision_mask'): 'JSON: list of [x,y] tiles that block movement',
             ('items', 'entry_points'): 'JSON: offset → [x,y] spawn point mapping',
             ('items', 'nested_map'): 'Map name to enter when interacting with this structure',
+            ('items', 'item_frame'): 'ItemFrame key this item is an ingredient for (NULL = not craftable)',
+            ('items', 'disassemblable'): 'Can this item be broken back into an ItemFrame with parts',
+            ('items', 'crafter_uid'): 'UID of creature that crafted this item (NULL = found/spawned)',
+            # item_frames
+            ('item_frames', 'key'): 'Unique frame blueprint identifier',
+            ('item_frames', 'name'): 'Display name for this crafting frame',
+            ('item_frames', 'description'): 'Description shown during crafting',
+            ('item_frames', 'output_item_key'): 'Item produced when all ingredients are present',
+            ('item_frames', 'auto_pop'): 'Auto-create frame when matching ingredient is picked up',
+            ('item_frames', 'composite_name'): 'Composite sprite name for partial assembly rendering',
+            ('item_frame_recipe', 'frame_key'): 'Which frame blueprint this ingredient belongs to',
+            ('item_frame_recipe', 'ingredient_key'): 'Item required as ingredient',
+            ('item_frame_recipe', 'quantity'): 'How many of this ingredient are needed',
             # tile_templates
             ('tile_templates', 'key'): 'Unique tile template identifier',
             ('tile_templates', 'walkable'): '1 = creatures can walk on this tile',

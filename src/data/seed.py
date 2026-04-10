@@ -86,7 +86,10 @@ CREATE TABLE IF NOT EXISTS items (
     footprint                  TEXT,
     collision_mask             TEXT,
     entry_points               TEXT,
-    nested_map                 TEXT
+    nested_map                 TEXT,
+    item_frame       TEXT REFERENCES item_frames(key),
+    disassemblable   INTEGER NOT NULL DEFAULT 0,
+    crafter_uid      INTEGER
 );
 CREATE TABLE IF NOT EXISTS item_slots (
     item_key TEXT NOT NULL REFERENCES items(key),
@@ -292,6 +295,21 @@ CREATE TABLE IF NOT EXISTS nn_models (
     obs_schema_id    INTEGER,
     act_schema_id    INTEGER,
     UNIQUE(name, version)
+);
+CREATE TABLE IF NOT EXISTS item_frames (
+    key              TEXT PRIMARY KEY,
+    name             TEXT NOT NULL DEFAULT '',
+    description      TEXT NOT NULL DEFAULT '',
+    output_item_key  TEXT NOT NULL REFERENCES items(key),
+    auto_pop         INTEGER NOT NULL DEFAULT 0,
+    composite_name   TEXT
+);
+CREATE TABLE IF NOT EXISTS item_frame_recipe (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    frame_key       TEXT NOT NULL REFERENCES item_frames(key),
+    ingredient_key  TEXT NOT NULL REFERENCES items(key),
+    quantity        INTEGER NOT NULL DEFAULT 1,
+    UNIQUE(frame_key, ingredient_key)
 );
 CREATE TABLE IF NOT EXISTS animations (
     name        TEXT PRIMARY KEY,

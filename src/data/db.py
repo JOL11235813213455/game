@@ -202,6 +202,22 @@ def _migrate(con: sqlite3.Connection) -> None:
         "ALTER TABLE tile_sets ADD COLUMN flow_direction TEXT",
         "ALTER TABLE tile_sets ADD COLUMN flow_speed REAL",
         "ALTER TABLE tile_sets ADD COLUMN depth INTEGER",
+        """CREATE TABLE IF NOT EXISTS item_frames (
+    key TEXT PRIMARY KEY,
+    name TEXT NOT NULL DEFAULT '',
+    description TEXT NOT NULL DEFAULT '',
+    output_item_key TEXT NOT NULL REFERENCES items(key),
+    auto_pop INTEGER NOT NULL DEFAULT 0,
+    composite_name TEXT)""",
+        """CREATE TABLE IF NOT EXISTS item_frame_recipe (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    frame_key TEXT NOT NULL REFERENCES item_frames(key),
+    ingredient_key TEXT NOT NULL REFERENCES items(key),
+    quantity INTEGER NOT NULL DEFAULT 1,
+    UNIQUE(frame_key, ingredient_key))""",
+        "ALTER TABLE items ADD COLUMN item_frame TEXT REFERENCES item_frames(key)",
+        "ALTER TABLE items ADD COLUMN disassemblable INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE items ADD COLUMN crafter_uid INTEGER",
     ]:
         try:
             con.execute(stmt)
