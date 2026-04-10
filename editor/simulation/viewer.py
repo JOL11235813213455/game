@@ -28,6 +28,7 @@ C_GRASS = (34, 139, 34)
 C_DIRT  = (139, 90, 43)
 C_SAND  = (210, 190, 130)
 C_WATER = (30, 100, 200)
+C_WATER_SHALLOW = (80, 150, 220)
 C_BLACK = (0, 0, 0)
 C_WHITE = (255, 255, 255)
 C_RED   = (200, 40, 40)
@@ -42,9 +43,46 @@ TILE_COLORS = {
     'grass': C_GRASS, 'dirt': C_DIRT, 'sand': C_SAND, 'water': C_WATER,
 }
 
+# Each purpose gets a distinct tint so the viewer actually shows the
+# district layout at a glance. Colors picked to be visually distinct
+# but muted (tiles are backdrop, creatures are foreground).
+PURPOSE_COLORS = {
+    'farming':     (150, 180, 60),    # golden wheat
+    'fishing':     (60, 140, 180),    # deeper blue-green — overlays on water
+    'gathering':   (100, 160, 70),    # forest green
+    'hunting':     (110, 80, 50),     # brown earth
+    'mining':      (120, 120, 140),   # stone gray-blue
+    'crafting':    (180, 140, 80),    # workshop tan
+    'trading':     (200, 170, 60),    # market gold
+    'eating':      (210, 160, 100),   # warm bread
+    'sleeping':    (70, 60, 110),     # twilight purple
+    'worship':     (200, 200, 240),   # pale sky
+    'training':    (170, 100, 100),   # dusty red
+    'guarding':    (140, 130, 100),   # olive
+    'healing':     (200, 230, 210),   # mint
+    'socializing': (220, 160, 200),   # pink
+    'gossiping':   (210, 180, 220),   # lilac
+    'pairing':     (230, 140, 160),   # rose
+    'exploring':   (180, 200, 180),   # sage
+}
+
 SPECIES_COLORS = {
     'human': C_BLUE, 'orc': C_GREEN, 'bug': C_GRAY,
 }
+
+
+def _tile_base_color(tile):
+    """Resolve a tile's base fill color: liquid > purpose > template > grass."""
+    if tile is None:
+        return C_GRASS
+    if getattr(tile, 'liquid', False):
+        depth = getattr(tile, 'depth', 0) or 0
+        return C_WATER if depth >= 1 else C_WATER_SHALLOW
+    purpose = getattr(tile, 'purpose', None)
+    if purpose and purpose in PURPOSE_COLORS:
+        return PURPOSE_COLORS[purpose]
+    tmpl = getattr(tile, 'tile_template', None) or 'grass'
+    return TILE_COLORS.get(tmpl, C_GRASS)
 
 
 def run_viewer(scenario: str = 'arena', cols: int = 25, rows: int = 25,
@@ -147,10 +185,9 @@ def run_viewer(scenario: str = 'arena', cols: int = 25, rows: int = 25,
             for y in range(rows):
                 tile = game_map.tiles.get(MapKey(x, y, 0))
                 if tile:
-                    tmpl = tile.tile_template or 'grass'
-                    color = TILE_COLORS.get(tmpl, C_GRAY)
+                    base = _tile_base_color(tile)
                     # Slightly vary color for visual interest
-                    r, g, b = color
+                    r, g, b = base
                     noise = ((x * 7 + y * 13) % 20) - 10
                     color = (max(0, min(255, r + noise)),
                              max(0, min(255, g + noise)),
@@ -158,16 +195,34 @@ def run_viewer(scenario: str = 'arena', cols: int = 25, rows: int = 25,
                     pygame.draw.rect(screen, color,
                                      (x * cell_size, y * cell_size, cell_size, cell_size))
 
-                    # Gold on tile
+                    cx_px = x * cell_size + cell_size // 2
+                    cy_px = y * cell_size + cell_size // 2
+
+                    # Surface gold (pickup-ready)
                     if tile.gold > 0:
                         pygame.draw.circle(screen, C_YELLOW,
-                                           (x * cell_size + cell_size // 2,
-                                            y * cell_size + cell_size // 2), 3)
+                                           (cx_px, cy_px), 3)
 
-                    # Items on tile
+                    # Surface items
                     if tile.inventory.items:
                         pygame.draw.rect(screen, C_ORANGE,
                                          (x * cell_size + 1, y * cell_size + 1, 4, 4))
+
+                    # Resource indicator — small ring scaled to fill
+                    rt = getattr(tile, 'resource_type', None)
+                    if rt and getattr(tile, 'resource_amount', 0) > 0:
+                        rmax = max(1, getattr(tile, 'resource_max', 1))
+                        fill = tile.resource_amount / rmax
+                        if fill > 0.1:
+                            ring_r = max(2, int(cell_size * 0.30 * fill))
+                            pygame.draw.circle(screen, (255, 220, 120),
+                                               (cx_px, cy_px), ring_r, 1)
+
+                    # Buried gold — tiny dim mark in the corner
+                    if getattr(tile, 'buried_gold', 0) > 20:
+                        pygame.draw.rect(screen, (180, 140, 40),
+                                         (x * cell_size + cell_size - 3,
+                                          y * cell_size + cell_size - 3, 2, 2))
 
         # Creatures
         for c in sim.creatures:
@@ -387,21 +442,45 @@ def run_training_viewer(cell_size: int = 20):
                 pygame.draw.rect(screen, color,
                                  (x * cell_size, y * cell_size, cell_size, cell_size))
 
-        # Overlay tile info (gold, items, water tiles)
+        # Overlay tile info. Priority: liquid > purpose > template.
+        # Everything else (gold, items, resources, buried) draws on top.
         for ti in state.get('tile_info', []):
             tx, ty = ti['x'], ti['y']
-            tmpl = ti.get('template', 'grass')
-            if tmpl != 'grass':
-                color = TILE_COLORS.get(tmpl, C_GRASS)
-                pygame.draw.rect(screen, color,
+            base = None
+            if ti.get('liquid'):
+                base = C_WATER if ti.get('depth', 0) >= 1 else C_WATER_SHALLOW
+            elif ti.get('purpose') and ti['purpose'] in PURPOSE_COLORS:
+                base = PURPOSE_COLORS[ti['purpose']]
+            else:
+                tmpl = ti.get('template', 'grass')
+                if tmpl != 'grass':
+                    base = TILE_COLORS.get(tmpl, C_GRASS)
+
+            if base is not None:
+                pygame.draw.rect(screen, base,
                                  (tx * cell_size, ty * cell_size, cell_size, cell_size))
+
+            cx_px = tx * cell_size + cell_size // 2
+            cy_px = ty * cell_size + cell_size // 2
+
             if ti['gold'] > 0:
-                pygame.draw.circle(screen, C_YELLOW,
-                                   (tx * cell_size + cell_size // 2,
-                                    ty * cell_size + cell_size // 2), 3)
+                pygame.draw.circle(screen, C_YELLOW, (cx_px, cy_px), 3)
             if ti['items'] > 0:
                 pygame.draw.rect(screen, C_ORANGE,
                                  (tx * cell_size + 1, ty * cell_size + 1, 4, 4))
+            rt = ti.get('resource_type')
+            ramt = ti.get('resource_amount', 0)
+            rmax = max(1, ti.get('resource_max', 1))
+            if rt and ramt > 0:
+                fill = ramt / rmax
+                if fill > 0.1:
+                    ring_r = max(2, int(cell_size * 0.30 * fill))
+                    pygame.draw.circle(screen, (255, 220, 120),
+                                       (cx_px, cy_px), ring_r, 1)
+            if ti.get('buried_gold', 0) > 20:
+                pygame.draw.rect(screen, (180, 140, 40),
+                                 (tx * cell_size + cell_size - 3,
+                                  ty * cell_size + cell_size - 3, 2, 2))
 
         # Draw creatures
         selected_data = None

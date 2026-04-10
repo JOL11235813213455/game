@@ -36,17 +36,33 @@ def write_state(sim, phase: str = '', step: int = 0, info: dict = None):
             'mask': c.observation_mask,
         })
 
-    # Tile info: non-grass templates + tiles with gold/items
+    # Tile info: anything non-default goes in. The replay viewer uses
+    # this to overlay liquid, purpose districts, resource tiles, and
+    # loot indicators on top of the default grass fill.
     tile_info = []
     for key, tile in sim.game_map.tiles.items():
         tmpl = tile.tile_template or 'grass'
-        has_stuff = tile.gold > 0 or tile.inventory.items
+        liquid = getattr(tile, 'liquid', False)
+        purpose = getattr(tile, 'purpose', None)
+        resource_type = getattr(tile, 'resource_type', None)
+        resource_amount = getattr(tile, 'resource_amount', 0) if resource_type else 0
+        resource_max = getattr(tile, 'resource_max', 0) if resource_type else 0
+        buried = getattr(tile, 'buried_gold', 0)
+        has_stuff = (tile.gold > 0 or tile.inventory.items or liquid
+                     or purpose or resource_type or buried > 20)
         if tmpl != 'grass' or has_stuff:
             tile_info.append({
                 'x': key.x, 'y': key.y,
                 'gold': tile.gold,
                 'items': len(tile.inventory.items),
                 'template': tmpl,
+                'liquid': bool(liquid),
+                'depth': int(getattr(tile, 'depth', 0) or 0),
+                'purpose': purpose,
+                'resource_type': resource_type,
+                'resource_amount': int(resource_amount),
+                'resource_max': int(resource_max),
+                'buried_gold': int(buried),
             })
 
     state = {
