@@ -154,6 +154,15 @@ def compute_reward(creature, prev: dict, curr: dict,
     if wage_delta > 0:
         signals['wage'] = math.log(1 + wage_delta) * 0.5
 
+    # Gold delta from non-wage sources (trading, selling, buying). Positive
+    # when selling goods for more gold, negative when buying (e.g. food).
+    # We scale smaller than wages so a hungry creature buying food is still
+    # rewarded on net (hunger signal swings positive by ~+1.0 on eat) even
+    # though it loses gold.
+    gold_delta = curr.get('gold', 0) - prev.get('gold', 0) - wage_delta
+    if gold_delta != 0:
+        signals['trade'] = math.copysign(math.log(1 + abs(gold_delta)), gold_delta) * 0.3
+
     # Hunger: satiated = positive, hungry = negative (logarithmic)
     hunger = curr.get('hunger', 0.0)
     prev_hunger = prev.get('hunger', 0.0)

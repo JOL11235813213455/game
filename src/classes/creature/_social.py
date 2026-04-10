@@ -83,6 +83,111 @@ class SocialMixin:
             total += base
         return total
 
+    def auto_trade(self, target) -> dict:
+        """Gold-denominated auto-trade with an adjacent target.
+
+        Closes the economy loop: the NN can pick ``Action.TRADE`` without
+        having to output item ids or prices. This method inspects both
+        inventories and picks the best swap direction:
+
+          1. **Buy food.** If self is hungry (< 0.3) and target has a food
+             item self can afford, self pays gold and receives one unit.
+          2. **Sell goods.** Otherwise, if self has any value-bearing
+             stackable, try to sell one unit to target. Target accepts if
+             it is hungry and the item is food, or if it is wealthy
+             enough (gold >= 3x price) to speculate.
+
+        Transfers a single unit from a stack (creating a new stack on the
+        target side) so multi-unit inventories aren't dumped wholesale.
+        Both sides record a positive interaction on success.
+
+        Returns dict: success, direction ('bought' or 'sold'),
+                      item, price, reason on failure.
+        """
+        import copy as _copy
+        from classes.inventory import Stackable
+
+        result = {'success': False}
+
+        if target is None or target is self or not getattr(target, 'is_alive', False):
+            result['reason'] = 'invalid_target'
+            return result
+        if self._sight_distance(target) > 1:
+            result['reason'] = 'not_adjacent'
+            return result
+
+        # ---- 1. BUY path: hungry self, target has food ----
+        if getattr(self, 'hunger', 0.0) < 0.3:
+            food_item = next(
+                (i for i in target.inventory.items
+                 if getattr(i, 'is_food', False) and getattr(i, 'value', 0) > 0),
+                None
+            )
+            if food_item is not None:
+                price = max(1, int(food_item.value))
+                if getattr(self, 'gold', 0) >= price:
+                    # Execute: self pays, target delivers one unit
+                    self.gold = int(self.gold) - price
+                    target.gold = int(getattr(target, 'gold', 0)) + price
+                    # Move one unit of the stack
+                    if getattr(food_item, 'quantity', 1) > 1:
+                        food_item.quantity -= 1
+                        unit = _copy.copy(food_item)
+                        unit.quantity = 1
+                        self.inventory.items.append(unit)
+                    else:
+                        target.inventory.items.remove(food_item)
+                        self.inventory.items.append(food_item)
+                    self.record_interaction(target, 2.0)
+                    target.record_interaction(self, 2.0)
+                    result['success'] = True
+                    result['direction'] = 'bought'
+                    result['item'] = food_item
+                    result['price'] = price
+                    return result
+
+        # ---- 2. SELL path: self has sellable goods, target will buy ----
+        sellable = sorted(
+            [i for i in self.inventory.items
+             if isinstance(i, Stackable) and getattr(i, 'value', 0) > 0],
+            key=lambda i: i.value, reverse=True
+        )
+        for item in sellable:
+            price = max(1, int(item.value))
+            if getattr(target, 'gold', 0) < price:
+                continue
+            # Buyer willingness: hungry + food, or wealthy enough to speculate
+            willing = False
+            if getattr(target, 'hunger', 0.0) < 0.3 and getattr(item, 'is_food', False):
+                willing = True
+            elif getattr(target, 'gold', 0) >= price * 3:
+                willing = True
+            if not willing:
+                continue
+
+            # Execute
+            target.gold = int(target.gold) - price
+            self.gold = int(getattr(self, 'gold', 0)) + price
+            if getattr(item, 'quantity', 1) > 1:
+                item.quantity -= 1
+                unit = _copy.copy(item)
+                unit.quantity = 1
+                target.inventory.items.append(unit)
+            else:
+                self.inventory.items.remove(item)
+                target.inventory.items.append(item)
+
+            self.record_interaction(target, 2.0)
+            target.record_interaction(self, 2.0)
+            result['success'] = True
+            result['direction'] = 'sold'
+            result['item'] = item
+            result['price'] = price
+            return result
+
+        result['reason'] = 'no_acceptable_trade'
+        return result
+
     def propose_trade(self, target,
                       offered: list, requested: list) -> dict:
         """Propose a trade: self offers items, requests items from target.

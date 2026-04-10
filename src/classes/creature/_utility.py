@@ -270,6 +270,26 @@ class UtilityMixin:
             # treat an empty inventory as "apprentice work" (wage, no output)
             if not effect.get('success') and effect.get('reason') == 'no_recipe_match':
                 effect = {'success': True, 'idle': True}
+        elif purpose == 'trading':
+            # Traders attempt to move goods for the nearest adjacent
+            # creature. If no partner or no swap possible, they still
+            # collect the stall-keeper's wage for being on duty.
+            from classes.world_object import WorldObject
+            from classes.creature import Creature as _Creature
+            partner = next(
+                (o for o in WorldObject.on_map(self.current_map)
+                 if isinstance(o, _Creature) and o is not self
+                 and o.is_alive
+                 and abs(o.location.x - self.location.x) +
+                     abs(o.location.y - self.location.y) <= 1),
+                None
+            )
+            if partner is not None:
+                effect = self.auto_trade(partner)
+                if not effect.get('success'):
+                    effect = {'success': True, 'idle': True}
+            else:
+                effect = {'success': True, 'idle': True}
         elif purpose == 'guarding':
             self.guard(cols=1, rows=1)
         elif purpose == 'hunting':

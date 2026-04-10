@@ -3549,6 +3549,123 @@ smelt_r = harvester.process(category='material')
 check("smelt Ore -> IronIngot succeeds", smelt_r['success'])
 
 # ==========================================================================
+# Auto-trade: the gold-denominated trade loop
+# ==========================================================================
+print("\n--- Auto-trade tests ---")
+
+tm = make_map(6, 6)
+
+# --- BUY path: hungry buyer, seller has food ---
+buyer = make_creature(tm, x=2, y=2, name='Buyer')
+buyer.hunger = -0.2  # below 0.3 → hungry
+buyer.gold = 50
+
+seller = make_creature(tm, x=2, y=3, name='Seller')  # adjacent
+bread_stack = Consumable(name='Bread', weight=0.1, value=4.0,
+                          quantity=3, heal_amount=5, duration=0)
+bread_stack.is_food = True
+seller.inventory.items.append(bread_stack)
+
+buy_r = buyer.auto_trade(seller)
+check("auto_trade buy succeeds", buy_r['success'])
+check(f"direction is bought (got {buy_r.get('direction')})",
+      buy_r.get('direction') == 'bought')
+check("buyer has bread now",
+      any(getattr(i, 'name', '') == 'Bread' for i in buyer.inventory.items))
+check("buyer paid gold", buyer.gold == 50 - 4)
+check("seller gained gold", seller.gold == 4)
+# Seller stack should be 2 now (transferred one unit out of 3)
+seller_bread_qty = sum(i.quantity for i in seller.inventory.items
+                       if getattr(i, 'name', '') == 'Bread')
+check(f"seller bread stack decremented (left: {seller_bread_qty})",
+      seller_bread_qty == 2)
+
+# --- SELL path: seller has goods, wealthy buyer ---
+rich_buyer = make_creature(tm, x=3, y=3, name='RichBuyer')
+rich_buyer.hunger = 0.8  # not hungry
+rich_buyer.gold = 100
+
+merchant = make_creature(tm, x=3, y=2, name='Merchant')  # adjacent
+ingot = Stackable(name='IronIngot', weight=0.5, value=8.0, quantity=2)
+merchant.inventory.items.append(ingot)
+merchant.gold = 0
+
+sell_r = merchant.auto_trade(rich_buyer)
+check("auto_trade sell succeeds", sell_r['success'])
+check(f"direction is sold (got {sell_r.get('direction')})",
+      sell_r.get('direction') == 'sold')
+check("rich buyer now has iron", any(getattr(i, 'name', '') == 'IronIngot'
+                                       for i in rich_buyer.inventory.items))
+check("merchant gained gold", merchant.gold == 8)
+check("rich buyer paid", rich_buyer.gold == 92)
+
+# --- Rejection: poor buyer, not hungry, seller has non-food goods ---
+poor_buyer = make_creature(tm, x=4, y=4, name='PoorBuyer')
+poor_buyer.hunger = 0.5
+poor_buyer.gold = 2  # can't afford much
+
+seller2 = make_creature(tm, x=4, y=3, name='Seller2')
+ingot2 = Stackable(name='IronIngot', weight=0.5, value=8.0, quantity=1)
+seller2.inventory.items.append(ingot2)
+
+rej_r = seller2.auto_trade(poor_buyer)
+check("auto_trade rejection when buyer can't afford", not rej_r['success'])
+
+# --- Non-adjacent rejection ---
+far1 = make_creature(tm, x=0, y=0, name='Far1')
+far2 = make_creature(tm, x=5, y=5, name='Far2')
+far_r = far1.auto_trade(far2)
+check("auto_trade far rejection", not far_r['success'])
+check("auto_trade reason is not_adjacent",
+      far_r.get('reason') == 'not_adjacent')
+
+# --- dispatch TRADE auto-picks target (fresh map — test isolation) ---
+dm = make_map(6, 6)
+d1 = make_creature(dm, x=1, y=1, name='D1')
+d1.hunger = -0.2
+d1.gold = 50
+d2 = make_creature(dm, x=1, y=2, name='D2')  # adjacent
+d2_bread = Consumable(name='Bread', weight=0.1, value=4.0, quantity=2,
+                       heal_amount=5, duration=0)
+d2_bread.is_food = True
+d2.inventory.items.append(d2_bread)
+dtr = dispatch(d1, Action.TRADE, {'cols': 6, 'rows': 6})
+check("dispatch TRADE with auto target succeeds", dtr.get('success'))
+
+# dispatch TRADE with no partner in range (fresh map)
+lm = make_map(6, 6)
+lonely = make_creature(lm, x=5, y=0, name='Lonely')
+lr = dispatch(lonely, Action.TRADE, {'cols': 6, 'rows': 6})
+check("dispatch TRADE with no partner fails", not lr.get('success'))
+check("dispatch TRADE no_partner reason", lr.get('reason') == 'no_partner')
+
+# --- Trader JOB executes a trade when partner adjacent ---
+tjm = make_map(6, 6)
+trade_tile = tjm.tiles[MapKey(3, 3, 0)]
+trade_tile.purpose = 'trading'
+
+trader = make_creature(tjm, x=3, y=3, name='Trader', stats={Stat.CHR: 14})
+trader.job = DEFAULT_JOBS['trader']
+trader.schedule = DAY_WORKER
+ingot3 = Stackable(name='IronIngot', weight=0.5, value=8.0, quantity=1)
+trader.inventory.items.append(ingot3)
+
+# Adjacent wealthy customer
+customer = make_creature(tjm, x=3, y=4, name='Customer')
+customer.gold = 100
+customer.hunger = 0.8  # wealthy speculation path
+
+# Use JOB_TIME (10am) from the earlier jobs test block
+tjr = trader.do_job(now=JOB_TIME_MS)
+check("trader JOB at trading tile succeeds", tjr['success'])
+check("trader JOB paid wage", trader._wage_accumulated > 0)
+# The trade may or may not have fired — trader gets paid either way
+# but customer should have the ingot if trade fired
+check("customer received ingot from trade",
+      any(getattr(i, 'name', '') == 'IronIngot'
+          for i in customer.inventory.items))
+
+# ==========================================================================
 print(f"\n{'='*50}")
 print(f"Results: {PASS} passed, {FAIL} failed out of {PASS+FAIL} tests")
 if FAIL:

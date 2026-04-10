@@ -268,6 +268,29 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
                 return {'success': False, 'reason': 'no_spell'}
         return creature.cast_spell(spell, target, now)
 
+    # TRADE is handled before the social-action range check because it
+    # does its own target auto-selection and does not require a sentient
+    # counterparty (animals can be traded with in a simple economy).
+    if action == Action.TRADE:
+        # Gold-denominated auto-trade: pick nearest adjacent creature as
+        # counterparty if none provided, let auto_trade decide direction
+        # and item. The NN just chooses "trade now," the system closes
+        # the loop with whatever makes economic sense.
+        if target is None:
+            from classes.world_object import WorldObject
+            from classes.creature import Creature as _Creature
+            target = next(
+                (o for o in WorldObject.on_map(creature.current_map)
+                 if isinstance(o, _Creature) and o is not creature
+                 and o.is_alive
+                 and abs(o.location.x - creature.location.x) +
+                     abs(o.location.y - creature.location.y) <= 1),
+                None
+            )
+            if target is None:
+                return {'success': False, 'reason': 'no_partner'}
+        return creature.auto_trade(target)
+
     # -- Social (requires sentient target) --
     if Action.INTIMIDATE <= action <= Action.TALK:
         if target is None:
@@ -282,13 +305,6 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
         if target is None:
             return {'success': False, 'reason': 'no_target'}
         return creature.deceive(target)
-
-    if action == Action.TRADE:
-        if target is None:
-            return {'success': False, 'reason': 'no_target'}
-        offered = context.get('items', [])
-        requested = context.get('requested', [])
-        return creature.propose_trade(target, offered, requested)
 
     if action == Action.BRIBE:
         if target is None:
