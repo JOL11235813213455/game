@@ -933,6 +933,7 @@ class SqlTab(ttk.Frame):
             ('nn_models', 'notes'): 'Free-form annotation',
             ('nn_models', 'obs_schema_id'): 'Observation schema ID at time of training',
             ('nn_models', 'act_schema_id'): 'Action schema ID at time of training',
+            ('species', 'sentient'): 'Whether this species is sentient (affects social, trade, reputation systems)',
             ('species', 'model_name'): 'Neural net model lineage name for this species (NULL = global default)',
             ('species', 'model_version'): 'Model version to use (NULL = latest)',
             ('creatures', 'model_name'): 'Override model lineage (NULL = use species default)',

@@ -15,6 +15,7 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS species (
     name               TEXT PRIMARY KEY,
     playable           INTEGER NOT NULL,
+    sentient           INTEGER NOT NULL DEFAULT 1,
     sprite_name        TEXT REFERENCES sprites(name),
     sprite_name_f      TEXT REFERENCES sprites(name),
     composite_name     TEXT,

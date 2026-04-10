@@ -190,6 +190,7 @@ def _migrate(con: sqlite3.Connection) -> None:
     created_at TEXT NOT NULL DEFAULT '',
     notes TEXT NOT NULL DEFAULT '',
     UNIQUE(name, version))""",
+        "ALTER TABLE species ADD COLUMN sentient INTEGER NOT NULL DEFAULT 1",
         "ALTER TABLE species ADD COLUMN model_name TEXT",
         "ALTER TABLE species ADD COLUMN model_version INTEGER",
         "ALTER TABLE creatures ADD COLUMN model_name TEXT",

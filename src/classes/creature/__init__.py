@@ -89,6 +89,8 @@ class Creature(
 
         # Size: from species default or override
         self.size = size or species_data.get('size', 'medium')
+        # Sentience: from species (non-sentient = crickets, deer, fish)
+        self.sentient: bool = bool(species_data.get('sentient', True))
         # Prudishness: species default with per-creature override
         self.prudishness = prudishness if prudishness is not None else species_data.get('prudishness', 0.5)
         # Age in game days (0 = newborn)
