@@ -24,6 +24,33 @@ def _sln(x: float) -> float:
     return math.copysign(math.log(abs(x) + 1), x)
 
 
+def _resolve_action_purpose(creature, action: int) -> str | None:
+    """Return the purpose string an action should count toward *right now*.
+
+    Most actions map statically via ACTION_PURPOSE. Two are polymorphic:
+
+      * ``HARVEST`` — aligned to the current tile's ``purpose`` (so
+        harvesting fish on a ``fishing`` tile pays the fishing reward,
+        berries on a ``gathering`` tile pays gathering, etc.).
+      * ``JOB`` — aligned to the creature's assigned job purpose.
+
+    Falls back to the static ACTION_PURPOSE entry when the polymorphic
+    context is missing.
+    """
+    from classes.actions import Action, ACTION_PURPOSE
+    if action == Action.JOB:
+        job = getattr(creature, 'job', None)
+        if job is not None:
+            return job.purpose
+        return None
+    if action == Action.HARVEST:
+        tile = creature.current_map.tiles.get(creature.location) if creature.current_map else None
+        if tile is not None and getattr(tile, 'purpose', None):
+            return tile.purpose
+        # fall through to static default
+    return ACTION_PURPOSE.get(action)
+
+
 def compute_reward(creature, prev: dict, curr: dict,
                    breakdown: bool = False,
                    last_action: int = None) -> float | tuple[float, dict]:
@@ -119,6 +146,14 @@ def compute_reward(creature, prev: dict, curr: dict,
     nearby = curr.get('nearby_count', 0)
     signals['crowding'] = -(nearby - 4) * 0.3 if nearby >= 5 else 0.0
 
+    # Wage earned since last tick — rewards consistent job execution.
+    # Scale is modest because gold is already the economic payoff; this
+    # signal exists so the NN gets a per-tick gradient from successful JOB
+    # actions rather than only the delayed gold -> eat -> survive loop.
+    wage_delta = curr.get('wage_accumulated', 0.0) - prev.get('wage_accumulated', 0.0)
+    if wage_delta > 0:
+        signals['wage'] = math.log(1 + wage_delta) * 0.5
+
     # Hunger: satiated = positive, hungry = negative (logarithmic)
     hunger = curr.get('hunger', 0.0)
     prev_hunger = prev.get('hunger', 0.0)
@@ -141,8 +176,7 @@ def compute_reward(creature, prev: dict, curr: dict,
 
         # At-goal bonus: performing aligned action at destination
         if creature.at_goal() and last_action is not None:
-            from classes.actions import ACTION_PURPOSE
-            action_purpose = ACTION_PURPOSE.get(last_action)
+            action_purpose = _resolve_action_purpose(creature, last_action)
             if action_purpose and action_purpose == creature.current_goal:
                 signals['goal_completed'] = 3.0
 
@@ -151,8 +185,7 @@ def compute_reward(creature, prev: dict, curr: dict,
     # Purpose proximity: reward scales with distance to visible purpose tile
     # On the tile: reward^2. In sight: reward^(1+1/d). Out of sight: -0.25
     if last_action is not None and total != 0:
-        from classes.actions import ACTION_PURPOSE
-        action_purpose = ACTION_PURPOSE.get(last_action)
+        action_purpose = _resolve_action_purpose(creature, last_action)
         if action_purpose:
             dist_to_purpose = curr.get('dist_to_purpose', {}).get(action_purpose)
             if dist_to_purpose is not None:
@@ -285,4 +318,6 @@ def make_reward_snapshot(creature) -> dict:
         'fatigue': getattr(creature, '_fatigue_level', 0),
         'hunger': getattr(creature, 'hunger', 0.0),
         'nearby_count': nearby_count,
+        'wage_accumulated': getattr(creature, '_wage_accumulated', 0.0),
+        'gold': getattr(creature, 'gold', 0),
     }

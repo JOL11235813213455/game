@@ -158,6 +158,13 @@ class Creature(
         self.goal_started_tick: int = 0
         self.goal_prev_distance: float = 0.0       # for progress reward
 
+        # Job / schedule. Assigned by arena generator or runtime logic.
+        # None = wanderer (no work obligations, still has a sleep schedule).
+        from classes.jobs import Schedule, WANDERER
+        self.job = None
+        self.schedule: Schedule = WANDERER   # default; overridden when job is set
+        self._wage_accumulated: float = 0.0  # total wages earned this session
+
         # Build Stats from species defaults + overrides
         species_stats = {k: v for k, v in species_data.items() if isinstance(k, Stat)}
         merged = {**species_stats, **(stats or {})}

@@ -51,6 +51,13 @@ class Simulation:
         from classes.gods import WorldData
         self.world_data = WorldData()
 
+        # Game clock — drives schedules, day/night, temporal observations.
+        # Convention: 1 tick (500ms) = 1 game minute, so 1 game hour = 60
+        # ticks and 1 full game day = 1440 ticks (~12 real minutes).
+        from main.game_clock import GameClock
+        self.game_clock = GameClock(start_hour=8.0)
+        self._last_clock_tick = 0
+
         # Per-creature state tracking
         self._obs_snapshots: dict[int, dict] = {}  # uid → prev observation snapshot
         self._reward_snapshots: dict[int, dict] = {}  # uid → prev reward snapshot
@@ -68,6 +75,12 @@ class Simulation:
         """
         self.now += self.tick_ms
         self.step_count += 1
+
+        # Advance game clock: 1 tick = 1 game minute, matching the hunger
+        # drain convention (2.0 / 1440 ticks = full depletion per game day).
+        # GameClock.update takes real seconds and maps 1 real second = 1
+        # game minute, so advance by exactly 1 real-second per tick.
+        self.game_clock.update(1.0)
 
         # Process all creature ticks (behavior, regen, etc.)
         for c in self.creatures:
@@ -87,7 +100,8 @@ class Simulation:
 
             # Build current observation (uses creature's history buffer)
             obs = build_observation(c, self.cols, self.rows, prev_snapshot=prev_obs,
-                                   world_data=self.world_data)
+                                   world_data=self.world_data,
+                                   game_clock=self.game_clock)
 
             # Apply observation mask if creature has one
             if c.observation_mask:

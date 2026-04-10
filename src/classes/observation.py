@@ -36,7 +36,7 @@ _SECTION_SIZES = {
     'self_combat': 17, 'self_economy': 20, 'self_slots': 14,
     'self_weapon': 15, 'self_inv_texture': 13, 'self_crafting': 6,
     'self_social': 10, 'self_status': 16, 'self_hunger': 6, 'self_quest': 10,
-    'self_goal': 21, 'self_movement': 8,
+    'self_goal': 21, 'self_schedule': 10, 'self_movement': 8,
     'self_genetics': 7, 'self_reputation': 6,
     'tile_deep': 21, 'tile_liquid': 25, 'spatial_walls': 25, 'spatial_features': 12,
     'tile_items': MAX_TILE_ITEMS * 9, 'census': 45, 'census_audio': 3,
@@ -448,6 +448,33 @@ def build_observation(creature, cols: int, rows: int,
     obs.append(goal_dir[0])  # dx normalized to -1/0/1
     obs.append(goal_dir[1])  # dy normalized to -1/0/1
     obs.append(1.0 if hasattr(creature, 'at_goal') and creature.at_goal() else 0.0)
+
+    # ==== SECTION 11c: SELF JOB / SCHEDULE (10) ====
+    # Gives the NN time-of-day awareness and job context so it can learn
+    # "do my job at work during work hours, sleep at night, free otherwise."
+    job = getattr(creature, 'job', None)
+    schedule = getattr(creature, 'schedule', None)
+    cur_hour = game_clock.hour if game_clock else 12.0
+    activity = schedule.activity_at(cur_hour) if schedule else 'open'
+    obs.append(1.0 if job is not None else 0.0)                       # has_job
+    obs.append(1.0 if activity == 'sleep' else 0.0)                   # activity one-hot: sleep
+    obs.append(1.0 if activity == 'work' else 0.0)                    #                    work
+    obs.append(1.0 if activity == 'open' else 0.0)                    #                    open
+    # At workplace? (purpose matches job's workplace purposes)
+    _tile = creature.current_map.tiles.get(creature.location) if creature.current_map else None
+    _tp = getattr(_tile, 'purpose', None) if _tile else None
+    at_workplace = 1.0 if (job and _tp and _tp in job.workplace_purposes) else 0.0
+    obs.append(at_workplace)
+    # Ready to work: at workplace AND in work hours — the "should JOB now" signal
+    obs.append(1.0 if (at_workplace and activity == 'work') else 0.0)
+    # Job purpose one-hot compressed to 1 float: is tile matching creature's job purpose?
+    obs.append(1.0 if (job and _tp == job.purpose) else 0.0)
+    # Wage bank (ln-transformed so it scales gently)
+    obs.append(math.log(1 + getattr(creature, '_wage_accumulated', 0.0)) / 5.0)
+    # Sleep pressure: 1 if in sleep hours, 0 otherwise
+    obs.append(1.0 if activity == 'sleep' else 0.0)
+    # Schedule variance marker: creature has a non-default schedule (future: night shift, etc.)
+    obs.append(1.0 if job and job.schedule is not schedule else 0.0)
 
     # ==== SECTION 12: SELF MOVEMENT/POSITION (8) ====
     cx, cy = creature.location.x, creature.location.y
@@ -1091,24 +1118,25 @@ SECTION_RANGES = {
     'self_hunger':      (171, 177),      # +1 desperation float
     'self_quest':       (177, 187),
     'self_goal':        (187, 208),
-    'self_movement':    (208, 216),
-    'self_genetics':    (216, 223),
-    'self_identity':    (223, 248),
-    'self_reputation':  (248, 254),
-    'tile_deep':        (254, 275),      # +3 resource floats
-    'tile_liquid':      (275, 300),
-    'spatial_walls':    (300, 325),
-    'spatial_features': (325, 341),     # +4 crowding metrics
-    'tile_items':       (341, 368),
-    'census_visible':   (368, 413),
-    'census_audible':   (413, 416),
-    'per_engaged':      (416, 686),
-    'world_time':       (686, 699),
-    'temporal':         (699, 713),
-    'trends':           (713, 724),
-    'time_since':       (724, 736),
-    'reward_signals':   (736, 753),
-    'transforms':       (753, OBSERVATION_SIZE),
+    'self_schedule':    (208, 218),      # +10 job/schedule floats
+    'self_movement':    (218, 226),
+    'self_genetics':    (226, 233),
+    'self_identity':    (233, 258),
+    'self_reputation':  (258, 264),
+    'tile_deep':        (264, 285),
+    'tile_liquid':      (285, 310),
+    'spatial_walls':    (310, 335),
+    'spatial_features': (335, 351),
+    'tile_items':       (351, 378),
+    'census_visible':   (378, 423),
+    'census_audible':   (423, 426),
+    'per_engaged':      (426, 696),
+    'world_time':       (696, 709),
+    'temporal':         (709, 723),
+    'trends':           (723, 734),
+    'time_since':       (734, 746),
+    'reward_signals':   (746, 763),
+    'transforms':       (763, OBSERVATION_SIZE),
 }
 
 # Semantic groups for easy mask building

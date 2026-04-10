@@ -1590,7 +1590,7 @@ m44 = make_map(cols=10, rows=10)
 actor = make_creature(m44, x=5, y=5, stats={Stat.STR: 14, Stat.AGL: 12}, name='Actor')
 dummy = make_creature(m44, x=6, y=5, stats={Stat.VIT: 12, Stat.PER: 10, Stat.LVL: 3}, name='Dummy')
 
-check(f"NUM_ACTIONS = {NUM_ACTIONS}", NUM_ACTIONS == 54)
+check(f"NUM_ACTIONS = {NUM_ACTIONS}", NUM_ACTIONS == 56)
 
 # Move south via dispatch (east is blocked by dummy at 6,5)
 ctx = {'cols': 10, 'rows': 10}
@@ -3248,6 +3248,152 @@ rc2 = make_creature(rm, x=2, y=2, name='Dispatcher')
 result4 = dispatch(rc2, Action.HARVEST, {'cols': 5, 'rows': 5})
 check("dispatch HARVEST succeeds", result4.get('success'))
 check("dispatch HARVEST amount", result4.get('amount') == 8)
+
+# ==========================================================================
+# Jobs, Schedules, FARM, polymorphic HARVEST
+# ==========================================================================
+print("\n--- Jobs / Schedule / FARM tests ---")
+
+from classes.jobs import (Schedule, Job, DAY_WORKER, WANDERER, NIGHT_WORKER,
+                           DEFAULT_JOBS, qualifies_for, best_job_for)
+
+# -- Schedule basics --
+check("DAY_WORKER at 10am is work",  DAY_WORKER.activity_at(10.0) == 'work')
+check("DAY_WORKER at 2am is sleep",  DAY_WORKER.activity_at(2.0) == 'sleep')
+check("DAY_WORKER at 12:30 is open (lunch break)",
+      DAY_WORKER.activity_at(12.5) == 'open')
+check("WANDERER at noon is open",   WANDERER.activity_at(12.0) == 'open')
+check("WANDERER at 3am is sleep",   WANDERER.activity_at(3.0) == 'sleep')
+check("NIGHT_WORKER at midnight is work",
+      NIGHT_WORKER.activity_at(0.0) == 'work')
+check("NIGHT_WORKER at noon is sleep",
+      NIGHT_WORKER.activity_at(12.0) == 'sleep')
+
+# -- Job qualification --
+jm = make_map(8, 8)
+strong_c = make_creature(jm, x=0, y=0, name='Strong',
+                          stats={Stat.STR: 16, Stat.VIT: 14, Stat.PER: 14,
+                                 Stat.INT: 8, Stat.CHR: 8})
+check("strong creature qualifies for miner", qualifies_for(strong_c, DEFAULT_JOBS['miner']))
+check("strong creature does NOT qualify for healer",
+      not qualifies_for(strong_c, DEFAULT_JOBS['healer']))
+
+best = best_job_for(strong_c)
+check(f"best_job_for strong returns a job: {best.name if best else None}",
+      best is not None)
+
+# -- FARM action --
+farm_tile = jm.tiles[MapKey(3, 3, 0)]
+farm_tile.purpose = 'farming'
+farm_tile.resource_type = 'wheat'
+farm_tile.resource_max = 20
+farm_tile.resource_amount = 5
+farm_tile.growth_rate = 1.0
+
+farmer_c = make_creature(jm, x=3, y=3, name='Farmer',
+                          stats={Stat.VIT: 14, Stat.INT: 14, Stat.STR: 12})
+farmer_c.job = DEFAULT_JOBS['farmer']
+farmer_c.schedule = DAY_WORKER
+
+fr = farmer_c.farm()
+check("farm() on farming tile succeeds", fr['success'])
+check("farm() boosts resource_amount", farm_tile.resource_amount > 5)
+
+# farm() fails on a non-resource tile
+no_res = make_creature(jm, x=0, y=1, name='NoResFarmer',
+                       stats={Stat.VIT: 14, Stat.INT: 14})
+nr = no_res.farm()
+check("farm() on empty tile fails", not nr['success'])
+check("farm() empty tile reason", nr.get('reason') == 'no_resource')
+
+# farm() fails when already full
+farm_tile.resource_amount = farm_tile.resource_max
+full_r = farmer_c.farm()
+check("farm() at max fails", not full_r['success'])
+check("farm() at max reason", full_r.get('reason') == 'already_full')
+
+# -- do_job() --
+# Fallback _current_hour(now_ms) = (8 + now_ms/500/60) % 24.
+# Target 10am → need offset of 2 game hours = 120 min = 60000 ms
+JOB_TIME_MS = 2 * 60 * 500  # 2 game hours after 8am start → 10am
+
+# Farmer on farming tile during work hours: paid
+farm_tile.resource_amount = 5  # reset
+prev_gold = farmer_c.gold
+jr = farmer_c.do_job(now=JOB_TIME_MS)
+check("do_job farmer on farming tile at 10am succeeds", jr['success'])
+check("do_job pays wage", farmer_c.gold > prev_gold)
+check("do_job records wage_accumulated", farmer_c._wage_accumulated > 0)
+
+# Farmer OFF hours (2am) → need 18 hours offset = 1080 min = 540000 ms
+farm_tile.resource_amount = 5
+OFF_HOURS_MS = 18 * 60 * 500  # 8am + 18h = 2am next day
+jr2 = farmer_c.do_job(now=OFF_HOURS_MS)
+check("do_job off-hours fails", not jr2['success'])
+check("do_job off-hours reason", jr2.get('reason') == 'off_hours')
+
+# Farmer at wrong workplace (trading tile, not farming)
+wrong_tile = jm.tiles[MapKey(5, 5, 0)]
+wrong_tile.purpose = 'trading'
+wrong_farmer = make_creature(jm, x=5, y=5, name='WrongFarmer',
+                              stats={Stat.VIT: 14, Stat.INT: 14})
+wrong_farmer.job = DEFAULT_JOBS['farmer']
+wrong_farmer.schedule = DAY_WORKER
+jr3 = wrong_farmer.do_job(now=JOB_TIME_MS)
+check("do_job at wrong workplace fails", not jr3['success'])
+check("do_job wrong workplace reason", jr3.get('reason') == 'not_at_workplace')
+
+# Wanderer (no job) cannot do_job
+wanderer_c = make_creature(jm, x=0, y=0, name='Wanderer')
+# wanderer_c.job defaults to None
+jr4 = wanderer_c.do_job(now=JOB_TIME_MS)
+check("do_job wanderer fails", not jr4['success'])
+check("do_job wanderer reason", jr4.get('reason') == 'no_job')
+
+# -- Polymorphic HARVEST reward resolution --
+from classes.reward import _resolve_action_purpose
+
+fishing_tile = jm.tiles[MapKey(1, 1, 0)]
+fishing_tile.purpose = 'fishing'
+fishing_tile.resource_type = 'fish'
+fishing_tile.resource_amount = 5
+fishing_tile.resource_max = 10
+
+fisher = make_creature(jm, x=1, y=1, name='Fisher')
+resolved = _resolve_action_purpose(fisher, Action.HARVEST)
+check(f"HARVEST on fishing tile resolves to 'fishing' (got {resolved})",
+      resolved == 'fishing')
+
+farmer_on_wheat = make_creature(jm, x=3, y=3, name='FarmerOnWheat')
+resolved_farm = _resolve_action_purpose(farmer_on_wheat, Action.HARVEST)
+check(f"HARVEST on farming tile resolves to 'farming' (got {resolved_farm})",
+      resolved_farm == 'farming')
+
+# JOB action resolves to creature's job purpose
+jr_farmer = make_creature(jm, x=0, y=2, name='JobResolveFarmer')
+jr_farmer.job = DEFAULT_JOBS['miner']
+resolved_job = _resolve_action_purpose(jr_farmer, Action.JOB)
+check(f"JOB resolves to creature's job purpose 'mining' (got {resolved_job})",
+      resolved_job == 'mining')
+
+# dispatch JOB works via the normal path
+disp_farmer = make_creature(jm, x=3, y=3, name='DispatchFarmer',
+                             stats={Stat.VIT: 14, Stat.INT: 14})
+disp_farmer.job = DEFAULT_JOBS['farmer']
+disp_farmer.schedule = DAY_WORKER
+farm_tile.resource_amount = 5
+djr = dispatch(disp_farmer, Action.JOB, {'cols': 8, 'rows': 8, 'now': JOB_TIME_MS})
+check("dispatch JOB succeeds", djr.get('success'))
+
+# dispatch FARM works
+disp_farm2 = make_creature(jm, x=3, y=3, name='DispatchFarm2',
+                            stats={Stat.VIT: 14, Stat.INT: 14})
+farm_tile.resource_amount = 5
+dfr = dispatch(disp_farm2, Action.FARM, {'cols': 8, 'rows': 8})
+check("dispatch FARM succeeds", dfr.get('success'))
+
+# Action counts
+check("NUM_ACTIONS is 56", NUM_ACTIONS == 56)
 
 # ==========================================================================
 print(f"\n{'='*50}")

@@ -5,6 +5,29 @@ from classes.inventory import Slot
 from classes.world_object import WorldObject
 
 
+def _current_hour(now_ms: int) -> float:
+    """Derive a 0-24 game hour from a simulation time in milliseconds.
+
+    Convention: 1 tick = 500ms = 1 game minute, matching the hunger drain
+    calibration (2.0 / 1440 ticks = full depletion per day). If a
+    :class:`GameClock` exists in Trackable, prefer it for runtime
+    consistency. Training start time defaults to 8:00 so first day covers
+    morning-work-evening-sleep rather than starting mid-night.
+    """
+    try:
+        from main.game_clock import GameClock
+        from classes.trackable import Trackable
+        for obj in Trackable.all_instances():
+            if isinstance(obj, GameClock):
+                return obj.hour
+    except Exception:
+        pass
+    # Fallback: derive from sim.now. 1 tick (500ms) = 1 game minute.
+    # Start offset 8h so wake/work/sleep cycle aligns with training windows.
+    minutes = now_ms / 500.0
+    return (8.0 + minutes / 60.0) % 24.0
+
+
 class UtilityMixin:
     """Utility actions: search, guard, wait, sleep, traps, stances."""
 
@@ -93,6 +116,118 @@ class UtilityMixin:
         result['success'] = True
         result['item'] = harvested
         result['amount'] = amount
+        return result
+
+    def farm(self) -> dict:
+        """Tend a farming tile — boost its resource growth.
+
+        FARM is the stewardship action, distinct from HARVEST. It does
+        not produce inventory; instead it boosts the tile's resource
+        amount by a multiple of its growth rate, scaled by INT. Requires
+        a tile with a resource and growth_rate > 0. Costs a small amount
+        of stamina.
+
+        Returns dict: success, boost (amount added), reason on failure.
+        """
+        result = {'success': False}
+
+        tile = self.current_map.tiles.get(self.location)
+        if tile is None:
+            result['reason'] = 'no_tile'
+            return result
+        if not getattr(tile, 'resource_type', None):
+            result['reason'] = 'no_resource'
+            return result
+        if tile.growth_rate <= 0:
+            result['reason'] = 'not_farmable'
+            return result
+        if tile.resource_amount >= tile.resource_max:
+            result['reason'] = 'already_full'
+            return result
+
+        # Stamina cost
+        stam_cost = 2
+        if self.stats.active[Stat.CUR_STAMINA]() < stam_cost:
+            result['reason'] = 'exhausted'
+            return result
+        self.stats.base[Stat.CUR_STAMINA] = max(
+            0, self.stats.base.get(Stat.CUR_STAMINA, 0) - stam_cost)
+
+        # Boost scales with INT modifier: neutral = 2x growth, +5 INT = 4.5x
+        int_mod = (self.stats.active[Stat.INT]() - 10) // 2
+        multiplier = 2.0 + max(0, int_mod) * 0.5
+        boost = tile.growth_rate * multiplier
+        old_amt = tile.resource_amount
+        tile.resource_amount = min(tile.resource_max, tile.resource_amount + boost)
+
+        result['success'] = True
+        result['boost'] = tile.resource_amount - old_amt
+        return result
+
+    def do_job(self, now: int = 0) -> dict:
+        """Perform one tick of assigned work.
+
+        Fails cleanly for wanderers and off-hours attempts. On success,
+        pays the job's wage_per_tick into the creature's gold, delegates
+        to the purpose-specific effect (farming → farm, mining → dig,
+        guarding → guard stance, hunting/crafting → search/craft, etc.)
+        so the job is doing something real on the tile.
+        """
+        result = {'success': False}
+
+        if self.job is None:
+            result['reason'] = 'no_job'
+            return result
+
+        tile = self.current_map.tiles.get(self.location)
+        if tile is None:
+            result['reason'] = 'no_tile'
+            return result
+
+        # Must be at a workplace tile
+        tile_purpose = getattr(tile, 'purpose', None)
+        if tile_purpose not in self.job.workplace_purposes:
+            result['reason'] = 'not_at_workplace'
+            return result
+
+        # Must be during work hours
+        hour = _current_hour(now)
+        if not self.schedule.in_work_hours(hour):
+            result['reason'] = 'off_hours'
+            return result
+
+        # Purpose-specific effect
+        effect = {'success': True}
+        purpose = self.job.purpose
+        if purpose == 'farming':
+            effect = self.farm()
+        elif purpose == 'mining':
+            # Mining increments buried_gold — treat as stewardship of the vein
+            tile.buried_gold = getattr(tile, 'buried_gold', 0) + 1
+        elif purpose == 'guarding':
+            # Guarding cheaply — fake cols/rows since we don't have context here
+            self.guard(cols=1, rows=1)
+        elif purpose == 'hunting':
+            # Hunting the site means maintaining snares / searching
+            self.search_tile()
+        elif purpose == 'healing':
+            # Healer recovers a bit of own mana as "channeled blessing"
+            cur = self.stats.active[Stat.CUR_MANA]()
+            mx  = self.stats.active[Stat.MAX_MANA]()
+            self.stats.base[Stat.CUR_MANA] = min(mx, cur + 1)
+        # 'trading' and 'crafting' jobs just collect wages (fold into NN-chosen
+        # TRADE / CRAFT actions; JOB for them is effectively "showing up")
+
+        # Pay wage if the underlying effect didn't hard-fail
+        if effect.get('success', True):
+            wage = self.job.wage_per_tick
+            self.gold = int(getattr(self, 'gold', 0) + wage)
+            self._wage_accumulated = getattr(self, '_wage_accumulated', 0.0) + wage
+            result['success'] = True
+            result['wage'] = wage
+            result['purpose'] = purpose
+        else:
+            result['reason'] = effect.get('reason', 'effect_failed')
         return result
 
     def guard(self, cols: int, rows: int) -> bool:

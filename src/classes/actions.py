@@ -78,6 +78,8 @@ class Action(IntEnum):
     CRAFT = 51
     DISASSEMBLE = 52
     HARVEST = 53
+    JOB = 54    # single parameterized action; dispatches via creature.do_job()
+    FARM = 55   # stewardship: boost resource growth on farming tiles
 
 
 NUM_ACTIONS = len(Action)
@@ -113,7 +115,12 @@ ACTION_PURPOSE = {
     Action.DIG: 'mining',
     Action.CRAFT: 'crafting',
     Action.DISASSEMBLE: 'crafting',
-    Action.HARVEST: 'farming',   # also fishing, gathering — purpose overrides in reward
+    # HARVEST is polymorphic: reward uses tile's actual purpose (farming/
+    # fishing/gathering/hunting — whichever the resource comes from).
+    # 'farming' here is a fallback for tiles with a resource but no explicit purpose.
+    Action.HARVEST: 'farming',
+    Action.FARM: 'farming',       # stewardship — distinct from extraction
+    Action.JOB: None,              # resolved at reward time from creature.job.purpose
     Action.USE_ITEM: 'eating',     # consumables
     Action.SET_TRAP: 'hunting',
 }
@@ -148,6 +155,7 @@ ACTION_NAMES = {
     Action.DIG: 'dig', Action.PUSH: 'push',
     Action.CRAFT: 'craft', Action.DISASSEMBLE: 'disassemble',
     Action.HARVEST: 'harvest',
+    Action.JOB: 'job', Action.FARM: 'farm',
 }
 
 
@@ -414,5 +422,11 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
 
     if action == Action.HARVEST:
         return creature.harvest()
+
+    if action == Action.FARM:
+        return creature.farm()
+
+    if action == Action.JOB:
+        return creature.do_job(context.get('now', 0))
 
     return {'success': False, 'reason': 'unknown_action'}

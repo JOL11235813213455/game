@@ -263,6 +263,7 @@ def generate_arena(cols: int = 20, rows: int = 20,
         'trading', 'eating', 'sleeping', 'worship',
         'crafting', 'training', 'socializing', 'farming',
         'hunting', 'gathering', 'gossiping', 'healing',
+        'mining', 'guarding',
     ]
     random.shuffle(district_purposes)
 
@@ -287,17 +288,20 @@ def generate_arena(cols: int = 20, rows: int = 20,
                     tiles[pk].purpose = purpose
 
     # --- Add a river (liquid tiles with flow) ---
+    # Shallow banks are tagged 'fishing' so HARVEST on them pays the
+    # fishing purpose reward (polymorphic alignment).
     river_x = cols // 2
     for y in range(rows):
         rk = MapKey(river_x, y, 0)
         if rk in tiles:
             tiles[rk] = Tile(walkable=True, liquid=True,
                              flow_direction='S', flow_speed=2.0, depth=1)
-        # Shallow banks on either side
         for bank_dx in [-1, 1]:
             bk = MapKey(river_x + bank_dx, y, 0)
             if bk in tiles:
-                tiles[bk] = Tile(walkable=True, liquid=True, depth=0)
+                bank = Tile(walkable=True, liquid=True, depth=0)
+                bank.purpose = 'fishing'
+                tiles[bk] = bank
 
     # --- Seed resources on purpose tiles ---
     # Maps purpose → (resource_type, resource_max, growth_rate)
@@ -357,6 +361,9 @@ def generate_arena(cols: int = 20, rows: int = 20,
     random.shuffle(spawn_tiles)
 
     creatures = []
+    from classes.jobs import DEFAULT_JOBS, qualifies_for, best_job_for, WANDERER
+    import copy as _copy
+
     for i in range(min(num_creatures, len(spawn_tiles))):
         loc = spawn_tiles[i]
         profile = profiles[i % len(profiles)]
@@ -380,6 +387,26 @@ def generate_arena(cols: int = 20, rows: int = 20,
                               heal_amount=2, duration=0)
             food.is_food = True
             c.inventory.items.append(food)
+
+        # Assign a job — population mix: 60% jobbed, 30% wanderer, 10% outlier.
+        # Outliers are jobbed but spawned far from their workplace (drifters
+        # looking for work, adds variance).
+        roll = random.random()
+        if roll < 0.60:
+            job = best_job_for(c)
+            if job is not None:
+                c.job = job
+                c.schedule = _copy.copy(job.schedule)
+        elif roll < 0.90:
+            # Wanderer — default schedule already set to WANDERER
+            pass
+        else:
+            # Outlier — pick any job we qualify for (not necessarily best paid)
+            eligible = [j for j in DEFAULT_JOBS.values() if qualifies_for(c, j)]
+            if eligible:
+                job = random.choice(eligible)
+                c.job = job
+                c.schedule = _copy.copy(job.schedule)
 
         creatures.append(c)
 
