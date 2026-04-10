@@ -399,6 +399,9 @@ class UtilityMixin:
             return result
 
         moved = item.disassemble_into(self.inventory)
+        # Empty frame self-destructs
+        if not item.ingredients.items and item in self.inventory.items:
+            self.inventory.items.remove(item)
         result['success'] = True
         result['parts'] = len(moved)
         return result
