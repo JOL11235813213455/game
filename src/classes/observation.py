@@ -38,7 +38,7 @@ _SECTION_SIZES = {
     'self_social': 10, 'self_status': 16, 'self_hunger': 5, 'self_quest': 10,
     'self_goal': 21, 'self_movement': 8,
     'self_genetics': 7, 'self_reputation': 6,
-    'tile_deep': 18, 'tile_liquid': 25, 'spatial_walls': 25, 'spatial_features': 12,
+    'tile_deep': 21, 'tile_liquid': 25, 'spatial_walls': 25, 'spatial_features': 12,
     'tile_items': MAX_TILE_ITEMS * 9, 'census': 45, 'census_audio': 3,
     'world_time': 13, 'temporal': 14, 'trends': 11, 'time_since': 12,
     'reward_signals': 17,
@@ -554,6 +554,13 @@ def build_observation(creature, cols: int, rows: int,
     else:
         obs.extend([0.5, 0.5, 0.5])
     obs.append(1.0 if tile_items else 0.0)
+    # Resource on current tile (3)
+    res_type = getattr(tile, 'resource_type', None) if tile else None
+    res_amt  = getattr(tile, 'resource_amount', 0) if tile else 0
+    res_max  = getattr(tile, 'resource_max', 0) if tile else 0
+    obs.append(1.0 if res_type else 0.0)                                  # has_resource
+    obs.append(res_amt / max(1, res_max) if res_max > 0 else 0.0)         # resource_fill (0=empty, 1=full)
+    obs.append(1.0 if (res_type and res_amt <= 0) else 0.0)               # resource_depleted
 
     # ==== SECTION 16b: TILE LIQUID / WATER (10) ====
     is_liquid = getattr(tile, 'liquid', False) if tile else False
@@ -1083,20 +1090,20 @@ SECTION_RANGES = {
     'self_genetics':    (215, 222),
     'self_identity':    (222, 247),
     'self_reputation':  (247, 253),
-    'tile_deep':        (253, 271),
-    'tile_liquid':      (271, 296),
-    'spatial_walls':    (296, 321),
-    'spatial_features': (321, 337),     # +4 crowding metrics
-    'tile_items':       (337, 364),
-    'census_visible':   (364, 409),
-    'census_audible':   (409, 412),
-    'per_engaged':      (412, 682),
-    'world_time':       (682, 695),
-    'temporal':         (695, 709),
-    'trends':           (709, 720),
-    'time_since':       (720, 732),
-    'reward_signals':   (732, 749),
-    'transforms':       (749, OBSERVATION_SIZE),
+    'tile_deep':        (253, 274),      # +3 resource floats
+    'tile_liquid':      (274, 299),
+    'spatial_walls':    (299, 324),
+    'spatial_features': (324, 340),     # +4 crowding metrics
+    'tile_items':       (340, 367),
+    'census_visible':   (367, 412),
+    'census_audible':   (412, 415),
+    'per_engaged':      (415, 685),
+    'world_time':       (685, 698),
+    'temporal':         (698, 712),
+    'trends':           (712, 723),
+    'time_since':       (723, 735),
+    'reward_signals':   (735, 752),
+    'transforms':       (752, OBSERVATION_SIZE),
 }
 
 # Semantic groups for easy mask building

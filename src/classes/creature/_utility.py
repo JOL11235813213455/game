@@ -9,12 +9,13 @@ class UtilityMixin:
     """Utility actions: search, guard, wait, sleep, traps, stances."""
 
     def search_tile(self) -> dict:
-        """Search the current tile for items.
+        """Search the current tile for items and resources.
 
         Reveals tile inventory. Hidden items require DETECTION check.
-        Returns dict: items_found (list), hidden_found (list).
+        Returns dict: items_found (list), hidden_found (list/bool),
+                      resource_type (str|None), resource_amount (int).
         """
-        result = {'items_found': [], 'hidden_found': []}
+        result = {'items_found': [], 'hidden_found': [], 'resource_type': None, 'resource_amount': 0}
 
         tile = self.current_map.tiles.get(self.location)
         if tile is None:
@@ -33,6 +34,65 @@ class UtilityMixin:
             else:
                 result['hidden_found'] = False
 
+        # Resource on tile
+        if getattr(tile, 'resource_type', None):
+            result['resource_type'] = tile.resource_type
+            result['resource_amount'] = int(tile.resource_amount)
+
+        return result
+
+    def harvest(self) -> dict:
+        """Harvest the resource from the current tile.
+
+        Converts tile.resource_amount into a Stackable item in inventory.
+        The full current amount is taken (tile goes to 0) and will grow back.
+        Returns dict: success (bool), item (Stackable|None), amount (int).
+        """
+        from classes.inventory import Stackable
+
+        result = {'success': False, 'item': None, 'amount': 0}
+
+        tile = self.current_map.tiles.get(self.location)
+        if tile is None:
+            result['reason'] = 'no_tile'
+            return result
+
+        if not getattr(tile, 'resource_type', None):
+            result['reason'] = 'no_resource'
+            return result
+
+        amount = int(tile.resource_amount)
+        if amount <= 0:
+            result['reason'] = 'depleted'
+            return result
+
+        # Harvest: take the resource, create a stackable item
+        tile.resource_amount = 0
+
+        # Check if a matching stack already exists in inventory
+        resource_name = tile.resource_type.capitalize()
+        for inv_item in self.inventory.items:
+            if isinstance(inv_item, Stackable) and inv_item.name == resource_name:
+                overflow = inv_item.add(amount, self.inventory)
+                result['success'] = True
+                result['item'] = inv_item
+                result['amount'] = amount - overflow
+                return result
+
+        # Create new stack
+        harvested = Stackable(
+            name=resource_name,
+            description=f'Harvested {resource_name.lower()}.',
+            weight=0.1 * amount,
+            value=float(amount),
+            quantity=amount,
+        )
+        harvested.is_food = tile.resource_type in ('wheat', 'berries', 'fish', 'mushrooms', 'corn')
+        self.inventory.items.append(harvested)
+
+        result['success'] = True
+        result['item'] = harvested
+        result['amount'] = amount
         return result
 
     def guard(self, cols: int, rows: int) -> bool:

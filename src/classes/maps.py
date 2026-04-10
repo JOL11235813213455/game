@@ -44,6 +44,10 @@ class Tile(Trackable):
         ,flow_speed:float=None      # tiles per second
         ,depth:int=None             # depth in tiles (0 = shallow, 1+ = deep)
         ,purpose:str=None           # tile purpose: trading, farming, hunting, etc.
+        ,resource_type:str=None     # harvestable resource name (e.g. 'wheat', 'fish', 'berries')
+        ,resource_amount:int=0      # current resource units available
+        ,resource_max:int=0         # maximum resource capacity
+        ,growth_rate:float=0.0      # units regenerated per grow tick
         ):
         super().__init__()
         tmpl = template or {}
@@ -60,6 +64,10 @@ class Tile(Trackable):
         self.flow_speed     = flow_speed     if flow_speed     is not None else tmpl.get('flow_speed',     0.0)
         self.depth          = depth          if depth          is not None else tmpl.get('depth',          0)
         self._purpose        = purpose        if purpose        is not None else tmpl.get('purpose',        None)
+        self.resource_type   = resource_type   if resource_type   is not None else tmpl.get('resource_type',   None)
+        self.resource_amount = resource_amount if resource_amount else tmpl.get('resource_amount', 0)
+        self.resource_max    = resource_max    if resource_max    else tmpl.get('resource_max',    0)
+        self.growth_rate     = growth_rate     if growth_rate     else tmpl.get('growth_rate',     0.0)
         # Schedule: {purpose_str: (start_hour, end_hour)} for time-dependent purposes
         # e.g. {'sleeping': (20, 6), 'pairing': (20, 6), 'farming': (6, 18)}
         self.purpose_schedule: dict = {}
@@ -167,6 +175,22 @@ class Map(Trackable):
             if gold > 0:
                 from_tile.gold -= gold
                 to_tile.gold += gold
+
+    def grow_resources(self):
+        """Tick resource regeneration on all tiles with a growth_rate.
+
+        Each tile's resource_amount grows toward resource_max by growth_rate
+        per call. Designed to be called periodically (e.g. every N training
+        steps or every game minute).
+        """
+        for tile in self.tiles.values():
+            if not tile.resource_type or tile.growth_rate <= 0:
+                continue
+            if tile.resource_amount < tile.resource_max:
+                tile.resource_amount = min(
+                    tile.resource_max,
+                    tile.resource_amount + tile.growth_rate
+                )
 
     def generate_buried_loot(self, loot_table: list[dict] = None,
                              density: float = 0.05, seed: int = None):

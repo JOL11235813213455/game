@@ -77,6 +77,7 @@ class Action(IntEnum):
     PUSH = 50
     CRAFT = 51
     DISASSEMBLE = 52
+    HARVEST = 53
 
 
 NUM_ACTIONS = len(Action)
@@ -112,6 +113,7 @@ ACTION_PURPOSE = {
     Action.DIG: 'mining',
     Action.CRAFT: 'crafting',
     Action.DISASSEMBLE: 'crafting',
+    Action.HARVEST: 'farming',   # also fishing, gathering — purpose overrides in reward
     Action.USE_ITEM: 'eating',     # consumables
     Action.SET_TRAP: 'hunting',
 }
@@ -145,6 +147,7 @@ ACTION_NAMES = {
     Action.SET_TRAP: 'set_trap', Action.BLOCK_STANCE: 'block_stance',
     Action.DIG: 'dig', Action.PUSH: 'push',
     Action.CRAFT: 'craft', Action.DISASSEMBLE: 'disassemble',
+    Action.HARVEST: 'harvest',
 }
 
 
@@ -408,5 +411,8 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
             if item is None:
                 return {'success': False, 'reason': 'nothing_to_disassemble'}
         return creature.disassemble(item)
+
+    if action == Action.HARVEST:
+        return creature.harvest()
 
     return {'success': False, 'reason': 'unknown_action'}

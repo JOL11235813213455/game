@@ -419,6 +419,8 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
         for c in sim.creatures:
             if c.is_alive:
                 c.process_ticks(sim.now)
+        if sim.step_count % 50 == 0:
+            sim.game_map.grow_resources()
 
         # Collect rewards using STORED action data
         for c in sim.creatures:

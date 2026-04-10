@@ -1590,7 +1590,7 @@ m44 = make_map(cols=10, rows=10)
 actor = make_creature(m44, x=5, y=5, stats={Stat.STR: 14, Stat.AGL: 12}, name='Actor')
 dummy = make_creature(m44, x=6, y=5, stats={Stat.VIT: 12, Stat.PER: 10, Stat.LVL: 3}, name='Dummy')
 
-check(f"NUM_ACTIONS = {NUM_ACTIONS}", NUM_ACTIONS == 53)
+check(f"NUM_ACTIONS = {NUM_ACTIONS}", NUM_ACTIONS == 54)
 
 # Move south via dispatch (east is blocked by dummy at 6,5)
 ctx = {'cols': 10, 'rows': 10}
@@ -3162,17 +3162,92 @@ gc7.process_ticks(1000)  # fire all registered ticks
 check("spatial_memory tick learns tile purpose",
       'resting' in gc7.known_locations)
 
-# -- goal_target_zone_id --
+# -- goal_target --
 gc8 = make_creature(gm6, x=0, y=0, name='ZoneCreature')
-gc8.set_goal('trading', 'tick_map', 5, 5, zone_id=42, tick=0)
-check("goal_target_zone_id set", gc8.goal_target_zone_id == 42)
+gc8.set_goal('trading', 'tick_map', 5, 5, tick=0)
+check("goal_target set", gc8.goal_target == ('tick_map', 5, 5))
 gc8.clear_goal()
-check("goal_target_zone_id cleared", gc8.goal_target_zone_id is None)
+check("goal_target cleared after clear_goal", gc8.goal_target is None)
 
 # -- goal_started_tick --
 gc9 = make_creature(gm6, x=0, y=0, name='TickTracker')
 gc9.set_goal('farming', 'tick_map', 5, 5, tick=12345)
 check("goal_started_tick set", gc9.goal_started_tick == 12345)
+
+# ==========================================================================
+# Resource / Harvest system
+# ==========================================================================
+print("\n--- Resource / Harvest tests ---")
+
+from classes.actions import Action, dispatch
+
+# Tile with a resource
+rm = make_map(5, 5)
+wheat_tile = rm.tiles[MapKey(2, 2, 0)]
+wheat_tile.purpose = 'farming'
+wheat_tile.resource_type = 'wheat'
+wheat_tile.resource_amount = 10
+wheat_tile.resource_max = 20
+wheat_tile.growth_rate = 1.0
+
+rc = make_creature(rm, x=2, y=2, name='Harvester')
+
+# search_tile should reveal resource
+sr = rc.search_tile()
+check("search_tile returns resource_type", sr['resource_type'] == 'wheat')
+check("search_tile returns resource_amount", sr['resource_amount'] == 10)
+
+# harvest happy path
+result = rc.harvest()
+check("harvest succeeds", result['success'])
+check("harvest returns correct amount", result['amount'] == 10)
+check("tile depleted after harvest", wheat_tile.resource_amount == 0)
+check("harvested item in inventory", any(getattr(i, 'name', '') == 'Wheat' for i in rc.inventory.items))
+check("harvested stack has correct quantity",
+      next((i.quantity for i in rc.inventory.items if getattr(i, 'name', '') == 'Wheat'), 0) == 10)
+
+# harvest from depleted tile fails
+result2 = rc.harvest()
+check("harvest depleted tile fails", not result2['success'])
+check("harvest depleted reason", result2.get('reason') == 'depleted')
+
+# search on depleted tile shows 0
+sr2 = rc.search_tile()
+check("search depleted tile shows 0 amount", sr2['resource_amount'] == 0)
+
+# harvest on tile with no resource fails
+empty_rc = make_creature(rm, x=0, y=0, name='EmptyHarvester')
+result3 = empty_rc.harvest()
+check("harvest no-resource tile fails", not result3['success'])
+check("harvest no-resource reason", result3.get('reason') == 'no_resource')
+
+# grow_resources tick
+wheat_tile.resource_amount = 5
+rm.grow_resources()
+check("grow_resources increments amount", wheat_tile.resource_amount == 6.0)
+
+# grow does not exceed max
+wheat_tile.resource_amount = 19.5
+rm.grow_resources()
+check("grow_resources caps at resource_max", wheat_tile.resource_amount == 20)
+
+# zero growth_rate tile does not grow
+inert_tile = rm.tiles[MapKey(1, 1, 0)]
+inert_tile.resource_type = 'rock'
+inert_tile.resource_amount = 5
+inert_tile.resource_max = 10
+inert_tile.growth_rate = 0.0
+rm.grow_resources()
+check("zero growth_rate tile unchanged", inert_tile.resource_amount == 5)
+
+# dispatch HARVEST action works
+wheat_tile.resource_amount = 8
+wheat_tile.resource_max = 20
+wheat_tile.growth_rate = 1.0
+rc2 = make_creature(rm, x=2, y=2, name='Dispatcher')
+result4 = dispatch(rc2, Action.HARVEST, {'cols': 5, 'rows': 5})
+check("dispatch HARVEST succeeds", result4.get('success'))
+check("dispatch HARVEST amount", result4.get('amount') == 8)
 
 # ==========================================================================
 print(f"\n{'='*50}")

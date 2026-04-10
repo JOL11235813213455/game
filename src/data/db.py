@@ -210,6 +210,14 @@ def _migrate(con: sqlite3.Connection) -> None:
         "ALTER TABLE tile_sets ADD COLUMN depth INTEGER",
         "ALTER TABLE tile_templates ADD COLUMN purpose TEXT",
         "ALTER TABLE tile_sets ADD COLUMN purpose TEXT",
+        "ALTER TABLE tile_templates ADD COLUMN resource_type TEXT",
+        "ALTER TABLE tile_templates ADD COLUMN resource_amount INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE tile_templates ADD COLUMN resource_max INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE tile_templates ADD COLUMN growth_rate REAL NOT NULL DEFAULT 0.0",
+        "ALTER TABLE tile_sets ADD COLUMN resource_type TEXT",
+        "ALTER TABLE tile_sets ADD COLUMN resource_amount INTEGER",
+        "ALTER TABLE tile_sets ADD COLUMN resource_max INTEGER",
+        "ALTER TABLE tile_sets ADD COLUMN growth_rate REAL",
         """CREATE TABLE IF NOT EXISTS item_frames (
     key TEXT PRIMARY KEY,
     name TEXT NOT NULL DEFAULT '',
@@ -797,6 +805,11 @@ def _load_tile_templates(con: sqlite3.Connection) -> None:
             'flow_direction': r['flow_direction'],
             'flow_speed': r['flow_speed'] if r['flow_speed'] is not None else 0.0,
             'depth': r['depth'] if r['depth'] is not None else 0,
+            'purpose': r['purpose'],
+            'resource_type': r['resource_type'],
+            'resource_amount': r['resource_amount'] if r['resource_amount'] is not None else 0,
+            'resource_max': r['resource_max'] if r['resource_max'] is not None else 0,
+            'growth_rate': r['growth_rate'] if r['growth_rate'] is not None else 0.0,
         }
 
 
@@ -861,6 +874,11 @@ def _load_maps(con: sqlite3.Connection) -> None:
                 flow_direction = te['flow_direction'] or None,
                 flow_speed     = float(te['flow_speed']) if te['flow_speed'] is not None else None,
                 depth          = int(te['depth']) if te['depth'] is not None else None,
+                purpose        = te['purpose'] or None,
+                resource_type  = te['resource_type'] or None,
+                resource_amount= int(te['resource_amount']) if te['resource_amount'] is not None else 0,
+                resource_max   = int(te['resource_max']) if te['resource_max'] is not None else 0,
+                growth_rate    = float(te['growth_rate']) if te['growth_rate'] is not None else 0.0,
             )
 
     # Fill remaining coords with default tile

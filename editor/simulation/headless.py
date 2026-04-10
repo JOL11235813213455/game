@@ -74,6 +74,10 @@ class Simulation:
             if c.is_alive:
                 c.update(self.now, self.cols, self.rows)
 
+        # Grow tile resources every 50 steps (~1 game minute at 500ms ticks)
+        if self.step_count % 50 == 0:
+            self.game_map.grow_resources()
+
         # Collect results
         from classes.temporal import make_history_snapshot
         results = []

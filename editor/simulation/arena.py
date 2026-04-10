@@ -299,6 +299,26 @@ def generate_arena(cols: int = 20, rows: int = 20,
             if bk in tiles:
                 tiles[bk] = Tile(walkable=True, liquid=True, depth=0)
 
+    # --- Seed resources on purpose tiles ---
+    # Maps purpose → (resource_type, resource_max, growth_rate)
+    PURPOSE_RESOURCES = {
+        'farming':   ('wheat',    20, 1.0),
+        'fishing':   ('fish',     15, 0.5),
+        'gathering': ('berries',  12, 0.8),
+        'hunting':   ('game',     10, 0.3),
+        'mining':    ('ore',       8, 0.2),
+    }
+    for key, tile in tiles.items():
+        if not tile.walkable:
+            continue
+        purpose = getattr(tile, '_purpose', None)
+        if purpose in PURPOSE_RESOURCES:
+            res_type, res_max, growth = PURPOSE_RESOURCES[purpose]
+            tile.resource_type   = res_type
+            tile.resource_max    = res_max
+            tile.resource_amount = random.randint(res_max // 2, res_max)
+            tile.growth_rate     = growth
+
     # --- Scatter food items on eating tiles ---
     eating_tiles = [k for k, t in tiles.items()
                     if t.walkable and getattr(t, '_purpose', None) == 'eating']
