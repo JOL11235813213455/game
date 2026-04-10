@@ -34,8 +34,8 @@ _BASE_ORDER = [Stat.STR, Stat.VIT, Stat.AGL, Stat.PER, Stat.INT, Stat.CHR, Stat.
 _SECTION_SIZES = {
     'self_base': 14, 'self_derived': 36, 'self_resources': 6,
     'self_combat': 17, 'self_economy': 20, 'self_slots': 14,
-    'self_weapon': 15, 'self_inv_texture': 13, 'self_social': 10,
-    'self_status': 16, 'self_quest': 10, 'self_movement': 8,
+    'self_weapon': 15, 'self_inv_texture': 13, 'self_crafting': 6,
+    'self_social': 10, 'self_status': 16, 'self_quest': 10, 'self_movement': 8,
     'self_genetics': 7, 'self_reputation': 6,
     'tile_deep': 18, 'tile_liquid': 10, 'spatial_walls': 25, 'spatial_features': 12,
     'tile_items': MAX_TILE_ITEMS * 9, 'census': 45, 'census_audio': 3,
@@ -345,6 +345,22 @@ def build_observation(creature, cols: int, rows: int,
                   for e in set(creature.equipment.values())
                   if isinstance(e, Wearable) and hasattr(e, 'durability_current')]
     obs.append(sum(armor_durs) / max(1, len(armor_durs)) if armor_durs else 1.0)
+
+    # ==== SECTION 8b: SELF CRAFTING READINESS (6) ====
+    from classes.inventory import ItemFrame as _ItemFrame
+    frames_in_inv = [i for i in creature.inventory.items if isinstance(i, _ItemFrame)]
+    has_frame = len(frames_in_inv) > 0
+    best_completion = max((f.completion_ratio for f in frames_in_inv), default=0.0)
+    can_craft = any(f.is_complete for f in frames_in_inv)
+    has_shovel = any(getattr(i, 'name', '').lower() in ('shovel', 'spade', 'pickaxe')
+                     for i in creature.inventory.items + list(set(creature.equipment.values())))
+    has_disassemblable = any(getattr(i, 'disassemblable', False) for i in creature.inventory.items)
+    obs.append(1.0 if has_frame else 0.0)
+    obs.append(best_completion)
+    obs.append(1.0 if can_craft else 0.0)
+    obs.append(1.0 if has_shovel else 0.0)
+    obs.append(1.0 if has_disassemblable else 0.0)
+    obs.append(s[Stat.CRAFT_QUALITY]() / 10.0)
 
     # ==== SECTION 9: SELF SOCIAL CAPITAL (10) ====
     pos_rels = [r for r in creature.relationships.values() if r[0] > 0]
@@ -1004,27 +1020,28 @@ SECTION_RANGES = {
     'self_slots':       (97, 111),
     'self_weapon':      (111, 126),
     'self_inv_texture': (126, 139),
-    'self_social':      (139, 149),
-    'self_status':      (149, 165),
-    'self_quest':       (165, 175),
-    'self_movement':    (175, 183),
-    'self_genetics':    (183, 190),
-    'self_identity':    (190, 215),
-    'self_reputation':  (215, 221),
-    'tile_deep':        (221, 239),
-    'tile_liquid':      (239, 249),
-    'spatial_walls':    (249, 274),
-    'spatial_features': (274, 290),     # +4 crowding metrics
-    'tile_items':       (290, 317),
-    'census_visible':   (317, 362),
-    'census_audible':   (362, 365),
-    'per_engaged':      (365, 635),
-    'world_time':       (635, 648),
-    'temporal':         (648, 662),
-    'trends':           (662, 673),
-    'time_since':       (673, 685),
-    'reward_signals':   (685, 702),
-    'transforms':       (702, OBSERVATION_SIZE),
+    'self_crafting':    (139, 145),
+    'self_social':      (145, 155),
+    'self_status':      (155, 171),
+    'self_quest':       (171, 181),
+    'self_movement':    (181, 189),
+    'self_genetics':    (189, 196),
+    'self_identity':    (196, 221),
+    'self_reputation':  (221, 227),
+    'tile_deep':        (227, 245),
+    'tile_liquid':      (245, 255),
+    'spatial_walls':    (255, 280),
+    'spatial_features': (280, 296),     # +4 crowding metrics
+    'tile_items':       (296, 323),
+    'census_visible':   (323, 368),
+    'census_audible':   (368, 371),
+    'per_engaged':      (371, 641),
+    'world_time':       (641, 654),
+    'temporal':         (654, 668),
+    'trends':           (668, 679),
+    'time_since':       (679, 691),
+    'reward_signals':   (691, 708),
+    'transforms':       (708, OBSERVATION_SIZE),
 }
 
 # Semantic groups for easy mask building
@@ -1035,7 +1052,7 @@ SECTION_GROUPS = {
     'vision': ['spatial_walls', 'spatial_features', 'tile_deep', 'tile_items',
                'census_visible', 'per_engaged'],
     'hearing': ['census_audible'],
-    'economy': ['self_economy', 'self_inv_texture', 'self_slots'],
+    'economy': ['self_economy', 'self_inv_texture', 'self_crafting', 'self_slots'],
     'religion': ['world_time'],  # god balances are in world_time + transforms
     'memory': ['temporal', 'trends', 'time_since'],
     'quest': ['self_quest'],
