@@ -183,6 +183,11 @@ class TrainingCurriculumTab(ttk.Frame):
         btn_stop = ttk.Button(btn_row, text='Stop', command=self._stop)
         btn_stop.pack(side=tk.LEFT, padx=8)
         add_tooltip(btn_stop, 'Kill any running curriculum process')
+
+        btn_watch = ttk.Button(btn_row, text='🔴 Watch Live',
+                                command=self._open_viewer)
+        btn_watch.pack(side=tk.LEFT, padx=2)
+        add_tooltip(btn_watch, 'Open the live training viewer in a separate window')
         row += 1
 
         # Model name + arena config
@@ -386,3 +391,20 @@ class TrainingCurriculumTab(ttk.Frame):
             self.status.config(text='stopped', foreground='red')
         except Exception as e:
             messagebox.showerror('Stop', str(e))
+
+    def _open_viewer(self):
+        """Launch the live training viewer in a separate process.
+
+        The viewer reads from editor/simulation/_live_state.json which
+        is written by run_mappo / run_ppo regardless of which sub-tab
+        launched the training. So opening it from here works whether
+        the running training was kicked off via Standard, Curriculum,
+        or even the CLI.
+        """
+        try:
+            subprocess.Popen([
+                sys.executable, '-m', 'editor.simulation.viewer',
+                '--scenario', 'training',
+            ], cwd=str(Path(__file__).parent.parent))
+        except Exception as e:
+            messagebox.showerror('Viewer', str(e))
