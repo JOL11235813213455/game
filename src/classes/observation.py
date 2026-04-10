@@ -540,7 +540,7 @@ def build_observation(creature, cols: int, rows: int,
     obs.append(1.0 if flow_dir == 'S' else 0.0)
     obs.append(1.0 if flow_dir == 'E' else 0.0)
     obs.append(1.0 if flow_dir == 'W' else 0.0)
-    obs.append(getattr(tile, 'flow_speed', 0) / 4.0 if tile else 0.0)
+    obs.append(getattr(tile, 'flow_speed', 0) / 10.0 if tile else 0.0)
     obs.append(getattr(tile, 'depth', 0) / 3.0 if tile else 0.0)
     obs.append(1.0 if getattr(creature, 'is_drowning', False) else 0.0)
     obs.append(1.0 if getattr(creature, 'can_swim', False) else 0.0)

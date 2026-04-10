@@ -190,7 +190,8 @@ class Creature(
         self.register_tick('mana_regen', 1000, self._do_mana_regen)
 
         # Water/flow tick — checks drowning and applies current
-        self.register_tick('water', 500, self._do_water_tick)
+        # 100ms for up to 10 TPS flow speed
+        self.register_tick('water', 100, self._do_water_tick)
 
     # -- Age ----------------------------------------------------------------
 
