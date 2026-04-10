@@ -307,7 +307,13 @@ class MovementMixin:
                     self.location = self.location._replace(x=nx, y=ny)
 
     def _flow_restricts_movement(self, dx: int, dy: int) -> bool:
-        """In liquid with flow, non-swimmers can only move along the flow axis."""
+        """In liquid with flow, non-swimmers can only move along the flow axis —
+        EXCEPT when the step would land them on a non-liquid tile (i.e. an
+        escape to the bank). A drowning creature has to be able to struggle
+        out, otherwise the flow is a death sentence and the game can trap
+        creatures when they're pushed, knocked, or otherwise end up in deep
+        water.
+        """
         tile = self.current_map.tiles.get(self.location)
         if tile is None or not getattr(tile, 'liquid', False):
             return False
@@ -319,9 +325,17 @@ class MovementMixin:
         fd = _FLOW_DIRS.get(flow_dir)
         if not fd:
             return False
+
+        # Escape exemption: if the target tile is non-liquid (dry land),
+        # let the creature step onto it regardless of flow direction.
+        target = self.current_map.tiles.get(
+            MapKey(self.location.x + dx, self.location.y + dy, self.location.z))
+        if target is not None and not getattr(target, 'liquid', False):
+            return False
+
         fx, fy = fd
         if fx != 0 and dy != 0:
-            return True  # E/W flow blocks N/S movement
+            return True  # E/W flow blocks N/S movement within liquid
         if fy != 0 and dx != 0:
-            return True  # N/S flow blocks E/W movement
+            return True  # N/S flow blocks E/W movement within liquid
         return False

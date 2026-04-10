@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 import random
 from classes.maps import Map, MapKey, Tile
 from classes.creature import Creature, RandomWanderBehavior
-from classes.inventory import Weapon, Wearable, Consumable, Slot
+from classes.inventory import Weapon, Wearable, Consumable, Stackable, Slot
 from classes.stats import Stat
 from classes.genetics import generate_chromosomes, express, apply_genetics
 from classes.gods import DEFAULT_GODS
@@ -289,12 +289,11 @@ def generate_arena(cols: int = 20, rows: int = 20,
         # district is better than an overlap).
         for _ in range(50):
             # Keep centers away from map edges so the full radius fits.
-            cx = random.randint(DISTRICT_RADIUS, cols - 1 - DISTRICT_RADIUS)
+            # Push the western edge in extra to leave room for the river
+            # (x=0,1,2 are river/banks) plus a one-tile buffer.
+            cx = random.randint(max(DISTRICT_RADIUS, 3 + DISTRICT_RADIUS),
+                                 cols - 1 - DISTRICT_RADIUS)
             cy = random.randint(DISTRICT_RADIUS, rows - 1 - DISTRICT_RADIUS)
-            # Also stay off the river and its banks (which get their own
-            # fishing purpose). The river is at cols // 2 with banks at ±1.
-            if abs(cx - cols // 2) <= 1:
-                continue
             if _too_close(cx, cy, centers):
                 continue
             placed = True
@@ -311,21 +310,37 @@ def generate_arena(cols: int = 20, rows: int = 20,
                 if pk in tiles and tiles[pk].walkable:
                     tiles[pk].purpose = purpose
 
-    # --- Add a river (liquid tiles with flow) ---
-    # Shallow banks are tagged 'fishing' so HARVEST on them pays the
-    # fishing purpose reward (polymorphic alignment).
-    river_x = cols // 2
+    # --- Add a river along the eastern edge ---
+    # The river runs north-south along x=1 with a single fishing bank at
+    # x=2 (and the unreachable far edge at x=0 quietly absorbs the deep
+    # half). This keeps the river visible and useful for fishing/flow
+    # but does NOT bisect the population — every creature can reach every
+    # purpose without needing to cross water.
+    #
+    # Deep tile = NOT walkable. Medium creatures (clearance 0) would drown
+    # on depth=1 tiles and non-swimmers are flow-locked, so an accessible
+    # deep river is a death trap. Banks are walkable (depth 0, safe for
+    # all sizes) and tagged 'fishing' so HARVEST on them pays the fishing
+    # purpose reward via polymorphic alignment.
+    river_x = 1
+    bank_x = 2
     for y in range(rows):
         rk = MapKey(river_x, y, 0)
         if rk in tiles:
-            tiles[rk] = Tile(walkable=True, liquid=True,
+            tiles[rk] = Tile(walkable=False, liquid=True,
                              flow_direction='S', flow_speed=2.0, depth=1)
-        for bank_dx in [-1, 1]:
-            bk = MapKey(river_x + bank_dx, y, 0)
-            if bk in tiles:
-                bank = Tile(walkable=True, liquid=True, depth=0)
-                bank.purpose = 'fishing'
-                tiles[bk] = bank
+        bk = MapKey(bank_x, y, 0)
+        if bk in tiles:
+            bank = Tile(walkable=True, liquid=True, depth=0)
+            bank.purpose = 'fishing'
+            tiles[bk] = bank
+        # Far western edge tile becomes a shallow bank too — just for
+        # visual continuity (it's outside the playable area in practice).
+        far = MapKey(0, y, 0)
+        if far in tiles:
+            far_bank = Tile(walkable=True, liquid=True, depth=0)
+            far_bank.purpose = 'fishing'
+            tiles[far] = far_bank
 
     # --- Seed resources on purpose tiles ---
     # Maps purpose → (resource_type, resource_max, growth_rate)
@@ -350,31 +365,84 @@ def generate_arena(cols: int = 20, rows: int = 20,
             tile.resource_amount = random.randint(res_max // 2, res_max)
             tile.growth_rate     = growth
 
-    # --- Scatter food items on eating tiles ---
-    eating_tiles = [k for k, t in tiles.items()
-                    if t.walkable and getattr(t, '_purpose', None) == 'eating']
-    for k in eating_tiles[:5]:
-        food = Consumable(name='Bread', weight=0.3, value=3.0,
+    # --- Scatter pre-made items on appropriate purpose tiles ---
+    # The training environment should be DENSE — we want the NN to
+    # encounter many different items, recipes, and inventories so that
+    # the action space gets exercised. Scatter food at eating tiles,
+    # raw materials at crafting tiles, weapons at training tiles, etc.
+    # All items here are runtime constructions (not from the DB
+    # catalog) — that's fine for training because they still fire the
+    # same action paths.
+    def _tiles_for(purpose):
+        return [k for k, t in tiles.items()
+                if t.walkable and getattr(t, '_purpose', None) == purpose]
+
+    # Food spread on eating tiles — a mix so the NN sees variety
+    for k in _tiles_for('eating')[:8]:
+        choice = random.choice([
+            ('Bread', 3, 4.0),
+            ('Cooked Fish', 5, 5.0),
+            ('Berry Jam', 2, 3.0),
+            ('Roast Meat', 6, 6.0),
+            ('Hearty Stew', 8, 9.0),
+        ])
+        name, heal, value = choice
+        food = Consumable(name=name, weight=0.3, value=value,
                           quantity=random.randint(1, 3),
-                          heal_amount=3, duration=0)
+                          heal_amount=heal, duration=0)
         food.is_food = True
         tiles[k].inventory.items.append(food)
+
+    # Pre-stocked raw materials on crafting tiles so a crafter who
+    # spawns straight onto a workshop has something to PROCESS without
+    # first having to go harvest. Mix of food ingredients and ore.
+    for k in _tiles_for('crafting')[:6]:
+        for _ in range(random.randint(1, 2)):
+            ingredient = random.choice([
+                ('Wheat',     0.15, 1.0, 99),
+                ('Fish',      0.4,  2.0, 20),
+                ('Berries',   0.1,  1.0, 50),
+                ('Iron Ore',  1.0,  2.0, 50),
+                ('Coal',      0.6,  1.0, 99),
+            ])
+            name, w, v, mxs = ingredient
+            stack = Stackable(name=name, weight=w, value=v,
+                              max_stack_size=mxs,
+                              quantity=random.randint(2, 5))
+            tiles[k].inventory.items.append(stack)
+
+    # Practice weapons at training tiles so combat actions have
+    # accessible equipment (the NN can PICKUP and EQUIP).
+    for k in _tiles_for('training')[:4]:
+        if random.random() < 0.7:
+            tiles[k].inventory.items.append(random_weapon())
+        if random.random() < 0.5:
+            tiles[k].inventory.items.append(random_armor())
+
+    # Healing tiles get a few potions
+    for k in _tiles_for('healing')[:4]:
+        for _ in range(random.randint(1, 2)):
+            potion_name = random.choice(['Health Potion', 'Mana Potion'])
+            heal = 8 if potion_name == 'Health Potion' else 0
+            mana = 8 if potion_name == 'Mana Potion' else 0
+            tiles[k].inventory.items.append(
+                Consumable(name=potion_name, weight=0.3, value=8,
+                           quantity=random.randint(1, 2),
+                           heal_amount=heal, mana_restore=mana, duration=0))
 
     # --- Gold: surface scatter + buried everywhere ---
     walkable_keys = [k for k, t in tiles.items()
                      if t.walkable and not getattr(t, 'liquid', False)]
-    # A handful of tiles have surface gold (free pickup)
-    for _ in range(min(10, len(walkable_keys))):
+
+    # Surface gold (free pickup) — generous spread to give the PICKUP
+    # action a reliable reward signal early in training.
+    for _ in range(min(20, len(walkable_keys))):
         k = random.choice(walkable_keys)
         tiles[k].gold = random.randint(1, 15)
 
-    # Every walkable, non-liquid tile has SOMETHING buried underneath —
-    # the DIG action has a reason to fire anywhere on the map, not just
-    # the handful of pre-seeded "loot" tiles. Most tiles are pocket
-    # change (1-8), a meaningful minority (20%) hold more (10-30), and
-    # a rare 5% hit a genuine pocket (40-150). Creates a long tail that
-    # rewards persistent digging while making sure any tile is worth
-    # something to check.
+    # Every walkable non-liquid tile has SOMETHING buried underneath.
+    # 75% pocket change, 20% medium find, 5% jackpot — long tail that
+    # rewards persistent digging without trivializing the economy.
     for k in walkable_keys:
         roll = random.random()
         if roll < 0.05:
@@ -384,8 +452,8 @@ def generate_arena(cols: int = 20, rows: int = 20,
         else:
             tiles[k].buried_gold = random.randint(1, 8)
 
-    # --- Scatter shovels for DIG action ---
-    for _ in range(2):
+    # Shovels for DIG — more of them (was 2)
+    for _ in range(5):
         k = random.choice(walkable_keys)
         shovel = Weapon(name='Shovel', weight=3.0, value=5.0,
                         damage=2, range=1, slots=[Slot.HAND_R], slot_count=1)
