@@ -59,9 +59,43 @@ class Tile(Trackable):
         self.flow_direction = flow_direction if flow_direction is not None else tmpl.get('flow_direction', None)
         self.flow_speed     = flow_speed     if flow_speed     is not None else tmpl.get('flow_speed',     0.0)
         self.depth          = depth          if depth          is not None else tmpl.get('depth',          0)
-        self.purpose        = purpose        if purpose        is not None else tmpl.get('purpose',        None)
+        self._purpose        = purpose        if purpose        is not None else tmpl.get('purpose',        None)
+        # Schedule: {purpose_str: (start_hour, end_hour)} for time-dependent purposes
+        # e.g. {'sleeping': (20, 6), 'pairing': (20, 6), 'farming': (6, 18)}
+        self.purpose_schedule: dict = {}
         self.nested_map: Map = map
         self.inventory = Inventory(items=items or [])
+
+    @property
+    def purpose(self) -> str | None:
+        """Active purpose, accounting for time-of-day schedule.
+
+        If purpose_schedule is set, returns the scheduled purpose for the
+        current hour. Falls back to the static _purpose if no schedule
+        matches or no game clock is available.
+        """
+        if self.purpose_schedule:
+            try:
+                from main.game_clock import GameClock
+                from classes.trackable import Trackable
+                for obj in Trackable.all_instances():
+                    if isinstance(obj, GameClock):
+                        hour = obj.hour
+                        for purp, (start, end) in self.purpose_schedule.items():
+                            if start <= end:
+                                if start <= hour < end:
+                                    return purp
+                            else:  # wraps midnight (e.g. 20-6)
+                                if hour >= start or hour < end:
+                                    return purp
+                        break
+            except Exception:
+                pass
+        return self._purpose
+
+    @purpose.setter
+    def purpose(self, value):
+        self._purpose = value
         self.buried_inventory = Inventory()  # requires DIG action + shovel to access
         self.buried_gold: int = 0            # buried gold (separate from surface gold)
         self.gold: int = 0  # gold on the ground
