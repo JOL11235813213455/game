@@ -588,6 +588,16 @@ def run_es(net: TorchCreatureNet, generations: int = 50,
     base_params = torch.nn.utils.parameters_to_vector(net.parameters()).detach().clone()
     param_size = base_params.shape[0]
 
+    # Write a placeholder ES state immediately so the viewer flips
+    # over from the stale MAPPO state file the moment we enter the
+    # ES phase, not after a whole generation completes.
+    from editor.simulation.train_state import write_es_state
+    write_es_state(
+        generation=0, total_generations=generations,
+        variant=0, total_variants=variants,
+        best_reward=0.0, avg_reward=0.0,
+    )
+
     for gen in range(generations):
         noises = []
         rewards = []
@@ -615,8 +625,18 @@ def run_es(net: TorchCreatureNet, generations: int = 50,
                     break
             rewards.append(total_r)
 
-        # Write ES progress for live viewer
-        from editor.simulation.train_state import write_es_state
+            # Per-variant viewer update — keeps the live viewer's
+            # progress bar moving in real time instead of jumping
+            # once per (potentially multi-minute) generation.
+            partial_arr = np.array(rewards)
+            write_es_state(
+                generation=gen, total_generations=generations,
+                variant=v + 1, total_variants=variants,
+                best_reward=float(np.max(partial_arr)),
+                avg_reward=float(np.mean(partial_arr)),
+            )
+
+        # Final ES state for this generation (after the elite update is computed below)
         rewards_arr_tmp = np.array(rewards)
         write_es_state(
             generation=gen, total_generations=generations,
