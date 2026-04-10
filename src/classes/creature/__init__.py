@@ -140,6 +140,11 @@ class Creature(
         self._max_hit_taken: int = 0        # worst single hit for survival anchor
         self._item_prices: dict = {}        # item id -> gold paid
 
+        # Hunger: 1.0 = full, 0.0 = neutral, -1.0 = starving
+        # Drains ~0.02 per tick (reaches starving in ~100 ticks / 50s)
+        self.hunger: float = 0.5  # start half-full
+        self._hunger_drain: float = 0.02  # per hunger tick
+
         # Spatial memory: {purpose_str: [(map_name, x, y, tick_discovered), ...]}
         # Populated when creature visits a purpose zone or purpose tile
         self.known_locations: dict[str, list[tuple]] = {}
@@ -189,6 +194,9 @@ class Creature(
         # Sleep deprivation
         self.sleep_debt: int = 0  # days without sleep
         self._fatigue_level: int = 0  # current debuff tier (0-4)
+
+        # Hunger tick — drain over time
+        self.register_tick('hunger', 1000, self._do_hunger_tick)
 
         # HP regen state
         self._regen_start = float('inf')  # timestamp when regen kicks in

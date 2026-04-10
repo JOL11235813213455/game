@@ -213,6 +213,26 @@ class InventoryMixin:
                 self.unregister_tick(tn)
             self.register_tick(tick_name, interval_ms, _expire)
 
+        # Direct heals
+        if item.heal_amount > 0:
+            hp = self.stats.base.get(Stat.HP_CURR, 0)
+            hp_max = self.stats.active[Stat.HP_MAX]()
+            self.stats.base[Stat.HP_CURR] = min(hp_max, hp + item.heal_amount)
+        if item.stamina_restore > 0:
+            stam = self.stats.base.get(Stat.CUR_STAMINA, 0)
+            stam_max = self.stats.active[Stat.MAX_STAMINA]()
+            self.stats.base[Stat.CUR_STAMINA] = min(stam_max, stam + item.stamina_restore)
+        if item.mana_restore > 0:
+            mana = self.stats.base.get(Stat.CUR_MANA, 0)
+            mana_max = self.stats.active[Stat.MAX_MANA]()
+            self.stats.base[Stat.CUR_MANA] = min(mana_max, mana + item.mana_restore)
+
+        # Food: restore hunger proportional to value
+        # Any consumable with heal_amount or explicit food flag feeds
+        if item.heal_amount > 0 or getattr(item, 'is_food', False):
+            food_amount = max(0.1, min(0.5, item.value / 20.0))
+            self.eat(food_amount)
+
         # Decrement stack
         item.quantity -= 1
         if item.quantity <= 0:

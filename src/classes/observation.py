@@ -35,7 +35,7 @@ _SECTION_SIZES = {
     'self_base': 14, 'self_derived': 36, 'self_resources': 6,
     'self_combat': 17, 'self_economy': 20, 'self_slots': 14,
     'self_weapon': 15, 'self_inv_texture': 13, 'self_crafting': 6,
-    'self_social': 10, 'self_status': 16, 'self_quest': 10,
+    'self_social': 10, 'self_status': 16, 'self_hunger': 5, 'self_quest': 10,
     'self_goal': 21, 'self_movement': 8,
     'self_genetics': 7, 'self_reputation': 6,
     'tile_deep': 18, 'tile_liquid': 25, 'spatial_walls': 25, 'spatial_features': 12,
@@ -403,6 +403,14 @@ def build_observation(creature, cols: int, rows: int,
     egg = next((i for i in creature.inventory.items if isinstance(i, Egg)), None)
     obs.append(egg.gestation_days / 30.0 if egg else 0.0)
     obs.append(1.0 if egg and egg.is_abomination else 0.0)
+
+    # ==== SECTION 10b: SELF HUNGER (5) ====
+    hunger = getattr(creature, 'hunger', 0.0)
+    obs.append(hunger)                                           # raw: -1 to 1
+    obs.append(max(0, hunger))                                   # positive only (satiation)
+    obs.append(max(0, -hunger))                                  # negative only (hunger urgency)
+    obs.append(1.0 if hunger > 0.5 else 0.0)                    # well-fed flag
+    obs.append(1.0 if hunger < -0.5 else 0.0)                   # starving flag
 
     # ==== SECTION 11: SELF QUEST/PROGRESSION (10) ====
     obs.append(len(creature.quest_log.get_active_quests()) / 5.0)
@@ -1060,26 +1068,27 @@ SECTION_RANGES = {
     'self_crafting':    (139, 145),
     'self_social':      (145, 155),
     'self_status':      (155, 171),
-    'self_quest':       (171, 181),
-    'self_goal':        (181, 202),
-    'self_movement':    (202, 210),
-    'self_genetics':    (210, 217),
-    'self_identity':    (217, 242),
-    'self_reputation':  (242, 248),
-    'tile_deep':        (248, 266),
-    'tile_liquid':      (266, 291),
-    'spatial_walls':    (291, 316),
-    'spatial_features': (316, 332),     # +4 crowding metrics
-    'tile_items':       (332, 359),
-    'census_visible':   (359, 404),
-    'census_audible':   (404, 407),
-    'per_engaged':      (407, 677),
-    'world_time':       (677, 690),
-    'temporal':         (690, 704),
-    'trends':           (704, 715),
-    'time_since':       (715, 727),
-    'reward_signals':   (727, 744),
-    'transforms':       (744, OBSERVATION_SIZE),
+    'self_hunger':      (171, 176),
+    'self_quest':       (176, 186),
+    'self_goal':        (186, 207),
+    'self_movement':    (207, 215),
+    'self_genetics':    (215, 222),
+    'self_identity':    (222, 247),
+    'self_reputation':  (247, 253),
+    'tile_deep':        (253, 271),
+    'tile_liquid':      (271, 296),
+    'spatial_walls':    (296, 321),
+    'spatial_features': (321, 337),     # +4 crowding metrics
+    'tile_items':       (337, 364),
+    'census_visible':   (364, 409),
+    'census_audible':   (409, 412),
+    'per_engaged':      (412, 682),
+    'world_time':       (682, 695),
+    'temporal':         (695, 709),
+    'trends':           (709, 720),
+    'time_since':       (720, 732),
+    'reward_signals':   (732, 749),
+    'transforms':       (749, OBSERVATION_SIZE),
 }
 
 # Semantic groups for easy mask building

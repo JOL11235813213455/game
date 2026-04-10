@@ -119,6 +119,21 @@ def compute_reward(creature, prev: dict, curr: dict,
     nearby = curr.get('nearby_count', 0)
     signals['crowding'] = -(nearby - 4) * 0.3 if nearby >= 5 else 0.0
 
+    # Hunger: satiated = positive, hungry = negative (logarithmic)
+    hunger = curr.get('hunger', 0.0)
+    prev_hunger = prev.get('hunger', 0.0)
+    if hunger > 0.5:
+        # Well-fed: small positive proportional to fullness
+        signals['hunger'] = (hunger - 0.5) * 0.5
+    elif hunger < 0.0:
+        # Hungry: logarithmically increasing penalty
+        signals['hunger'] = -math.log(1 + abs(hunger) * 3) * 1.5
+    else:
+        signals['hunger'] = 0.0
+    # Bonus for eating (hunger increased this tick)
+    if hunger > prev_hunger + 0.05:
+        signals['hunger'] += 1.0  # ate something — reward
+
     # Goal progress: reward for moving closer to goal target
     if hasattr(creature, 'goal_target') and creature.goal_target is not None:
         progress = creature.goal_progress()
@@ -257,5 +272,6 @@ def make_reward_snapshot(creature) -> dict:
         'exp': stats.base.get(Stat.EXP, 0),
         'failed_actions': getattr(creature, 'failed_actions', 0),
         'fatigue': getattr(creature, '_fatigue_level', 0),
+        'hunger': getattr(creature, 'hunger', 0.0),
         'nearby_count': nearby_count,
     }
