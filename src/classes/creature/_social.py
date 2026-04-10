@@ -86,26 +86,44 @@ class SocialMixin:
     def auto_trade(self, target) -> dict:
         """Gold-denominated auto-trade with an adjacent target.
 
-        Closes the economy loop: the NN can pick ``Action.TRADE`` without
-        having to output item ids or prices. This method inspects both
-        inventories and picks the best swap direction:
+        Closes the economy loop: the NN picks ``Action.TRADE`` and the
+        system chooses direction, item, and price. This is a thin
+        orchestration layer over the real pricing engine in
+        :mod:`classes.valuation` — it picks who buys what, then delegates
+        to :func:`~classes.valuation.compute_trade_price` for feasibility
+        and price, and to :mod:`classes.market` for cleared-price memory.
 
-          1. **Buy food.** If self is hungry (< 0.3) and target has a food
-             item self can afford, self pays gold and receives one unit.
-          2. **Sell goods.** Otherwise, if self has any value-bearing
-             stackable, try to sell one unit to target. Target accepts if
-             it is hungry and the item is food, or if it is wealthy
-             enough (gold >= 3x price) to speculate.
+        Direction selection (in priority order):
 
-        Transfers a single unit from a stack (creating a new stack on the
-        target side) so multi-unit inventories aren't dumped wholesale.
-        Both sides record a positive interaction on success.
+          1. **Buy food.** If self is hungry (< 0.3) and target has food
+             items, try the most valuable one that's feasible.
+          2. **Sell goods.** Otherwise, walk self's stackables by
+             descending item.value and find the first one
+             compute_trade_price says is feasible with this buyer.
 
-        Returns dict: success, direction ('bought' or 'sold'),
-                      item, price, reason on failure.
+        On success, a single unit is moved between stacks (so
+        multi-quantity inventories aren't dumped wholesale), the
+        computed price is transferred as gold, the buyer's
+        ``_item_prices`` gets the cost basis so resale has a floor, the
+        market EMA is updated with the cleared price, and both sides
+        record a positive interaction. The caller receives the trade
+        dict plus the computed surplus so the reward layer can use
+        :func:`~classes.valuation.trade_reward` to convert surplus to a
+        per-tick RL signal.
+
+        Returns dict:
+            success: bool
+            direction: 'bought' or 'sold'
+            item: the transferred item (a new 1-quantity stack if split)
+            price: float — gold that actually moved
+            surplus: float — self's share of the bargain surplus
+                (positive for a good deal, zero for break-even)
+            reason: str — on failure
         """
         import copy as _copy
         from classes.inventory import Stackable
+        from classes.valuation import compute_trade_price
+        from classes.market import observe_trade
 
         result = {'success': False}
 
@@ -116,35 +134,79 @@ class SocialMixin:
             result['reason'] = 'not_adjacent'
             return result
 
-        # ---- 1. BUY path: hungry self, target has food ----
+        def _execute(seller, buyer, item, deal: dict) -> dict:
+            """Transfer one unit of item for deal['price'] gold.
+
+            Handles stack splitting, gold transfer, cost-basis tracking
+            on the buyer side, market EMA update, and sentiment."""
+            price = deal['price']
+            # Round price to int gold (the economy is integer-denominated)
+            gold_int = max(1, int(round(price)))
+            if getattr(buyer, 'gold', 0) < gold_int:
+                return {'success': False, 'reason': 'buyer_broke'}
+
+            # Transfer one unit out of the stack
+            if getattr(item, 'quantity', 1) > 1:
+                item.quantity -= 1
+                unit = _copy.copy(item)
+                unit.quantity = 1
+            else:
+                seller.inventory.items.remove(item)
+                unit = item
+            buyer.inventory.items.append(unit)
+
+            # Transfer gold
+            buyer.gold = int(buyer.gold) - gold_int
+            seller.gold = int(getattr(seller, 'gold', 0)) + gold_int
+
+            # Buyer's cost basis — preserves the 'won't sell below paid' floor
+            # for future resale attempts.
+            if hasattr(buyer, '_item_prices'):
+                buyer._item_prices[id(unit)] = float(gold_int)
+
+            # Record cleared trade in the global market tape
+            observe_trade(getattr(unit, 'name', ''), float(gold_int))
+
+            # Sentiment
+            seller.record_interaction(buyer, 2.0)
+            buyer.record_interaction(seller, 2.0)
+            return {
+                'success': True,
+                'item': unit,
+                'price': float(gold_int),
+            }
+
+        # ---- 1. BUY path: self is hungry, target has food ----
         if getattr(self, 'hunger', 0.0) < 0.3:
-            food_item = next(
-                (i for i in target.inventory.items
-                 if getattr(i, 'is_food', False) and getattr(i, 'value', 0) > 0),
-                None
+            food_candidates = sorted(
+                [i for i in target.inventory.items
+                 if getattr(i, 'is_food', False)
+                 and isinstance(i, Stackable)
+                 and getattr(i, 'value', 0) > 0],
+                key=lambda i: i.value, reverse=True
             )
-            if food_item is not None:
-                price = max(1, int(food_item.value))
-                if getattr(self, 'gold', 0) >= price:
-                    # Execute: self pays, target delivers one unit
-                    self.gold = int(self.gold) - price
-                    target.gold = int(getattr(target, 'gold', 0)) + price
-                    # Move one unit of the stack
-                    if getattr(food_item, 'quantity', 1) > 1:
-                        food_item.quantity -= 1
-                        unit = _copy.copy(food_item)
-                        unit.quantity = 1
-                        self.inventory.items.append(unit)
-                    else:
-                        target.inventory.items.remove(food_item)
-                        self.inventory.items.append(food_item)
-                    self.record_interaction(target, 2.0)
-                    target.record_interaction(self, 2.0)
-                    result['success'] = True
-                    result['direction'] = 'bought'
-                    result['item'] = food_item
-                    result['price'] = price
-                    return result
+            for food_item in food_candidates:
+                deal = compute_trade_price(food_item, target, self)  # target=seller, self=buyer
+                if not deal['feasible']:
+                    continue
+                if self.gold < max(1, int(round(deal['price']))):
+                    continue
+                tx = _execute(seller=target, buyer=self, item=food_item, deal=deal)
+                if not tx['success']:
+                    continue
+                # Accumulate surplus for the RL reward signal
+                self._trade_surplus_accumulated = (
+                    getattr(self, '_trade_surplus_accumulated', 0.0)
+                    + deal['buyer_surplus']
+                )
+                target._trade_surplus_accumulated = (
+                    getattr(target, '_trade_surplus_accumulated', 0.0)
+                    + deal['seller_surplus']
+                )
+                result.update(tx)
+                result['direction'] = 'bought'
+                result['surplus'] = deal['buyer_surplus']
+                return result
 
         # ---- 2. SELL path: self has sellable goods, target will buy ----
         sellable = sorted(
@@ -153,36 +215,25 @@ class SocialMixin:
             key=lambda i: i.value, reverse=True
         )
         for item in sellable:
-            price = max(1, int(item.value))
-            if getattr(target, 'gold', 0) < price:
+            deal = compute_trade_price(item, self, target)  # self=seller, target=buyer
+            if not deal['feasible']:
                 continue
-            # Buyer willingness: hungry + food, or wealthy enough to speculate
-            willing = False
-            if getattr(target, 'hunger', 0.0) < 0.3 and getattr(item, 'is_food', False):
-                willing = True
-            elif getattr(target, 'gold', 0) >= price * 3:
-                willing = True
-            if not willing:
+            if getattr(target, 'gold', 0) < max(1, int(round(deal['price']))):
                 continue
-
-            # Execute
-            target.gold = int(target.gold) - price
-            self.gold = int(getattr(self, 'gold', 0)) + price
-            if getattr(item, 'quantity', 1) > 1:
-                item.quantity -= 1
-                unit = _copy.copy(item)
-                unit.quantity = 1
-                target.inventory.items.append(unit)
-            else:
-                self.inventory.items.remove(item)
-                target.inventory.items.append(item)
-
-            self.record_interaction(target, 2.0)
-            target.record_interaction(self, 2.0)
-            result['success'] = True
+            tx = _execute(seller=self, buyer=target, item=item, deal=deal)
+            if not tx['success']:
+                continue
+            self._trade_surplus_accumulated = (
+                getattr(self, '_trade_surplus_accumulated', 0.0)
+                + deal['seller_surplus']
+            )
+            target._trade_surplus_accumulated = (
+                getattr(target, '_trade_surplus_accumulated', 0.0)
+                + deal['buyer_surplus']
+            )
+            result.update(tx)
             result['direction'] = 'sold'
-            result['item'] = item
-            result['price'] = price
+            result['surplus'] = deal['seller_surplus']
             return result
 
         result['reason'] = 'no_acceptable_trade'

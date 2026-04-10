@@ -164,6 +164,7 @@ class Creature(
         self.job = None
         self.schedule: Schedule = WANDERER   # default; overridden when job is set
         self._wage_accumulated: float = 0.0  # total wages earned this session
+        self._trade_surplus_accumulated: float = 0.0  # summed bargain surplus from trades
 
         # Build Stats from species defaults + overrides
         species_stats = {k: v for k, v in species_data.items() if isinstance(k, Stat)}

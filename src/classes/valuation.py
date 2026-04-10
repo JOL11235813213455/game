@@ -154,7 +154,12 @@ def compute_raw_kpi(item, creature) -> float:
         return max(0.001, kpi)
 
     elif metric == 'heal_value' or (metric is None and isinstance(item, Consumable)):
-        heal = getattr(item, 'damage', 0)  # consumables use damage field for heal
+        # Use the Consumable's actual restore fields. The previous code
+        # read ``item.damage`` which does not exist on Consumable and
+        # silently returned 0 for every food item.
+        heal = (getattr(item, 'heal_amount', 0)
+                + getattr(item, 'mana_restore', 0)
+                + getattr(item, 'stamina_restore', 0))
         buff_total = sum(abs(v) for v in item.buffs.values())
         duration = getattr(item, 'duration', 0)
         return max(0.001, heal + buff_total * max(1, duration))
@@ -241,6 +246,14 @@ def max_buy_price(item, creature) -> float:
 def compute_trade_price(item, seller, buyer) -> dict:
     """Compute the trade price for an item between two creatures.
 
+    The buyer's ceiling (``max_buy_price``) and the seller's floor
+    (``min_sell_price``) are each blended with the current market
+    price for this item type via :func:`classes.market.market_anchor`.
+    Thin markets have low anchor weight (individual valuations
+    dominate); thick markets pull both sides toward the consensus
+    price. This is where macro scarcity/abundance feedback enters
+    the bargaining.
+
     Returns dict:
         feasible: bool — can a deal be made?
         price: float — the agreed price
@@ -250,8 +263,17 @@ def compute_trade_price(item, seller, buyer) -> dict:
         seller_min: float
         buyer_max: float
     """
-    s_min = min_sell_price(item, seller)
-    b_max = max_buy_price(item, buyer)
+    from classes.market import market_anchor
+
+    s_min_raw = min_sell_price(item, seller)
+    b_max_raw = max_buy_price(item, buyer)
+
+    # Market anchoring: pull valuations toward EMA cleared price when
+    # market data exists. ``market_anchor`` leaves values untouched
+    # when no history exists or confidence is low.
+    item_name = getattr(item, 'name', '')
+    s_min = market_anchor(item_name, s_min_raw)
+    b_max = market_anchor(item_name, b_max_raw)
 
     result = {
         'feasible': False, 'price': 0.0, 'surplus': 0.0,
@@ -300,6 +322,12 @@ def compute_trade_price(item, seller, buyer) -> dict:
         if seller_disposable <= 0:
             paid = seller._item_prices.get(id(item), item.value)
             s_min = paid  # override min_sell to purchase price
+            # Recompute surplus on the new floor so buyer_surplus /
+            # seller_surplus in the returned dict are internally
+            # consistent with the final price.
+            surplus = max(0.0, b_max - s_min)
+            result['seller_min'] = s_min
+            result['surplus'] = surplus
 
     price = s_min + (surplus * seller_share)
     result['price'] = price

@@ -3553,12 +3553,17 @@ check("smelt Ore -> IronIngot succeeds", smelt_r['success'])
 # ==========================================================================
 print("\n--- Auto-trade tests ---")
 
+# Start each auto-trade section with a clean market tape so one test's
+# EMA drift doesn't contaminate another's price anchoring.
+from classes.market import reset_market, observe_trade, market_price, market_confidence, market_snapshot
+reset_market()
+
 tm = make_map(6, 6)
 
 # --- BUY path: hungry buyer, seller has food ---
 buyer = make_creature(tm, x=2, y=2, name='Buyer')
 buyer.hunger = -0.2  # below 0.3 → hungry
-buyer.gold = 50
+buyer.gold = 100
 
 seller = make_creature(tm, x=2, y=3, name='Seller')  # adjacent
 bread_stack = Consumable(name='Bread', weight=0.1, value=4.0,
@@ -3566,38 +3571,48 @@ bread_stack = Consumable(name='Bread', weight=0.1, value=4.0,
 bread_stack.is_food = True
 seller.inventory.items.append(bread_stack)
 
+buyer_prev_gold = buyer.gold
+seller_prev_gold = seller.gold
 buy_r = buyer.auto_trade(seller)
 check("auto_trade buy succeeds", buy_r['success'])
 check(f"direction is bought (got {buy_r.get('direction')})",
       buy_r.get('direction') == 'bought')
 check("buyer has bread now",
       any(getattr(i, 'name', '') == 'Bread' for i in buyer.inventory.items))
-check("buyer paid gold", buyer.gold == 50 - 4)
-check("seller gained gold", seller.gold == 4)
+# Gold should flow from buyer to seller by the computed price
+price_paid = buy_r.get('price', 0)
+check(f"buyer paid ({price_paid} gold)", buyer.gold == buyer_prev_gold - price_paid)
+check(f"seller gained ({price_paid} gold)", seller.gold == seller_prev_gold + price_paid)
 # Seller stack should be 2 now (transferred one unit out of 3)
 seller_bread_qty = sum(i.quantity for i in seller.inventory.items
                        if getattr(i, 'name', '') == 'Bread')
 check(f"seller bread stack decremented (left: {seller_bread_qty})",
       seller_bread_qty == 2)
+# Buyer side should have cost basis recorded for resale floor
+bought_bread = next(i for i in buyer.inventory.items
+                    if getattr(i, 'name', '') == 'Bread')
+check("buyer _item_prices records cost basis",
+      id(bought_bread) in buyer._item_prices)
 
 # --- SELL path: seller has goods, wealthy buyer ---
 rich_buyer = make_creature(tm, x=3, y=3, name='RichBuyer')
 rich_buyer.hunger = 0.8  # not hungry
-rich_buyer.gold = 100
+rich_buyer.gold = 500  # wealthy
 
 merchant = make_creature(tm, x=3, y=2, name='Merchant')  # adjacent
 ingot = Stackable(name='IronIngot', weight=0.5, value=8.0, quantity=2)
 merchant.inventory.items.append(ingot)
 merchant.gold = 0
 
+merchant_prev = merchant.gold
 sell_r = merchant.auto_trade(rich_buyer)
 check("auto_trade sell succeeds", sell_r['success'])
 check(f"direction is sold (got {sell_r.get('direction')})",
       sell_r.get('direction') == 'sold')
 check("rich buyer now has iron", any(getattr(i, 'name', '') == 'IronIngot'
                                        for i in rich_buyer.inventory.items))
-check("merchant gained gold", merchant.gold == 8)
-check("rich buyer paid", rich_buyer.gold == 92)
+sell_price = sell_r.get('price', 0)
+check(f"merchant gained {sell_price}", merchant.gold == merchant_prev + sell_price)
 
 # --- Rejection: poor buyer, not hungry, seller has non-food goods ---
 poor_buyer = make_creature(tm, x=4, y=4, name='PoorBuyer')
@@ -3638,6 +3653,121 @@ lonely = make_creature(lm, x=5, y=0, name='Lonely')
 lr = dispatch(lonely, Action.TRADE, {'cols': 6, 'rows': 6})
 check("dispatch TRADE with no partner fails", not lr.get('success'))
 check("dispatch TRADE no_partner reason", lr.get('reason') == 'no_partner')
+
+# --- Market memory: EMA drifts toward cleared prices ---
+reset_market()
+observe_trade('TestItem', 10.0)
+check("market_price after first trade = 10",
+      abs(market_price('TestItem') - 10.0) < 0.01)
+# EMA = 0.2 * 20 + 0.8 * 10 = 12
+observe_trade('TestItem', 20.0)
+check(f"market_price after second (20) drifts toward it (got {market_price('TestItem'):.2f})",
+      abs(market_price('TestItem') - 12.0) < 0.01)
+# Many trades at 10 should drift back toward 10
+for _ in range(30):
+    observe_trade('TestItem', 10.0)
+check(f"market_price after 30 trades at 10 drifts back (got {market_price('TestItem'):.2f})",
+      abs(market_price('TestItem') - 10.0) < 0.5)
+# Confidence grows with volume
+check("market_confidence > 0 after trades", market_confidence('TestItem') > 0)
+# Unknown item returns seed
+check("market_price unknown returns seed",
+      market_price('NonExistent', seed=5.5) == 5.5)
+check("market_price unknown with no seed returns None",
+      market_price('NonExistent') is None)
+
+# --- compute_trade_price consults market memory ---
+reset_market()
+from classes.valuation import compute_trade_price
+# Seed the market for Bread at price=10 via 40 trades
+for _ in range(40):
+    observe_trade('Bread', 10.0)
+# Now compute_trade_price with bread should anchor toward market (10)
+am = make_map(6, 6)
+mv_seller = make_creature(am, x=1, y=1, name='MVSeller',
+                          stats={Stat.VIT: 12, Stat.STR: 12})
+mv_buyer = make_creature(am, x=1, y=2, name='MVBuyer',
+                         stats={Stat.VIT: 12, Stat.STR: 12})
+mv_buyer.gold = 200
+mv_buyer.hunger = 0.6  # not desperate
+mv_bread = Consumable(name='Bread', weight=0.1, value=4.0, quantity=5,
+                       heal_amount=5, duration=0)
+mv_bread.is_food = True
+mv_seller.inventory.items.append(mv_bread)
+deal = compute_trade_price(mv_bread, mv_seller, mv_buyer)
+# Without market: s_min/b_max ~= 28; with full market confidence and 30%
+# anchor, pulled toward 10 → somewhere around 22-24
+anchored_min = deal['seller_min']
+check(f"market anchored seller_min below raw worth (got {anchored_min:.2f})",
+      anchored_min < 28.0)
+
+# --- Food Consumables get non-zero KPI after heal_amount fix ---
+from classes.valuation import worth_to_creature
+heal_bread = Consumable(name='HealBread', weight=0.1, value=4.0, quantity=1,
+                         heal_amount=5, duration=0)
+kpi_creature = make_creature(am, x=3, y=3, name='KPICheck')
+worth = worth_to_creature(heal_bread, kpi_creature)
+check(f"bread worth > 0 (heal_amount bug fix; got {worth:.2f})",
+      worth > 0)
+
+# --- Desperation surplus recompute bugfix ---
+# Scenario: seller with qty=3 bread, _item_prices says they paid 12.
+# Raw worth ~= 28 (quantity decompound). Buyer also values at ~28.
+# Without desperation: s_min=max(12,28)=28, b_max=28, surplus=0, price=28.
+# Seller has gold=0 → desperation fires → s_min drops to 12, surplus
+# should be recomputed to 16, price becomes 12 + 16 * share. Price must
+# be >= 12 (paid floor), buyer_surplus + seller_surplus must equal
+# the (new) surplus.
+reset_market()
+rb_map = make_map(6, 6)
+rb_seller = make_creature(rb_map, x=1, y=1, name='RBSeller')
+rb_seller.gold = 0  # desperate
+rb_bread = Consumable(name='Bread', weight=0.1, value=4.0, quantity=3,
+                       heal_amount=5, duration=0)
+rb_bread.is_food = True
+rb_seller._item_prices[id(rb_bread)] = 12.0  # paid 12 earlier
+rb_seller.inventory.items.append(rb_bread)
+
+rb_buyer = make_creature(rb_map, x=1, y=2, name='RBBuyer')
+rb_buyer.gold = 100
+rb_buyer.hunger = 0.6  # not desperate
+
+rb_deal = compute_trade_price(rb_bread, rb_seller, rb_buyer)
+check(f"desperate seller feasible after paid-price override (feasible={rb_deal['feasible']})",
+      rb_deal['feasible'])
+check(f"desperate seller price >= paid floor (price={rb_deal['price']:.1f})",
+      rb_deal['price'] >= 12.0 - 0.01)
+check(f"surpluses sum to total after desperation recompute",
+      abs(rb_deal['buyer_surplus'] + rb_deal['seller_surplus'] -
+          rb_deal['surplus']) < 0.01)
+check(f"desperation reports positive surplus (got {rb_deal['surplus']:.2f})",
+      rb_deal['surplus'] > 0)
+
+# --- Auto-trade records trade in market ---
+reset_market()
+sm = make_map(6, 6)
+s1 = make_creature(sm, x=1, y=1, name='S1')
+s1.hunger = -0.2
+s1.gold = 100
+s2 = make_creature(sm, x=1, y=2, name='S2')
+s2_bread = Consumable(name='Bread', weight=0.1, value=4.0, quantity=3,
+                       heal_amount=5, duration=0)
+s2_bread.is_food = True
+s2.inventory.items.append(s2_bread)
+
+snap_before = market_snapshot()
+s1.auto_trade(s2)
+snap_after = market_snapshot()
+check("auto_trade updated market for Bread",
+      'Bread' in snap_after and 'Bread' not in snap_before)
+
+# --- Market confidence grows with volume ---
+reset_market()
+for i in range(100):
+    observe_trade('BulkItem', 7.0)
+conf = market_confidence('BulkItem')
+check(f"high-volume confidence approaches 1.0 (got {conf:.2f})",
+      conf > 0.9)
 
 # --- Trader JOB executes a trade when partner adjacent ---
 tjm = make_map(6, 6)

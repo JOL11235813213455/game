@@ -147,21 +147,20 @@ def compute_reward(creature, prev: dict, curr: dict,
     signals['crowding'] = -(nearby - 4) * 0.3 if nearby >= 5 else 0.0
 
     # Wage earned since last tick — rewards consistent job execution.
-    # Scale is modest because gold is already the economic payoff; this
-    # signal exists so the NN gets a per-tick gradient from successful JOB
-    # actions rather than only the delayed gold -> eat -> survive loop.
     wage_delta = curr.get('wage_accumulated', 0.0) - prev.get('wage_accumulated', 0.0)
     if wage_delta > 0:
         signals['wage'] = math.log(1 + wage_delta) * 0.5
 
-    # Gold delta from non-wage sources (trading, selling, buying). Positive
-    # when selling goods for more gold, negative when buying (e.g. food).
-    # We scale smaller than wages so a hungry creature buying food is still
-    # rewarded on net (hunger signal swings positive by ~+1.0 on eat) even
-    # though it loses gold.
-    gold_delta = curr.get('gold', 0) - prev.get('gold', 0) - wage_delta
-    if gold_delta != 0:
-        signals['trade'] = math.copysign(math.log(1 + abs(gold_delta)), gold_delta) * 0.3
+    # Trade surplus earned since last tick — uses the bargaining surplus
+    # from compute_trade_price (buyer_surplus or seller_surplus), not the
+    # raw gold delta. trade_reward scales it by wealth so small surpluses
+    # matter more to poor creatures than rich ones.
+    from classes.valuation import trade_reward
+    surplus_delta = (curr.get('trade_surplus', 0.0)
+                     - prev.get('trade_surplus', 0.0))
+    if surplus_delta > 0:
+        wealth = max(1.0, float(curr.get('gold', 0)) + curr.get('inv_value', 0.0))
+        signals['trade'] = trade_reward(surplus_delta, wealth)
 
     # Hunger: satiated = positive, hungry = negative (logarithmic)
     hunger = curr.get('hunger', 0.0)
@@ -328,5 +327,6 @@ def make_reward_snapshot(creature) -> dict:
         'hunger': getattr(creature, 'hunger', 0.0),
         'nearby_count': nearby_count,
         'wage_accumulated': getattr(creature, '_wage_accumulated', 0.0),
+        'trade_surplus': getattr(creature, '_trade_surplus_accumulated', 0.0),
         'gold': getattr(creature, 'gold', 0),
     }
