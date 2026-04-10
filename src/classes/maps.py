@@ -115,6 +115,13 @@ class Tile(Trackable):
         self._purpose = value
 
 class Map(Trackable):
+    # Grid cell size in tiles. Creatures self-register their cell when
+    # their location changes; sight queries then read only cells within
+    # a small neighborhood instead of scanning every creature on the map.
+    # 8 tiles is a little larger than typical SIGHT_RANGE (~7) so a 3x3
+    # cell neighborhood always contains every potentially-visible creature.
+    CELL_SIZE = 8
+
     def __init__(
         self
         ,tile_set: dict[MapKey, Tile] = None
@@ -136,6 +143,70 @@ class Map(Trackable):
         self.y_max = y_max
         self.z_min = z_min
         self.z_max = z_max
+        # Spatial index: (cell_x, cell_y, z) -> set of creature uids.
+        # Populated via Creature.location setter when creatures move.
+        # Not pickled — rebuilt by caller on load (see _rebuild_spatial_index).
+        self._creature_cells: dict = {}
+
+    # --- Spatial index API ----------------------------------------------
+    def _cell_for(self, x: int, y: int, z: int = 0) -> tuple:
+        return (x // self.CELL_SIZE, y // self.CELL_SIZE, z)
+
+    def register_creature_at(self, creature, x: int, y: int, z: int = 0):
+        """Add creature to the grid cell containing (x, y, z)."""
+        key = self._cell_for(x, y, z)
+        self._creature_cells.setdefault(key, set()).add(creature.uid)
+
+    def unregister_creature_at(self, creature, x: int, y: int, z: int = 0):
+        """Remove creature from the grid cell containing (x, y, z)."""
+        key = self._cell_for(x, y, z)
+        cell = self._creature_cells.get(key)
+        if cell is not None:
+            cell.discard(creature.uid)
+            if not cell:
+                self._creature_cells.pop(key, None)
+
+    def creatures_in_range(self, cx: int, cy: int, cz: int,
+                            manhattan_range: int) -> list:
+        """Return all live creatures whose cell is within the neighborhood
+        required to cover a Manhattan-distance query of the given range.
+
+        The caller still applies the precise distance filter; this is a
+        cheap broad-phase reject based on cell membership.
+        """
+        from classes.trackable import Trackable
+        cell_span = max(1, (manhattan_range // self.CELL_SIZE) + 1)
+        cx0 = cx // self.CELL_SIZE
+        cy0 = cy // self.CELL_SIZE
+        uids: set = set()
+        for ox in range(-cell_span, cell_span + 1):
+            for oy in range(-cell_span, cell_span + 1):
+                cell = self._creature_cells.get((cx0 + ox, cy0 + oy, cz))
+                if cell:
+                    uids.update(cell)
+        if not uids:
+            return []
+        # Resolve uids to live Creature instances via Trackable registry.
+        from classes.creature import Creature
+        out = []
+        for obj in Trackable.all_instances():
+            if isinstance(obj, Creature) and obj.uid in uids and obj.is_alive:
+                out.append(obj)
+        return out
+
+    def rebuild_spatial_index(self):
+        """Scan all creatures on this map and rebuild the grid cells.
+
+        Called after save/load (when _creature_cells is empty because
+        it wasn't pickled) or whenever the index might be stale.
+        """
+        self._creature_cells = {}
+        from classes.world_object import WorldObject
+        from classes.creature import Creature
+        for obj in WorldObject.on_map(self):
+            if isinstance(obj, Creature) and obj.is_alive:
+                self.register_creature_at(
+                    obj, obj.location.x, obj.location.y, obj.location.z)
 
     # Flow directions to (dx, dy)
     _FLOW_DIRS = {'N': (0, -1), 'S': (0, 1), 'E': (1, 0), 'W': (-1, 0)}

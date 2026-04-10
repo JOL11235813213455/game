@@ -166,6 +166,15 @@ class Creature(
         self._wage_accumulated: float = 0.0  # total wages earned this session
         self._trade_surplus_accumulated: float = 0.0  # summed bargain surplus from trades
 
+        # Per-tick perception cache. The `_perception_cache_tick` is
+        # compared against the simulation step counter; when stale, the
+        # cached visible/heard lists are rebuilt from the spatial grid.
+        # Invalidated by the location setter above so a creature moving
+        # always gets a fresh scan next time it's queried.
+        self._perception_cache_tick: int = -1
+        self._cached_visible: list = []   # list of (distance, creature)
+        self._cached_heard: list = []     # list of (distance, creature)
+
         # Build Stats from species defaults + overrides
         species_stats = {k: v for k, v in species_data.items() if isinstance(k, Stat)}
         merged = {**species_stats, **(stats or {})}
@@ -226,6 +235,98 @@ class Creature(
 
         # Spatial memory: learn locations of purpose zones each tick
         self.register_tick('spatial_memory', 500, lambda now: self.update_spatial_memory(now))
+
+    # -- Location property override (spatial grid registration) -----------
+    #
+    # Creature overrides WorldObject.location so every position change
+    # automatically updates the Map's spatial grid. This is the single
+    # chokepoint the grid depends on — every code path that moves a
+    # creature MUST go through this setter, which it does as long as
+    # it writes to ``self.location`` rather than poking ``_location``
+    # directly.
+
+    @property
+    def location(self):
+        return self._location
+
+    @location.setter
+    def location(self, new_loc):
+        old = getattr(self, '_location', None)
+        # Unregister from old cell if we had one on the current map
+        cm = getattr(self, '_current_map', None)
+        if (old is not None and cm is not None
+                and hasattr(cm, 'unregister_creature_at')):
+            cm.unregister_creature_at(self, old.x, old.y, old.z)
+        self._location = new_loc
+        # Register at new cell if we're on a map
+        if (new_loc is not None and cm is not None
+                and hasattr(cm, 'register_creature_at')):
+            cm.register_creature_at(self, new_loc.x, new_loc.y, new_loc.z)
+        # Invalidate the cached visibility snapshot — position changed.
+        # Use setattr so this works even before __init__ has set the attr.
+        self._perception_cache_tick = -1
+
+    # -- Perception cache ---------------------------------------------------
+    #
+    # Computed once per simulation step and reused across observation,
+    # dispatch, and reward consumers. Rebuilt only when the cache tick
+    # doesn't match the caller-supplied tick (or when self.location
+    # changes, which invalidates the cache via the setter above).
+    #
+    # Returns two lists:
+    #   visible: (distance, other_creature) sorted by ascending distance
+    #   heard:   (distance, other_creature) creatures within hearing
+    #            range but NOT within sight range
+
+    def get_perception(self, tick: int) -> tuple[list, list]:
+        """Return (visible, heard_only) lists for this creature at ``tick``.
+
+        Uses the Map's spatial grid when available (cheap O(cell_neighborhood)),
+        falls back to WorldObject.on_map iteration otherwise. Cached per
+        tick on the creature.
+        """
+        if self._perception_cache_tick == tick:
+            return self._cached_visible, self._cached_heard
+
+        from classes.stats import Stat
+        from classes.world_object import WorldObject
+        from classes.creature import Creature as _C
+
+        game_map = self._current_map
+        sight = max(1, self.stats.active[Stat.SIGHT_RANGE]())
+        hearing = max(1, self.stats.active[Stat.HEARING_RANGE]())
+        query_range = max(sight, hearing)
+
+        # Prefer the spatial grid broad-phase when the map supports it
+        if game_map is not None and hasattr(game_map, 'creatures_in_range'):
+            candidates = game_map.creatures_in_range(
+                self.location.x, self.location.y, self.location.z, query_range)
+        else:
+            candidates = [o for o in WorldObject.on_map(game_map)
+                          if isinstance(o, _C)]
+
+        cx = self.location.x
+        cy = self.location.y
+        visible = []
+        heard = []
+        for obj in candidates:
+            if obj is self or not obj.is_alive:
+                continue
+            dist = abs(cx - obj.location.x) + abs(cy - obj.location.y)
+            stealth = obj.stats.active[Stat.STEALTH]()
+            eff_sight = sight - stealth
+            if dist <= eff_sight:
+                visible.append((dist, obj))
+            elif dist <= hearing:
+                heard.append((dist, obj))
+
+        visible.sort(key=lambda x: x[0])
+        heard.sort(key=lambda x: x[0])
+
+        self._cached_visible = visible
+        self._cached_heard = heard
+        self._perception_cache_tick = tick
+        return visible, heard
 
     # -- Age ----------------------------------------------------------------
 

@@ -35,16 +35,32 @@ class WorldObject(Trackable):
     def __init__(self, current_map: Map = None, location=None):
         super().__init__()
         self._current_map = None
+        self._location = None  # raw storage for the property
         if location is None:
             from classes.maps import MapKey
             location = MapKey()
-        self.location = location
         self.anim = AnimationState()
         self._composite_anim = None
         self._composite_anim_start = 0
         self._composite_flip_h = False
-        # Set via property to register in _by_map
+        # Set current_map BEFORE location so the location setter can
+        # register with the map's spatial grid on first assignment.
         self.current_map = current_map
+        self.location = location
+
+    @property
+    def location(self):
+        return self._location
+
+    @location.setter
+    def location(self, new_loc):
+        """Base WorldObject setter: just stores the value.
+
+        Creature overrides this to also update the map's spatial grid
+        on every change, so sight queries can use cell buckets instead
+        of scanning every creature on the map.
+        """
+        self._location = new_loc
 
     @property
     def current_map(self):

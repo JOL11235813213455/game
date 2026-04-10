@@ -413,7 +413,8 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
 
             obs = build_observation(c, sim.cols, sim.rows,
                                     world_data=sim.world_data,
-                                    game_clock=sim.game_clock)
+                                    game_clock=sim.game_clock,
+                                    observation_tick=sim.step_count)
             if c.observation_mask:
                 apply_preset_mask(obs, c.observation_mask)
 
@@ -764,7 +765,8 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
 
             obs = build_observation(agent, sim.cols, sim.rows,
                                     world_data=sim.world_data,
-                                    game_clock=sim.game_clock)
+                                    game_clock=sim.game_clock,
+                                    observation_tick=sim.step_count)
             if agent.observation_mask:
                 apply_preset_mask(obs, agent.observation_mask)
             obs_arr = np.array(obs, dtype=np.float32)

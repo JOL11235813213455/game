@@ -150,7 +150,8 @@ def build_observation(creature, cols: int, rows: int,
                       world_data=None,
                       trend_10: dict | None = None,
                       trend_100: dict | None = None,
-                      time_since: dict | None = None) -> list[float]:
+                      time_since: dict | None = None,
+                      observation_tick: int | None = None) -> list[float]:
     """Build the full observation vector.
 
     Returns list of floats (~714 elements).
@@ -555,20 +556,27 @@ def build_observation(creature, cols: int, rows: int,
     sight = max(1, s[Stat.SIGHT_RANGE]())
     hearing = max(1, s[Stat.HEARING_RANGE]())
 
-    visible = []
-    heard_only = []
-    for obj in WorldObject.on_map(game_map):
-        if not isinstance(obj, Creature) or obj is creature or not obj.is_alive:
-            continue
-        dist = abs(cx - obj.location.x) + abs(cy - obj.location.y)
-        stealth = obj.stats.active[Stat.STEALTH]()
-        eff_sight = sight - stealth
-        if dist <= eff_sight:
-            visible.append((dist, obj))
-        elif dist <= hearing:
-            heard_only.append((dist, obj))
-
-    visible.sort(key=lambda x: x[0])
+    # Use the creature's per-tick cached perception when possible. The
+    # cache is invalidated whenever the creature's location changes and
+    # the caller passes a tick counter through observation_tick to
+    # compel a rebuild once per step. Falls back to a fresh scan when
+    # no cache is available (old call sites / tests).
+    if hasattr(creature, 'get_perception') and observation_tick is not None:
+        visible, heard_only = creature.get_perception(observation_tick)
+    else:
+        visible = []
+        heard_only = []
+        for obj in WorldObject.on_map(game_map):
+            if not isinstance(obj, Creature) or obj is creature or not obj.is_alive:
+                continue
+            dist = abs(cx - obj.location.x) + abs(cy - obj.location.y)
+            stealth = obj.stats.active[Stat.STEALTH]()
+            eff_sight = sight - stealth
+            if dist <= eff_sight:
+                visible.append((dist, obj))
+            elif dist <= hearing:
+                heard_only.append((dist, obj))
+        visible.sort(key=lambda x: x[0])
 
     # ==== SECTION 16: CURRENT TILE DEEP (18) ====
     obs.append(1.0 if tile and getattr(tile, 'covered', False) else 0.0)

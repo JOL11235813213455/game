@@ -70,6 +70,15 @@ class Simulation:
             for c in self.creatures:
                 c._hunger_drain = 0.0
 
+        # Rebuild the map's spatial grid from scratch. The arena generator
+        # constructs creatures with locations, but if it did so before
+        # the Creature.location property setter was in place (e.g. via
+        # direct attribute assignment in older code paths), some cells
+        # may be missing entries. Rebuilding here is cheap and ensures
+        # the sight cache queries get correct results from tick 0.
+        if hasattr(self.game_map, 'rebuild_spatial_index'):
+            self.game_map.rebuild_spatial_index()
+
         # World data for god system
         from classes.gods import WorldData
         self.world_data = WorldData()
@@ -205,7 +214,8 @@ class Simulation:
             # Build current observation (uses creature's history buffer)
             obs = build_observation(c, self.cols, self.rows, prev_snapshot=prev_obs,
                                    world_data=self.world_data,
-                                   game_clock=self.game_clock)
+                                   game_clock=self.game_clock,
+                                   observation_tick=self.step_count)
 
             # Apply observation mask if creature has one
             if c.observation_mask:
