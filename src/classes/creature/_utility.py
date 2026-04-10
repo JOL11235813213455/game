@@ -164,6 +164,54 @@ class UtilityMixin:
         result['boost'] = tile.resource_amount - old_amt
         return result
 
+    def process(self, category: str = None) -> dict:
+        """Transform raw materials in inventory into a finished good.
+
+        Must be performed on a ``crafting`` purpose tile. The method
+        scans inventory for the first recipe whose ingredients are all
+        present (optionally filtered to ``'food'`` or ``'material'``),
+        consumes the inputs, and adds the output item to the inventory.
+
+        Returns dict: success, recipe, output, or failure reason.
+        """
+        from classes.recipes import find_matching_recipe, consume_inputs
+
+        result = {'success': False}
+
+        tile = self.current_map.tiles.get(self.location)
+        if tile is None:
+            result['reason'] = 'no_tile'
+            return result
+        if getattr(tile, 'purpose', None) != 'crafting':
+            result['reason'] = 'wrong_tile'
+            return result
+
+        # Stamina cost — processing is lighter than mining/farming
+        stam_cost = 1
+        if self.stats.active[Stat.CUR_STAMINA]() < stam_cost:
+            result['reason'] = 'exhausted'
+            return result
+
+        recipe = find_matching_recipe(self.inventory.items, category=category)
+        if recipe is None:
+            result['reason'] = 'no_recipe_match'
+            return result
+
+        if not consume_inputs(self.inventory, recipe):
+            result['reason'] = 'consume_failed'
+            return result
+
+        self.stats.base[Stat.CUR_STAMINA] = max(
+            0, self.stats.base.get(Stat.CUR_STAMINA, 0) - stam_cost)
+
+        output = recipe.output_factory()
+        self.inventory.items.append(output)
+
+        result['success'] = True
+        result['recipe'] = recipe.name
+        result['output'] = output
+        return result
+
     def do_job(self, now: int = 0) -> dict:
         """Perform one tick of assigned work.
 
@@ -196,27 +244,42 @@ class UtilityMixin:
             result['reason'] = 'off_hours'
             return result
 
-        # Purpose-specific effect
+        # Purpose-specific effect. Every job performs a real action on
+        # the world; the wage is a reward for the work, not an
+        # independent money-printer.
         effect = {'success': True}
         purpose = self.job.purpose
         if purpose == 'farming':
             effect = self.farm()
         elif purpose == 'mining':
-            # Mining increments buried_gold — treat as stewardship of the vein
-            tile.buried_gold = getattr(tile, 'buried_gold', 0) + 1
+            # Miners tend the ore vein — same stewardship model as farming.
+            # HARVEST on the tile is what actually extracts ore.
+            if getattr(tile, 'resource_type', None) and tile.growth_rate > 0:
+                str_mod = (self.stats.active[Stat.STR]() - 10) // 2
+                multiplier = 2.0 + max(0, str_mod) * 0.5
+                boost = tile.growth_rate * multiplier
+                old = tile.resource_amount
+                tile.resource_amount = min(tile.resource_max, tile.resource_amount + boost)
+                effect['boost'] = tile.resource_amount - old
+            else:
+                effect = {'success': False, 'reason': 'not_a_vein'}
+        elif purpose == 'crafting':
+            # Crafters process raw materials into goods while working.
+            effect = self.process()
+            # Crafter still gets wage even if nothing to process right now —
+            # treat an empty inventory as "apprentice work" (wage, no output)
+            if not effect.get('success') and effect.get('reason') == 'no_recipe_match':
+                effect = {'success': True, 'idle': True}
         elif purpose == 'guarding':
-            # Guarding cheaply — fake cols/rows since we don't have context here
             self.guard(cols=1, rows=1)
         elif purpose == 'hunting':
-            # Hunting the site means maintaining snares / searching
             self.search_tile()
         elif purpose == 'healing':
-            # Healer recovers a bit of own mana as "channeled blessing"
             cur = self.stats.active[Stat.CUR_MANA]()
             mx  = self.stats.active[Stat.MAX_MANA]()
             self.stats.base[Stat.CUR_MANA] = min(mx, cur + 1)
-        # 'trading' and 'crafting' jobs just collect wages (fold into NN-chosen
-        # TRADE / CRAFT actions; JOB for them is effectively "showing up")
+        # 'trading' jobs collect wages for showing up — the real TRADE
+        # action is separate and NN-chosen.
 
         # Pay wage if the underlying effect didn't hard-fail
         if effect.get('success', True):

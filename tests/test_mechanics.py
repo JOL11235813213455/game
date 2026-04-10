@@ -1590,7 +1590,7 @@ m44 = make_map(cols=10, rows=10)
 actor = make_creature(m44, x=5, y=5, stats={Stat.STR: 14, Stat.AGL: 12}, name='Actor')
 dummy = make_creature(m44, x=6, y=5, stats={Stat.VIT: 12, Stat.PER: 10, Stat.LVL: 3}, name='Dummy')
 
-check(f"NUM_ACTIONS = {NUM_ACTIONS}", NUM_ACTIONS == 56)
+check(f"NUM_ACTIONS = {NUM_ACTIONS}", NUM_ACTIONS == 57)
 
 # Move south via dispatch (east is blocked by dummy at 6,5)
 ctx = {'cols': 10, 'rows': 10}
@@ -3393,7 +3393,160 @@ dfr = dispatch(disp_farm2, Action.FARM, {'cols': 8, 'rows': 8})
 check("dispatch FARM succeeds", dfr.get('success'))
 
 # Action counts
-check("NUM_ACTIONS is 56", NUM_ACTIONS == 56)
+check("NUM_ACTIONS is 57", NUM_ACTIONS == 57)
+
+# ==========================================================================
+# Processing recipes (cook / smelt)
+# ==========================================================================
+print("\n--- Processing recipes tests ---")
+
+from classes.recipes import (PROCESSING_RECIPES, find_matching_recipe,
+                              consume_inputs, Recipe)
+from classes.inventory import Stackable
+
+pm = make_map(8, 8)
+
+# --- find_matching_recipe happy path ---
+cook_tile = pm.tiles[MapKey(4, 4, 0)]
+cook_tile.purpose = 'crafting'
+
+cook = make_creature(pm, x=4, y=4, name='Cook',
+                      stats={Stat.INT: 12, Stat.STR: 10})
+# Give the cook 2 wheat
+wheat = Stackable(name='Wheat', weight=0.2, value=1.0, quantity=2)
+wheat.is_food = True
+cook.inventory.items.append(wheat)
+
+recipe = find_matching_recipe(cook.inventory.items)
+check("find_matching_recipe returns something with wheat",
+      recipe is not None)
+check(f"wheat matches bake_bread (got {recipe.name if recipe else None})",
+      recipe is not None and recipe.name == 'bake_bread')
+
+# Filter by category
+ore_stack = Stackable(name='Ore', weight=0.5, value=1.0, quantity=2)
+stash_for_cat = [wheat, ore_stack]
+food_recipe = find_matching_recipe(stash_for_cat, category='food')
+material_recipe = find_matching_recipe(stash_for_cat, category='material')
+check("category='food' prefers bake_bread",
+      food_recipe is not None and food_recipe.category == 'food')
+check("category='material' picks smelt_iron",
+      material_recipe is not None and material_recipe.name == 'smelt_iron')
+
+# --- process() happy path ---
+pr = cook.process()
+check("process() on crafting tile succeeds", pr['success'])
+check(f"process() returns recipe name (got {pr.get('recipe')})",
+      pr.get('recipe') == 'bake_bread')
+check("bread now in inventory",
+      any(getattr(i, 'name', '') == 'Bread' for i in cook.inventory.items))
+# Wheat should have been consumed (2 required)
+wheat_left = sum(i.quantity for i in cook.inventory.items
+                 if getattr(i, 'name', '') == 'Wheat')
+check(f"wheat consumed (left: {wheat_left})", wheat_left == 0)
+
+# --- process() on wrong tile fails ---
+wrong_tile_cook = make_creature(pm, x=0, y=0, name='WrongTileCook',
+                                 stats={Stat.INT: 12})
+wheat2 = Stackable(name='Wheat', weight=0.2, value=1.0, quantity=2)
+wrong_tile_cook.inventory.items.append(wheat2)
+pr2 = wrong_tile_cook.process()
+check("process() off crafting tile fails", not pr2['success'])
+check("process() wrong_tile reason", pr2.get('reason') == 'wrong_tile')
+
+# --- process() with no ingredients fails ---
+empty_cook = make_creature(pm, x=4, y=4, name='EmptyCook',
+                            stats={Stat.INT: 12})
+pr3 = empty_cook.process()
+check("process() with no ingredients fails", not pr3['success'])
+check("process() no_recipe_match reason",
+      pr3.get('reason') == 'no_recipe_match')
+
+# --- process() ore → iron ---
+smelter = make_creature(pm, x=4, y=4, name='Smelter',
+                         stats={Stat.STR: 12})
+ore_stack2 = Stackable(name='Ore', weight=0.5, value=1.0, quantity=2)
+smelter.inventory.items.append(ore_stack2)
+pr4 = smelter.process(category='material')
+check("process() ore to iron succeeds", pr4['success'])
+check("IronIngot in inventory",
+      any(getattr(i, 'name', '') == 'IronIngot'
+          for i in smelter.inventory.items))
+
+# --- Bread gives more heal than raw wheat (the whole point) ---
+bread = next((i for i in cook.inventory.items
+              if getattr(i, 'name', '') == 'Bread'), None)
+check("bread has heal_amount > 0", bread is not None and bread.heal_amount > 0)
+check("bread heal_amount > raw wheat implicit heal",
+      bread is not None and bread.heal_amount >= 5)
+
+# --- dispatch PROCESS works end-to-end ---
+disp_cook = make_creature(pm, x=4, y=4, name='DispatchCook',
+                           stats={Stat.INT: 12})
+wheat3 = Stackable(name='Wheat', weight=0.2, value=1.0, quantity=2)
+disp_cook.inventory.items.append(wheat3)
+dpr = dispatch(disp_cook, Action.PROCESS, {'cols': 8, 'rows': 8})
+check("dispatch PROCESS succeeds", dpr.get('success'))
+
+# --- Crafter JOB performs processing ---
+crafter = make_creature(pm, x=4, y=4, name='CrafterJob',
+                         stats={Stat.INT: 14})
+from classes.jobs import DEFAULT_JOBS, DAY_WORKER
+crafter.job = DEFAULT_JOBS['crafter']
+crafter.schedule = DAY_WORKER
+wheat4 = Stackable(name='Wheat', weight=0.2, value=1.0, quantity=2)
+crafter.inventory.items.append(wheat4)
+# JOB_TIME_MS defined earlier in the jobs test block — reuse
+cjr = crafter.do_job(now=JOB_TIME_MS)
+check("crafter JOB with wheat ingredient succeeds", cjr['success'])
+check("crafter JOB produces bread",
+      any(getattr(i, 'name', '') == 'Bread' for i in crafter.inventory.items))
+check("crafter JOB paid wage", crafter._wage_accumulated > 0)
+
+# --- Crafter JOB with empty inventory is 'idle' but still paid ---
+idle_crafter = make_creature(pm, x=4, y=4, name='IdleCrafter',
+                              stats={Stat.INT: 14})
+idle_crafter.job = DEFAULT_JOBS['crafter']
+idle_crafter.schedule = DAY_WORKER
+cjr_idle = idle_crafter.do_job(now=JOB_TIME_MS)
+check("idle crafter JOB still succeeds (apprentice work)",
+      cjr_idle['success'])
+check("idle crafter paid wage", idle_crafter._wage_accumulated > 0)
+
+# --- Mining JOB boosts vein, does NOT mint buried_gold ---
+mine_tile = pm.tiles[MapKey(2, 5, 0)]
+mine_tile.purpose = 'mining'
+mine_tile.resource_type = 'ore'
+mine_tile.resource_max = 8
+mine_tile.resource_amount = 3
+mine_tile.growth_rate = 0.2
+mine_tile.buried_gold = 0
+
+miner = make_creature(pm, x=2, y=5, name='Miner',
+                      stats={Stat.STR: 14, Stat.VIT: 12})
+miner.job = DEFAULT_JOBS['miner']
+miner.schedule = DAY_WORKER
+prev_buried = mine_tile.buried_gold
+prev_amount = mine_tile.resource_amount
+mjr = miner.do_job(now=JOB_TIME_MS)
+check("miner JOB succeeds", mjr['success'])
+check("miner JOB boosted resource_amount (vein tending)",
+      mine_tile.resource_amount > prev_amount)
+check("miner JOB did NOT mint buried_gold",
+      mine_tile.buried_gold == prev_buried)
+
+# --- Full loop: harvest ore, process to ingot ---
+mine_tile.resource_amount = mine_tile.resource_max  # max it out for harvest
+harvester = make_creature(pm, x=2, y=5, name='HarvestMiner',
+                           stats={Stat.STR: 12})
+hr = harvester.harvest()
+check("harvest on mining tile succeeds", hr['success'])
+check("harvested stack is Ore",
+      any(getattr(i, 'name', '') == 'Ore' for i in harvester.inventory.items))
+# Move to crafting tile, smelt
+harvester.location = MapKey(4, 4, 0)
+smelt_r = harvester.process(category='material')
+check("smelt Ore -> IronIngot succeeds", smelt_r['success'])
 
 # ==========================================================================
 print(f"\n{'='*50}")

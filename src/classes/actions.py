@@ -80,6 +80,7 @@ class Action(IntEnum):
     HARVEST = 53
     JOB = 54    # single parameterized action; dispatches via creature.do_job()
     FARM = 55   # stewardship: boost resource growth on farming tiles
+    PROCESS = 56   # raw -> refined: bake/cook/smelt (tile-gated to crafting)
 
 
 NUM_ACTIONS = len(Action)
@@ -121,6 +122,7 @@ ACTION_PURPOSE = {
     Action.HARVEST: 'farming',
     Action.FARM: 'farming',       # stewardship — distinct from extraction
     Action.JOB: None,              # resolved at reward time from creature.job.purpose
+    Action.PROCESS: 'crafting',   # cook/smelt — tile-gated to crafting
     Action.USE_ITEM: 'eating',     # consumables
     Action.SET_TRAP: 'hunting',
 }
@@ -156,6 +158,7 @@ ACTION_NAMES = {
     Action.CRAFT: 'craft', Action.DISASSEMBLE: 'disassemble',
     Action.HARVEST: 'harvest',
     Action.JOB: 'job', Action.FARM: 'farm',
+    Action.PROCESS: 'process',
 }
 
 
@@ -428,5 +431,8 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
 
     if action == Action.JOB:
         return creature.do_job(context.get('now', 0))
+
+    if action == Action.PROCESS:
+        return creature.process()
 
     return {'success': False, 'reason': 'unknown_action'}
