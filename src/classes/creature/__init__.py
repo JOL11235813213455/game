@@ -141,9 +141,10 @@ class Creature(
         self._item_prices: dict = {}        # item id -> gold paid
 
         # Hunger: 1.0 = full, 0.0 = neutral, -1.0 = starving
-        # Drains ~0.02 per tick (reaches starving in ~100 ticks / 50s)
+        # Full bar (1.0 to -1.0) depletes in 1 game day (24 min real time)
+        # 1440 ticks/day, 2.0 range → ~0.00139/tick
         self.hunger: float = 0.5  # start half-full
-        self._hunger_drain: float = 0.02  # per hunger tick
+        self._hunger_drain: float = 2.0 / 1440.0  # per hunger tick
 
         # Spatial memory: {purpose_str: [(map_name, x, y, tick_discovered), ...]}
         # Populated when creature visits a purpose zone or purpose tile
