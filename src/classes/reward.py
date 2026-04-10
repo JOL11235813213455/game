@@ -133,14 +133,29 @@ def compute_reward(creature, prev: dict, curr: dict,
 
     total = sum(signals.values())
 
-    # Purpose alignment: double reward when action matches tile purpose
-    if last_action is not None and total > 0:
-        from classes.actions import action_aligned_with_tile
-        tile = creature.current_map.tiles.get(creature.location)
-        zone_purposes = curr.get('zone_purposes')
-        if tile and action_aligned_with_tile(last_action, tile, zone_purposes):
-            signals['purpose_bonus'] = total
-            total *= 2.0
+    # Purpose proximity: reward scales with distance to visible purpose tile
+    # On the tile: reward^2. In sight: reward^(1+1/d). Out of sight: -0.25
+    if last_action is not None and total != 0:
+        from classes.actions import ACTION_PURPOSE
+        action_purpose = ACTION_PURPOSE.get(last_action)
+        if action_purpose:
+            dist_to_purpose = curr.get('dist_to_purpose', {}).get(action_purpose)
+            if dist_to_purpose is not None:
+                # Visible — boost reward based on proximity
+                d = max(1, dist_to_purpose)
+                exponent = 1 + 1.0 / d
+                if total > 0:
+                    boosted = total ** exponent
+                    signals['purpose_proximity'] = boosted - total
+                    total = boosted
+                else:
+                    # Negative reward — reduce penalty when near purpose tile
+                    signals['purpose_proximity'] = abs(total) * (1.0 / d) * 0.5
+                    total += signals['purpose_proximity']
+            else:
+                # No matching purpose tile visible — slight penalty
+                signals['purpose_proximity'] = -0.25
+                total -= 0.25
 
     return (total, signals) if breakdown else total
 
@@ -198,22 +213,31 @@ def make_reward_snapshot(creature) -> dict:
     except Exception:
         pass
 
-    # Zone purposes at current location
-    zone_purposes = set()
+    # Distance to nearest visible tile of each purpose type
+    dist_to_purpose = {}
     try:
-        tile_purpose = None
-        tile = creature.current_map.tiles.get(creature.location)
-        if tile:
-            tile_purpose = getattr(tile, 'purpose', None)
-        if tile_purpose:
-            zone_purposes.add(tile_purpose)
+        sight = max(1, stats.active[Stat.SIGHT_RANGE]())
+        cx, cy = creature.location.x, creature.location.y
+        game_map = creature.current_map
+        # Scan visible tiles for purpose
+        for dx in range(-sight, sight + 1):
+            for dy in range(-sight, sight + 1):
+                if abs(dx) + abs(dy) > sight:
+                    continue
+                from classes.maps import MapKey as _MK
+                t = game_map.tiles.get(_MK(cx + dx, cy + dy, creature.location.z))
+                if t and getattr(t, 'purpose', None):
+                    d = abs(dx) + abs(dy)
+                    p = t.purpose
+                    if p not in dist_to_purpose or d < dist_to_purpose[p]:
+                        dist_to_purpose[p] = d
     except Exception:
         pass
 
     return {
         'alive': creature.is_alive,
         'hp_ratio': stats.active[Stat.HP_CURR]() / hp_max,
-        'zone_purposes': zone_purposes,
+        'dist_to_purpose': dist_to_purpose,
         'gold': creature.gold,
         'debt': debt,
         'disposable': disposable,

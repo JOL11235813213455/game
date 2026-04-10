@@ -561,11 +561,27 @@ def build_observation(creature, cols: int, rows: int,
     obs.append(1.0 if getattr(creature, 'can_swim', False) else 0.0)
     buried_count = len(tile.buried_inventory.items) if tile and hasattr(tile, 'buried_inventory') else 0
     obs.append(1.0 if buried_count > 0 or getattr(tile, 'buried_gold', 0) > 0 else 0.0)
-    # Tile purpose one-hot
+    # Visible distance to nearest purpose tile (per purpose type)
+    # 0.0 = standing on it, 1.0 = out of sight. Multiple transforms.
     from classes.actions import TILE_PURPOSES
-    tile_purpose = getattr(tile, 'purpose', None) if tile else None
+    _purpose_dists = {}
+    if tile:
+        _sight = max(1, s[Stat.SIGHT_RANGE]())
+        for ddx in range(-_sight, _sight + 1):
+            for ddy in range(-_sight, _sight + 1):
+                if abs(ddx) + abs(ddy) > _sight:
+                    continue
+                pt = game_map.tiles.get(MapKey(cx + ddx, cy + ddy, creature.location.z))
+                if pt and getattr(pt, 'purpose', None):
+                    d = abs(ddx) + abs(ddy)
+                    if pt.purpose not in _purpose_dists or d < _purpose_dists[pt.purpose]:
+                        _purpose_dists[pt.purpose] = d
     for p in TILE_PURPOSES:
-        obs.append(1.0 if tile_purpose == p else 0.0)
+        d = _purpose_dists.get(p)
+        if d is not None:
+            obs.append(1.0 - min(d, _sight) / max(1, _sight))  # proximity: 1.0=on it, 0.0=at sight edge
+        else:
+            obs.append(0.0)  # not visible
 
     # ==== SECTION 17: SPATIAL WALLS + OPENNESS (25) ====
     _dirs8 = [(0,-1),(0,1),(1,0),(-1,0),(1,-1),(-1,-1),(1,1),(-1,1)]
