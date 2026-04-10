@@ -376,6 +376,10 @@ class SqlTab(ttk.Frame):
         ('item_frame_recipe', 'ingredient_key', 'items', 'key'),
         ('items', 'item_frame', 'item_frames', 'key'),
         ('purpose_places', 'map_name', 'maps', 'name'),
+        ('processing_recipes', 'output_item_key', 'items', 'key'),
+        ('processing_recipe_inputs', 'recipe_key', 'processing_recipes', 'key'),
+        ('processing_recipe_inputs', 'ingredient_item_key', 'items', 'key'),
+        ('creatures', 'job_key', 'jobs', 'key'),
     ]
 
     # Clusters: groups of related tables laid out together
@@ -408,6 +412,11 @@ class SqlTab(ttk.Frame):
             'label': 'Items',
             'color': '#1a2a2a',
             'tables': ['items', 'item_slots', 'item_frames', 'item_frame_recipe'],
+        },
+        {
+            'label': 'Economy',
+            'color': '#3a3a1a',
+            'tables': ['jobs', 'processing_recipes', 'processing_recipe_inputs'],
         },
         {
             'label': 'Spells',
@@ -860,6 +869,31 @@ class SqlTab(ttk.Frame):
             ('items', 'item_frame'): 'ItemFrame key this item is an ingredient for (NULL = not craftable)',
             ('items', 'disassemblable'): 'Can this item be broken back into an ItemFrame with parts',
             ('items', 'crafter_uid'): 'UID of creature that crafted this item (NULL = found/spawned)',
+            ('items', 'is_food'): '1 = item counts as food — eligible for hunger-dependent valuation and food-filtered recipes',
+            ('items', 'kpi_metric'): 'KPI computation hint: burst_damage, damage_reduction, heal_value, ammo_value, stat_delta. NULL = auto-detect from item class',
+            # jobs
+            ('jobs', 'key'): 'Unique job identifier',
+            ('jobs', 'name'): 'Display name (e.g. "Farmer")',
+            ('jobs', 'description'): 'Flavor text shown in editor and tooltips',
+            ('jobs', 'purpose'): 'Primary tile purpose this job aligns with (farming, mining, etc.)',
+            ('jobs', 'wage_per_tick'): 'Gold paid per successful JOB tick during work hours',
+            ('jobs', 'required_stat'): 'Stat gate for qualification (STR, VIT, INT, PER, CHR, LCK, AGL)',
+            ('jobs', 'required_level'): 'Minimum required_stat value to qualify',
+            ('jobs', 'workplace_purposes'): 'JSON list of tile purposes that count as "at work"',
+            ('jobs', 'schedule_template'): 'Named schedule: day_worker, night_worker, wanderer',
+            ('creatures', 'job_key'): 'Jobs table reference — this creature\'s assigned profession (NULL = wanderer)',
+            # processing_recipes
+            ('processing_recipes', 'key'): 'Unique recipe identifier (e.g. bake_bread)',
+            ('processing_recipes', 'name'): 'Display name (e.g. "Bake Bread")',
+            ('processing_recipes', 'description'): 'Flavor text shown in editor',
+            ('processing_recipes', 'output_item_key'): 'Item produced by this recipe',
+            ('processing_recipes', 'output_quantity'): 'How many units are produced per successful PROCESS',
+            ('processing_recipes', 'category'): 'food or material — filter used by PROCESS action',
+            ('processing_recipes', 'required_tile_purpose'): 'Tile purpose the creature must stand on to run this recipe',
+            ('processing_recipes', 'stamina_cost'): 'Stamina spent per execution',
+            ('processing_recipe_inputs', 'recipe_key'): 'Parent recipe',
+            ('processing_recipe_inputs', 'ingredient_item_key'): 'Item consumed as an ingredient',
+            ('processing_recipe_inputs', 'quantity'): 'How many of this ingredient are required',
             # item_frames
             ('item_frames', 'key'): 'Unique frame blueprint identifier',
             ('item_frames', 'name'): 'Display name for this crafting frame',

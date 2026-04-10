@@ -305,12 +305,15 @@ def generate_arena(cols: int = 20, rows: int = 20,
 
     # --- Seed resources on purpose tiles ---
     # Maps purpose → (resource_type, resource_max, growth_rate)
+    # Map purpose to (item_key, max, growth). The item_key must match an
+    # entry in the DB items catalog so harvest() can clone the right
+    # template instead of inventing ad-hoc Stackable instances.
     PURPOSE_RESOURCES = {
-        'farming':   ('wheat',    20, 1.0),
-        'fishing':   ('fish',     15, 0.5),
-        'gathering': ('berries',  12, 0.8),
-        'hunting':   ('game',     10, 0.3),
-        'mining':    ('ore',       8, 0.2),
+        'farming':   ('food_wheat_raw',      20, 1.0),
+        'fishing':   ('food_fish_raw',       15, 0.5),
+        'gathering': ('food_berries_raw',    12, 0.8),
+        'hunting':   ('food_game_raw',       10, 0.3),
+        'mining':    ('material_ore_iron',    8, 0.2),
     }
     for key, tile in tiles.items():
         if not tile.walkable:

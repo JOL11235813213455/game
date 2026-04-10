@@ -90,7 +90,9 @@ CREATE TABLE IF NOT EXISTS items (
     nested_map                 TEXT,
     item_frame       TEXT REFERENCES item_frames(key),
     disassemblable   INTEGER NOT NULL DEFAULT 0,
-    crafter_uid      INTEGER
+    crafter_uid      INTEGER,
+    is_food          INTEGER NOT NULL DEFAULT 0,
+    kpi_metric       TEXT
 );
 CREATE TABLE IF NOT EXISTS item_slots (
     item_key TEXT NOT NULL REFERENCES items(key),
@@ -121,7 +123,36 @@ CREATE TABLE IF NOT EXISTS creatures (
     cumulative_limit INTEGER NOT NULL DEFAULT -1,
     concurrent_limit INTEGER NOT NULL DEFAULT -1,
     model_name       TEXT,
-    model_version    INTEGER
+    model_version    INTEGER,
+    job_key          TEXT REFERENCES jobs(key)
+);
+CREATE TABLE IF NOT EXISTS jobs (
+    key                 TEXT PRIMARY KEY,
+    name                TEXT NOT NULL DEFAULT '',
+    description         TEXT NOT NULL DEFAULT '',
+    purpose             TEXT NOT NULL,
+    wage_per_tick       REAL NOT NULL DEFAULT 1.0,
+    required_stat       TEXT NOT NULL DEFAULT 'STR',
+    required_level      INTEGER NOT NULL DEFAULT 8,
+    workplace_purposes  TEXT NOT NULL DEFAULT '[]',
+    schedule_template   TEXT NOT NULL DEFAULT 'day_worker'
+);
+CREATE TABLE IF NOT EXISTS processing_recipes (
+    key                   TEXT PRIMARY KEY,
+    name                  TEXT NOT NULL DEFAULT '',
+    description           TEXT NOT NULL DEFAULT '',
+    output_item_key       TEXT NOT NULL REFERENCES items(key),
+    output_quantity       INTEGER NOT NULL DEFAULT 1,
+    category              TEXT NOT NULL DEFAULT 'food',
+    required_tile_purpose TEXT NOT NULL DEFAULT 'crafting',
+    stamina_cost          INTEGER NOT NULL DEFAULT 1
+);
+CREATE TABLE IF NOT EXISTS processing_recipe_inputs (
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    recipe_key            TEXT NOT NULL REFERENCES processing_recipes(key),
+    ingredient_item_key   TEXT NOT NULL REFERENCES items(key),
+    quantity              INTEGER NOT NULL DEFAULT 1,
+    UNIQUE(recipe_key, ingredient_item_key)
 );
 CREATE TABLE IF NOT EXISTS creature_stats (
     creature_key TEXT NOT NULL REFERENCES creatures(key),

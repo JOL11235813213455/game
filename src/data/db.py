@@ -28,6 +28,8 @@ TILE_TEMPLATES: dict[str, dict] = {}
 MAPS:  dict[str, object] = {}
 MAP_GRAPH = None  # MapGraph instance, built after maps are loaded
 ITEM_FRAMES: dict[str, dict] = {}  # frame_key → {recipe, output_item_key, auto_pop, ...}
+JOBS:         dict[str, object] = {}  # job_key → Job instance (classes.jobs.Job)
+PROCESSING_RECIPES: list = []          # list of classes.recipes.Recipe
 STRUCTURES: dict[str, 'Structure'] = {}  # key → Structure instance (templates from DB)
 ANIMATIONS: dict[str, dict] = {}    # name → {target_type, frames: [{sprite_name, duration_ms}]}
 ANIM_BINDINGS: dict[tuple, str] = {}  # (target_name, behavior) → animation_name
@@ -218,6 +220,36 @@ def _migrate(con: sqlite3.Connection) -> None:
         "ALTER TABLE tile_sets ADD COLUMN resource_amount INTEGER",
         "ALTER TABLE tile_sets ADD COLUMN resource_max INTEGER",
         "ALTER TABLE tile_sets ADD COLUMN growth_rate REAL",
+        # Items: food flag + kpi_metric (for valuation specificity)
+        "ALTER TABLE items ADD COLUMN is_food INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE items ADD COLUMN kpi_metric TEXT",
+        # Jobs / schedules / recipes — the economy catalog
+        """CREATE TABLE IF NOT EXISTS jobs (
+    key TEXT PRIMARY KEY,
+    name TEXT NOT NULL DEFAULT '',
+    description TEXT NOT NULL DEFAULT '',
+    purpose TEXT NOT NULL,
+    wage_per_tick REAL NOT NULL DEFAULT 1.0,
+    required_stat TEXT NOT NULL DEFAULT 'STR',
+    required_level INTEGER NOT NULL DEFAULT 8,
+    workplace_purposes TEXT NOT NULL DEFAULT '[]',
+    schedule_template TEXT NOT NULL DEFAULT 'day_worker')""",
+        """CREATE TABLE IF NOT EXISTS processing_recipes (
+    key TEXT PRIMARY KEY,
+    name TEXT NOT NULL DEFAULT '',
+    description TEXT NOT NULL DEFAULT '',
+    output_item_key TEXT NOT NULL REFERENCES items(key),
+    output_quantity INTEGER NOT NULL DEFAULT 1,
+    category TEXT NOT NULL DEFAULT 'food',
+    required_tile_purpose TEXT NOT NULL DEFAULT 'crafting',
+    stamina_cost INTEGER NOT NULL DEFAULT 1)""",
+        """CREATE TABLE IF NOT EXISTS processing_recipe_inputs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    recipe_key TEXT NOT NULL REFERENCES processing_recipes(key),
+    ingredient_item_key TEXT NOT NULL REFERENCES items(key),
+    quantity INTEGER NOT NULL DEFAULT 1,
+    UNIQUE(recipe_key, ingredient_item_key))""",
+        "ALTER TABLE creatures ADD COLUMN job_key TEXT REFERENCES jobs(key)",
         """CREATE TABLE IF NOT EXISTS item_frames (
     key TEXT PRIMARY KEY,
     name TEXT NOT NULL DEFAULT '',
@@ -469,6 +501,8 @@ def load(db_path: Path = _DB_PATH) -> None:
         _load_animations(con)
         _load_composites(con)
         _load_item_frames(con)
+        _load_jobs(con)
+        _load_processing_recipes(con)
     finally:
         con.close()
 
@@ -784,6 +818,17 @@ def _load_items(con: sqlite3.Connection) -> None:
         if r['tile_scale'] is not None:
             obj.tile_scale = r['tile_scale']
         obj.collision = bool(r['collision'])
+        # Food flag and KPI metric hint
+        try:
+            obj.is_food = bool(r['is_food'])
+        except (KeyError, IndexError):
+            obj.is_food = False
+        try:
+            if r['kpi_metric']:
+                obj.kpi_metric = r['kpi_metric']
+        except (KeyError, IndexError):
+            pass
+        obj.key = key                 # remember catalog key for lookups
         ITEMS[key] = obj
         if cls == Structure:
             STRUCTURES[key] = obj
@@ -937,6 +982,125 @@ def _load_item_frames(con: sqlite3.Connection) -> None:
             'composite_name': r['composite_name'],
             'recipe': recipe,
         }
+
+
+def _load_jobs(con: sqlite3.Connection) -> None:
+    """Load the jobs catalog and publish into classes.jobs.DEFAULT_JOBS.
+
+    Each job row becomes a fully-constructed Job instance with its schedule
+    template resolved. The module-level ``classes.jobs.DEFAULT_JOBS`` dict
+    is cleared and repopulated so every caller that imports it sees the
+    DB-authoritative catalog.
+    """
+    global JOBS
+    JOBS.clear()
+
+    from classes.jobs import (Job, DAY_WORKER, NIGHT_WORKER, WANDERER,
+                                DEFAULT_JOBS)
+    from classes.stats import Stat
+
+    template_map = {
+        'day_worker':   DAY_WORKER,
+        'night_worker': NIGHT_WORKER,
+        'wanderer':     WANDERER,
+    }
+
+    try:
+        rows = con.execute(
+            'SELECT key, name, description, purpose, wage_per_tick, '
+            'required_stat, required_level, workplace_purposes, '
+            'schedule_template FROM jobs'
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return  # table absent (fresh DB) — tests will use hardcoded fallback
+
+    DEFAULT_JOBS.clear()
+    for r in rows:
+        try:
+            stat = Stat[r['required_stat']]
+        except KeyError:
+            stat = Stat.STR
+        schedule = template_map.get(r['schedule_template'], DAY_WORKER)
+        workplaces = tuple(json.loads(r['workplace_purposes'] or '[]'))
+        if not workplaces:
+            workplaces = (r['purpose'],)
+        job = Job(
+            name=r['name'] or r['key'],
+            purpose=r['purpose'],
+            schedule=schedule,
+            wage_per_tick=float(r['wage_per_tick']),
+            required_stat=stat,
+            required_level=int(r['required_level']),
+            workplace_purposes=workplaces,
+        )
+        job.key = r['key']
+        job.description = r['description'] or ''
+        JOBS[r['key']] = job
+        DEFAULT_JOBS[r['key']] = job
+
+
+def _load_processing_recipes(con: sqlite3.Connection) -> None:
+    """Load processing recipes and publish into classes.recipes.PROCESSING_RECIPES.
+
+    Each recipe becomes a ``Recipe`` whose ``output_factory`` clones the
+    target item from the ITEMS catalog (so quantity and attributes are
+    consistent with the DB). Inputs come from processing_recipe_inputs.
+    """
+    global PROCESSING_RECIPES
+    PROCESSING_RECIPES.clear()
+
+    from classes.recipes import Recipe, PROCESSING_RECIPES as LIVE_LIST
+    import copy as _copy
+
+    try:
+        recipe_rows = con.execute(
+            'SELECT key, name, description, output_item_key, output_quantity, '
+            'category, required_tile_purpose, stamina_cost FROM processing_recipes'
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return
+
+    LIVE_LIST.clear()
+    for r in recipe_rows:
+        inputs: dict[str, int] = {}
+        for ing in con.execute(
+            'SELECT ingredient_item_key, quantity FROM processing_recipe_inputs '
+            'WHERE recipe_key=?', (r['key'],)
+        ).fetchall():
+            ing_item = ITEMS.get(ing['ingredient_item_key'])
+            # Use the item's display name as the lookup key so it matches
+            # what inventory stacks are named. Falls back to the raw item
+            # key when the item isn't loaded yet (shouldn't happen in
+            # normal load order but keeps things robust).
+            ing_name = ing_item.name if ing_item else ing['ingredient_item_key']
+            inputs[ing_name] = int(ing['quantity'])
+
+        output_item = ITEMS.get(r['output_item_key'])
+        if output_item is None:
+            continue  # orphan recipe — skip
+        output_qty = int(r['output_quantity'] or 1)
+
+        def _make_factory(template_item, qty):
+            def _factory():
+                clone = _copy.copy(template_item)
+                # Fresh quantity
+                clone.quantity = qty
+                return clone
+            return _factory
+
+        recipe = Recipe(
+            name=r['key'],
+            inputs=inputs,
+            output_factory=_make_factory(output_item, output_qty),
+            category=r['category'] or 'food',
+        )
+        recipe.display_name = r['name'] or r['key']
+        recipe.description = r['description'] or ''
+        recipe.required_tile_purpose = r['required_tile_purpose'] or 'crafting'
+        recipe.stamina_cost = int(r['stamina_cost'] or 1)
+
+        PROCESSING_RECIPES.append(recipe)
+        LIVE_LIST.append(recipe)
 
 
 def _load_animations(con: sqlite3.Connection) -> None:

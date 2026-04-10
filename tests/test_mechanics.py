@@ -3769,6 +3769,37 @@ conf = market_confidence('BulkItem')
 check(f"high-volume confidence approaches 1.0 (got {conf:.2f})",
       conf > 0.9)
 
+# --- Hunger-dependent food valuation ---
+hv_map = make_map(5, 5)
+bread_probe = Consumable(name='ProbeBread', heal_amount=5, quantity=1)
+bread_probe.is_food = True
+full_c = make_creature(hv_map, x=0, y=0, name='FullCreature')
+full_c.hunger = 0.8
+hungry_c = make_creature(hv_map, x=1, y=0, name='HungryCreature')
+hungry_c.hunger = -0.3
+starving_c = make_creature(hv_map, x=2, y=0, name='StarvingCreature')
+starving_c.hunger = -0.9
+
+full_worth = worth_to_creature(bread_probe, full_c)
+hungry_worth = worth_to_creature(bread_probe, hungry_c)
+starving_worth = worth_to_creature(bread_probe, starving_c)
+check(f"full creature worth positive ({full_worth:.1f})", full_worth > 0)
+check(f"hungry > full ({hungry_worth:.1f} > {full_worth:.1f})",
+      hungry_worth > full_worth)
+check(f"starving > hungry ({starving_worth:.1f} > {hungry_worth:.1f})",
+      starving_worth > hungry_worth)
+# Spec: 1x at hunger=0, 3x at hunger=-1 — starving should be about 3x full
+check(f"starving/full ratio ~= 3 (got {starving_worth/full_worth:.2f})",
+      2.5 < starving_worth / full_worth < 3.5)
+
+# Non-food consumables are NOT affected by hunger
+potion = Consumable(name='TestPotion', heal_amount=5, quantity=1)
+# potion.is_food not set → defaults to falsy
+potion_full = worth_to_creature(potion, full_c)
+potion_hungry = worth_to_creature(potion, hungry_c)
+check(f"non-food potion worth is hunger-independent ({potion_full:.1f} == {potion_hungry:.1f})",
+      abs(potion_full - potion_hungry) < 0.01)
+
 # --- Trader JOB executes a trade when partner adjacent ---
 tjm = make_map(6, 6)
 trade_tile = tjm.tiles[MapKey(3, 3, 0)]
@@ -3794,6 +3825,76 @@ check("trader JOB paid wage", trader._wage_accumulated > 0)
 check("customer received ingot from trade",
       any(getattr(i, 'name', '') == 'IronIngot'
           for i in customer.inventory.items))
+
+# ==========================================================================
+# DB catalog tests — MUST BE LAST because the DB loader replaces
+# classes.recipes.PROCESSING_RECIPES with DB-sourced entries whose
+# ingredient names differ from the hardcoded defaults. Earlier tests
+# depend on the hardcoded recipes still being in place.
+# ==========================================================================
+print("\n--- DB catalog tests ---")
+
+try:
+    from data.db import (load as _db_load, ITEMS, JOBS,
+                          PROCESSING_RECIPES as DB_RECIPES)
+    _db_load()
+    _db_loaded = True
+except Exception as _e:
+    _db_loaded = False
+    print(f"  (DB catalog not loadable: {_e})")
+
+if _db_loaded:
+    check("food_wheat_raw exists in ITEMS", 'food_wheat_raw' in ITEMS)
+    check("food_bread exists in ITEMS", 'food_bread' in ITEMS)
+    check("material_ore_iron exists in ITEMS", 'material_ore_iron' in ITEMS)
+    bread_item = ITEMS.get('food_bread')
+    check("bread is_food flag is True",
+          bread_item is not None and getattr(bread_item, 'is_food', False))
+    check("bread heal_amount from DB = 5",
+          bread_item is not None and getattr(bread_item, 'heal_amount', 0) == 5)
+
+    check(f">= 7 jobs loaded (got {len(JOBS)})", len(JOBS) >= 7)
+    check("farmer job loaded from DB", 'farmer' in JOBS)
+    check("guard loaded from DB", 'guard' in JOBS)
+    check("guard has night_worker schedule (work band present)",
+          'guard' in JOBS and bool(JOBS['guard'].schedule.bands.get('work')))
+
+    check(f">= 6 recipes loaded (got {len(DB_RECIPES)})", len(DB_RECIPES) >= 6)
+    db_recipe_names = [r.name for r in DB_RECIPES]
+    check("bake_bread recipe present", 'bake_bread' in db_recipe_names)
+    check("smelt_iron recipe present", 'smelt_iron' in db_recipe_names)
+
+    # Catalog-driven harvest: tile.resource_type = canonical item key
+    cat_map = make_map(5, 5)
+    cat_tile = cat_map.tiles[MapKey(2, 2, 0)]
+    cat_tile.resource_type = 'food_wheat_raw'
+    cat_tile.resource_amount = 10
+    cat_tile.resource_max = 20
+    cat_tile.growth_rate = 1.0
+    cat_harvester = make_creature(cat_map, x=2, y=2, name='CatHarvester')
+    cat_hr = cat_harvester.harvest()
+    check("catalog harvest succeeds", cat_hr['success'])
+    cat_wheat = next((i for i in cat_harvester.inventory.items
+                       if getattr(i, 'name', '') == 'Wheat'), None)
+    check("harvested item has DB name 'Wheat'", cat_wheat is not None)
+    check("harvested item has DB value",
+          cat_wheat is not None and abs(cat_wheat.value - 1.0) < 0.01)
+
+    # Catalog-driven PROCESS: bake_bread via DB list
+    cat_craft = cat_map.tiles[MapKey(3, 3, 0)]
+    cat_craft.purpose = 'crafting'
+    cat_harvester.location = MapKey(3, 3, 0)
+    if cat_wheat is not None and cat_wheat.quantity < 2:
+        cat_wheat.quantity = 2
+    cat_pr = cat_harvester.process()
+    check("catalog PROCESS bake_bread succeeds", cat_pr['success'])
+    cat_bread = next((i for i in cat_harvester.inventory.items
+                       if getattr(i, 'name', '') == 'Bread'), None)
+    check("bread is in inventory after PROCESS", cat_bread is not None)
+    check("bread has heal_amount from DB",
+          cat_bread is not None and cat_bread.heal_amount == 5)
+else:
+    check("DB catalog was loadable", False)
 
 # ==========================================================================
 print(f"\n{'='*50}")

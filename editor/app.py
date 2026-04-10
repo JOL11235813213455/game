@@ -48,6 +48,7 @@ class EditorApp(tk.Tk):
         self._spells_lazy = _LazyTab(notebook, self._make_spells)
         self._quests_lazy = _LazyTab(notebook, self._make_quests)
         self._gods_lazy = _LazyTab(notebook, self._make_gods)
+        self._economy_lazy = _LazyTab(notebook, self._make_economy)
         self._dialogue_lazy = _LazyTab(notebook, self._make_dialogue)
         self._training_lazy = _LazyTab(notebook, self._make_training)
         self._sql_lazy = _LazyTab(notebook, self._make_sql)
@@ -57,6 +58,7 @@ class EditorApp(tk.Tk):
         notebook.add(self._spells_lazy,    text='  Spells  ')
         notebook.add(self._quests_lazy,    text='  Quests  ')
         notebook.add(self._gods_lazy,      text='  Gods  ')
+        notebook.add(self._economy_lazy,   text='  Economy  ')
         notebook.add(self._dialogue_lazy,  text='  Dialogue  ')
         notebook.add(self._training_lazy,  text='  Training  ')
         notebook.add(self._sql_lazy,       text='  SQL  ')
@@ -108,6 +110,17 @@ class EditorApp(tk.Tk):
     def _make_gods(self, parent):
         from editor.gods_tab import GodsTab
         return GodsTab(parent)
+
+    def _make_economy(self, parent):
+        from editor.jobs_tab import JobsTab
+        from editor.recipes_tab import RecipesTab
+        nb = ttk.Notebook(parent)
+        nb.pack(fill=tk.BOTH, expand=True)
+        self.jobs_tab = JobsTab(nb)
+        self.recipes_tab = RecipesTab(nb)
+        nb.add(self.jobs_tab, text='  Jobs  ')
+        nb.add(self.recipes_tab, text='  Recipes  ')
+        return nb
 
     def _make_dialogue(self, parent):
         from editor.dialogue_tab import DialogueTab

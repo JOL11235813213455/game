@@ -154,15 +154,29 @@ def compute_raw_kpi(item, creature) -> float:
         return max(0.001, kpi)
 
     elif metric == 'heal_value' or (metric is None and isinstance(item, Consumable)):
-        # Use the Consumable's actual restore fields. The previous code
-        # read ``item.damage`` which does not exist on Consumable and
-        # silently returned 0 for every food item.
+        # Use the Consumable's actual restore fields.
         heal = (getattr(item, 'heal_amount', 0)
                 + getattr(item, 'mana_restore', 0)
                 + getattr(item, 'stamina_restore', 0))
         buff_total = sum(abs(v) for v in item.buffs.values())
         duration = getattr(item, 'duration', 0)
-        return max(0.001, heal + buff_total * max(1, duration))
+        base = heal + buff_total * max(1, duration)
+
+        # Hunger-dependent valuation for food: a starving creature values
+        # a loaf of bread much more than a full one. This is what drives
+        # price formation — hungry buyers bid more, prices rise, EMA
+        # anchors new trades higher, market signals scarcity.
+        #
+        # The multiplier ranges from 1.0 (satiated, hunger >= 0) up to
+        # ~3.0 (starving, hunger = -1) for food items specifically.
+        # Non-food consumables (potions, scrolls) are unaffected.
+        is_food = getattr(item, 'is_food', False)
+        if is_food and hasattr(creature, 'hunger'):
+            desperation = max(0.0, -creature.hunger)  # 0..1
+            food_multiplier = 1.0 + desperation * 2.0  # 1..3
+            base = base * food_multiplier
+
+        return max(0.001, base)
 
     elif metric == 'ammo_value' or (metric is None and isinstance(item, Ammunition)):
         return max(0.001, item.damage)

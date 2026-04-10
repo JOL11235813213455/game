@@ -606,6 +606,186 @@ def seed():
                 buffs='{"vitality": 2, "max health": 3}')
     insert_slots(con, 'ring_vitality', ['ring_l', 'ring_r'])
 
+    # ======================================================================
+    # ECONOMY — raw & processed food, materials, jobs, recipes
+    # ======================================================================
+
+    # --- Raw food (harvested from resource tiles) ---
+    insert_item(con, 'Stackable', 'food_wheat_raw', 'Wheat',
+                description='Sheaves of raw wheat, straight from the field.',
+                weight=0.15, value=1.0, max_stack_size=99, quantity=1,
+                is_food=0, action_word='gather')
+    insert_item(con, 'Stackable', 'food_fish_raw', 'Fish',
+                description='A freshly caught fish, still slick with river water.',
+                weight=0.4, value=2.0, max_stack_size=20, quantity=1,
+                is_food=0, action_word='catch')
+    insert_item(con, 'Stackable', 'food_berries_raw', 'Berries',
+                description='A handful of wild berries — sweet but quick to spoil.',
+                weight=0.1, value=1.0, max_stack_size=50, quantity=1,
+                is_food=1, action_word='pick')
+    insert_item(con, 'Stackable', 'food_game_raw', 'Raw Game',
+                description='A butchered cut of game meat. Best cooked.',
+                weight=0.8, value=2.5, max_stack_size=10, quantity=1,
+                is_food=0, action_word='take')
+    insert_item(con, 'Stackable', 'food_mushrooms_raw', 'Mushrooms',
+                description='Woodland mushrooms — earthy, firm, and filling.',
+                weight=0.1, value=1.2, max_stack_size=50, quantity=1,
+                is_food=1, action_word='forage')
+
+    # --- Processed food (from PROCESS action on crafting tiles) ---
+    insert_item(con, 'Consumable', 'food_bread', 'Bread',
+                description='A warm, crusty loaf. Sustaining and simple.',
+                weight=0.25, value=4.0, max_stack_size=20, quantity=1,
+                heal_amount=5, duration=0, is_food=1, action_word='eat')
+    insert_item(con, 'Consumable', 'food_cooked_fish', 'Cooked Fish',
+                description='Fish grilled over coals. Savory and rich.',
+                weight=0.35, value=5.0, max_stack_size=20, quantity=1,
+                heal_amount=7, duration=0, is_food=1, action_word='eat')
+    insert_item(con, 'Consumable', 'food_jam', 'Berry Jam',
+                description='Thick berry preserves, stored in a clay pot.',
+                weight=0.3, value=4.0, max_stack_size=10, quantity=1,
+                heal_amount=4, duration=0, is_food=1, action_word='eat')
+    insert_item(con, 'Consumable', 'food_roast_meat', 'Roast Meat',
+                description='A seared, tender cut of roasted game.',
+                weight=0.6, value=6.0, max_stack_size=10, quantity=1,
+                heal_amount=8, duration=0, is_food=1, action_word='eat')
+    insert_item(con, 'Consumable', 'food_dried_mushrooms', 'Dried Mushrooms',
+                description='Mushrooms preserved by drying. Keeps for weeks.',
+                weight=0.05, value=2.0, max_stack_size=50, quantity=1,
+                heal_amount=3, duration=0, is_food=1, action_word='eat')
+    insert_item(con, 'Consumable', 'food_stew', 'Hearty Stew',
+                description='A rich stew of meat and mushrooms.',
+                weight=0.7, value=9.0, max_stack_size=5, quantity=1,
+                heal_amount=12, duration=0, is_food=1, action_word='eat')
+
+    # --- Raw materials (harvested from mining/lumbering tiles) ---
+    insert_item(con, 'Stackable', 'material_ore_iron', 'Iron Ore',
+                description='Chunks of iron-rich ore. Worthless until smelted.',
+                weight=1.0, value=2.0, max_stack_size=50, quantity=1,
+                action_word='break')
+    insert_item(con, 'Stackable', 'material_ore_copper', 'Copper Ore',
+                description='Reddish copper ore. Soft but workable.',
+                weight=0.9, value=1.5, max_stack_size=50, quantity=1,
+                action_word='break')
+    insert_item(con, 'Stackable', 'material_coal', 'Coal',
+                description='Lumps of black coal. Fuels forges and hearths.',
+                weight=0.6, value=1.0, max_stack_size=99, quantity=1,
+                action_word='take')
+    insert_item(con, 'Stackable', 'material_stone', 'Stone',
+                description='A rough chunk of worked stone.',
+                weight=2.0, value=0.5, max_stack_size=20, quantity=1,
+                action_word='haul')
+
+    # --- Processed materials (from smelting/refining recipes) ---
+    insert_item(con, 'Stackable', 'material_ingot_iron', 'Iron Ingot',
+                description='A bar of refined iron, ready for the smithy.',
+                weight=1.5, value=8.0, max_stack_size=20, quantity=1,
+                action_word='carry')
+    insert_item(con, 'Stackable', 'material_ingot_copper', 'Copper Ingot',
+                description='A bar of refined copper. Trades well.',
+                weight=1.4, value=6.0, max_stack_size=20, quantity=1,
+                action_word='carry')
+    insert_item(con, 'Stackable', 'material_charcoal', 'Charcoal',
+                description='Lightweight black fuel — hotter than coal.',
+                weight=0.3, value=2.0, max_stack_size=50, quantity=1,
+                action_word='pack')
+
+    # --- Shovel (needed for DIG action, was runtime-only before) ---
+    insert_item(con, 'Weapon', 'tool_shovel', 'Shovel',
+                description='A sturdy digging shovel. Doubles as a club at need.',
+                weight=3.0, value=5.0,
+                damage=2, range=1, durability_max=150, durability_current=150,
+                slot_count=1, action_word='dig')
+    insert_slots(con, 'tool_shovel', ['hand_r'])
+
+    # --- Jobs (seeded into jobs table) ---
+    import json as _json
+    def _job(key, name, description, purpose, wage, stat, level, workplaces, sched):
+        con.execute(
+            'INSERT OR REPLACE INTO jobs (key, name, description, purpose, '
+            'wage_per_tick, required_stat, required_level, workplace_purposes, '
+            'schedule_template) VALUES (?,?,?,?,?,?,?,?,?)',
+            (key, name, description, purpose, wage, stat, level,
+             _json.dumps(workplaces), sched)
+        )
+
+    _job('farmer', 'Farmer',
+         'Tends fields of wheat and other crops. Up at dawn, in bed by dusk.',
+         'farming', 1.0, 'VIT', 8, ['farming'], 'day_worker')
+    _job('miner', 'Miner',
+         'Works the ore veins. Heavy labor, decent wages.',
+         'mining', 1.5, 'STR', 10, ['mining'], 'day_worker')
+    _job('crafter', 'Crafter',
+         'Turns raw goods into finished wares at the workshop.',
+         'crafting', 1.2, 'INT', 10, ['crafting'], 'day_worker')
+    _job('trader', 'Trader',
+         'Buys and sells at the market. Lives off the spread.',
+         'trading', 1.3, 'CHR', 10, ['trading'], 'day_worker')
+    _job('hunter', 'Hunter',
+         'Stalks game in the wild. Patient, observant, self-reliant.',
+         'hunting', 1.1, 'PER', 10, ['hunting'], 'day_worker')
+    _job('healer', 'Healer',
+         'Tends the sick and channels blessings at the temple.',
+         'healing', 1.4, 'INT', 12, ['healing'], 'day_worker')
+    _job('guard', 'Guard',
+         'Watches the walls by night. Extra pay for the late shift.',
+         'guarding', 1.2, 'STR', 10, ['guarding'], 'night_worker')
+
+    # --- Processing recipes (seeded into processing_recipes) ---
+    def _recipe(key, name, description, output_key, output_qty, category,
+                 ingredients, tile_purpose='crafting', stamina=1):
+        con.execute('DELETE FROM processing_recipe_inputs WHERE recipe_key=?', (key,))
+        con.execute(
+            'INSERT OR REPLACE INTO processing_recipes '
+            '(key, name, description, output_item_key, output_quantity, category, '
+            'required_tile_purpose, stamina_cost) VALUES (?,?,?,?,?,?,?,?)',
+            (key, name, description, output_key, output_qty, category,
+             tile_purpose, stamina)
+        )
+        for ing_key, qty in ingredients.items():
+            con.execute(
+                'INSERT INTO processing_recipe_inputs '
+                '(recipe_key, ingredient_item_key, quantity) VALUES (?,?,?)',
+                (key, ing_key, qty)
+            )
+
+    _recipe('bake_bread', 'Bake Bread',
+            'Turn raw wheat into loaves of bread.',
+            'food_bread', 1, 'food',
+            {'food_wheat_raw': 2})
+    _recipe('cook_fish', 'Cook Fish',
+            'Grill raw fish over a hot fire.',
+            'food_cooked_fish', 1, 'food',
+            {'food_fish_raw': 1})
+    _recipe('make_jam', 'Make Jam',
+            'Preserve wild berries as thick jam.',
+            'food_jam', 1, 'food',
+            {'food_berries_raw': 3})
+    _recipe('roast_meat', 'Roast Meat',
+            'Roast a cut of raw game meat.',
+            'food_roast_meat', 1, 'food',
+            {'food_game_raw': 1})
+    _recipe('dry_mushrooms', 'Dry Mushrooms',
+            'Preserve mushrooms by drying.',
+            'food_dried_mushrooms', 1, 'food',
+            {'food_mushrooms_raw': 2})
+    _recipe('make_stew', 'Make Stew',
+            'A hearty stew of meat and mushrooms — a full meal.',
+            'food_stew', 1, 'food',
+            {'food_game_raw': 1, 'food_mushrooms_raw': 1})
+    _recipe('smelt_iron', 'Smelt Iron',
+            'Refine iron ore into tradeable ingots.',
+            'material_ingot_iron', 1, 'material',
+            {'material_ore_iron': 2, 'material_coal': 1}, stamina=2)
+    _recipe('smelt_copper', 'Smelt Copper',
+            'Refine copper ore into ingots.',
+            'material_ingot_copper', 1, 'material',
+            {'material_ore_copper': 2, 'material_coal': 1}, stamina=2)
+    _recipe('burn_charcoal', 'Burn Charcoal',
+            'Convert raw stone-like coal into hotter charcoal.',
+            'material_charcoal', 2, 'material',
+            {'material_coal': 1}, stamina=1)
+
     con.commit()
     con.close()
 
@@ -620,6 +800,13 @@ def seed():
     print('  1 stackable (gold piece)')
     print('  3 potions (health, stamina, mana)')
     print('  1 ring (ring of vitality)')
+    print('  5 raw food items (wheat, fish, berries, game, mushrooms)')
+    print('  6 processed food items (bread, cooked fish, jam, roast, dried mushrooms, stew)')
+    print('  4 raw materials (iron ore, copper ore, coal, stone)')
+    print('  3 processed materials (iron ingot, copper ingot, charcoal)')
+    print('  1 tool (shovel)')
+    print('  7 jobs (farmer, miner, crafter, trader, hunter, healer, guard)')
+    print('  9 processing recipes (bake, cook, jam, roast, dry, stew, smelt×2, charcoal)')
 
 
 if __name__ == '__main__':

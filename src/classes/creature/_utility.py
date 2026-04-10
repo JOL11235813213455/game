@@ -67,8 +67,17 @@ class UtilityMixin:
     def harvest(self) -> dict:
         """Harvest the resource from the current tile.
 
-        Converts tile.resource_amount into a Stackable item in inventory.
-        The full current amount is taken (tile goes to 0) and will grow back.
+        Looks up the tile's resource item in the DB catalog (``ITEMS``)
+        using ``tile.resource_type`` as the key, clones it with the
+        current ``resource_amount`` as quantity, and adds it to
+        inventory. The tile drops to zero and regrows via
+        ``Map.grow_resources``.
+
+        Falls back to a runtime-constructed Stackable when the catalog
+        lookup fails — keeps tests running without a full DB load, and
+        keeps tile templates that use short names (e.g. ``'wheat'``)
+        functional before arenas are updated.
+
         Returns dict: success (bool), item (Stackable|None), amount (int).
         """
         from classes.inventory import Stackable
@@ -89,10 +98,32 @@ class UtilityMixin:
             result['reason'] = 'depleted'
             return result
 
-        # Harvest: take the resource, create a stackable item
+        # Take the resource
         tile.resource_amount = 0
 
-        # Check if a matching stack already exists in inventory
+        # Prefer DB catalog template
+        from data.db import ITEMS
+        template = ITEMS.get(tile.resource_type)
+
+        if template is not None:
+            import copy as _copy
+            # Check for an existing matching stack in inventory to merge into
+            for inv_item in self.inventory.items:
+                if isinstance(inv_item, Stackable) and inv_item.name == template.name:
+                    overflow = inv_item.add(amount, self.inventory)
+                    result['success'] = True
+                    result['item'] = inv_item
+                    result['amount'] = amount - overflow
+                    return result
+            clone = _copy.copy(template)
+            clone.quantity = amount
+            self.inventory.items.append(clone)
+            result['success'] = True
+            result['item'] = clone
+            result['amount'] = amount
+            return result
+
+        # Fallback (no DB catalog): use the legacy runtime construction
         resource_name = tile.resource_type.capitalize()
         for inv_item in self.inventory.items:
             if isinstance(inv_item, Stackable) and inv_item.name == resource_name:
@@ -101,8 +132,6 @@ class UtilityMixin:
                 result['item'] = inv_item
                 result['amount'] = amount - overflow
                 return result
-
-        # Create new stack
         harvested = Stackable(
             name=resource_name,
             description=f'Harvested {resource_name.lower()}.',
@@ -110,7 +139,8 @@ class UtilityMixin:
             value=float(amount),
             quantity=amount,
         )
-        harvested.is_food = tile.resource_type in ('wheat', 'berries', 'fish', 'mushrooms', 'corn')
+        harvested.is_food = tile.resource_type in (
+            'wheat', 'berries', 'fish', 'mushrooms', 'corn', 'game')
         self.inventory.items.append(harvested)
 
         result['success'] = True
@@ -205,7 +235,21 @@ class UtilityMixin:
             0, self.stats.base.get(Stat.CUR_STAMINA, 0) - stam_cost)
 
         output = recipe.output_factory()
-        self.inventory.items.append(output)
+        # Merge into an existing matching stack if possible so repeated
+        # PROCESS calls don't fill inventory with single-unit duplicates.
+        from classes.inventory import Stackable
+        merged = False
+        if isinstance(output, Stackable):
+            for inv_item in self.inventory.items:
+                if (isinstance(inv_item, Stackable)
+                        and inv_item.name == output.name
+                        and type(inv_item) is type(output)):
+                    inv_item.quantity = getattr(inv_item, 'quantity', 1) + getattr(output, 'quantity', 1)
+                    output = inv_item
+                    merged = True
+                    break
+        if not merged:
+            self.inventory.items.append(output)
 
         result['success'] = True
         result['recipe'] = recipe.name
