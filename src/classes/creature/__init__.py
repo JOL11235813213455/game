@@ -16,6 +16,7 @@ from classes.creature._reproduction import ReproductionMixin
 from classes.creature._relationships import RelationshipsMixin
 from classes.creature._conversation import ConversationMixin
 from classes.creature._utility import UtilityMixin
+from classes.creature._goals import GoalMixin
 from classes.creature._regen import RegenMixin
 from classes.creature._behaviors import (
     RandomWanderBehavior, PairedBehavior, NeuralBehavior, StatWeightedBehavior,
@@ -31,6 +32,7 @@ class Creature(
     RelationshipsMixin,
     ConversationMixin,
     UtilityMixin,
+    GoalMixin,
     RegenMixin,
     WorldObject,
 ):
@@ -138,6 +140,17 @@ class Creature(
         self._max_hit_taken: int = 0        # worst single hit for survival anchor
         self._item_prices: dict = {}        # item id -> gold paid
 
+        # Spatial memory: {purpose_str: [(map_name, x, y, tick_discovered), ...]}
+        # Populated when creature visits a purpose zone or purpose tile
+        self.known_locations: dict[str, list[tuple]] = {}
+
+        # Goal state (hierarchical RL)
+        self.current_goal: str | None = None      # purpose string e.g. 'trading'
+        self.goal_target: tuple | None = None      # (map_name, x, y) destination
+        self.goal_target_zone_id: int | None = None  # zone ID if targeting a zone
+        self.goal_started_tick: int = 0
+        self.goal_prev_distance: float = 0.0       # for progress reward
+
         # Build Stats from species defaults + overrides
         species_stats = {k: v for k, v in species_data.items() if isinstance(k, Stat)}
         merged = {**species_stats, **(stats or {})}
@@ -192,6 +205,9 @@ class Creature(
         # Water/flow tick — checks drowning and applies current
         # 100ms for up to 10 TPS flow speed
         self.register_tick('water', 100, self._do_water_tick)
+
+        # Spatial memory: learn locations of purpose zones each tick
+        self.register_tick('spatial_memory', 500, lambda now: self.update_spatial_memory(now))
 
     # -- Age ----------------------------------------------------------------
 

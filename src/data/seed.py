@@ -281,6 +281,18 @@ CREATE TABLE IF NOT EXISTS maps (
     y_min INTEGER NOT NULL DEFAULT 0,  y_max INTEGER NOT NULL DEFAULT 0,
     z_min INTEGER NOT NULL DEFAULT 0,  z_max INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS purpose_places (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    map_name    TEXT NOT NULL REFERENCES maps(name),
+    purpose     TEXT NOT NULL,
+    name        TEXT NOT NULL DEFAULT '',
+    x_min       INTEGER NOT NULL,
+    y_min       INTEGER NOT NULL,
+    z_min       INTEGER NOT NULL DEFAULT 0,
+    x_max       INTEGER NOT NULL,
+    y_max       INTEGER NOT NULL,
+    z_max       INTEGER NOT NULL DEFAULT 0
+);
 CREATE TABLE IF NOT EXISTS nn_models (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
     name             TEXT NOT NULL,

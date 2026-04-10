@@ -375,6 +375,7 @@ class SqlTab(ttk.Frame):
         ('item_frame_recipe', 'frame_key', 'item_frames', 'key'),
         ('item_frame_recipe', 'ingredient_key', 'items', 'key'),
         ('items', 'item_frame', 'item_frames', 'key'),
+        ('purpose_places', 'map_name', 'maps', 'name'),
     ]
 
     # Clusters: groups of related tables laid out together
@@ -396,7 +397,7 @@ class SqlTab(ttk.Frame):
         {
             'label': 'World',
             'color': '#3a2a1a',
-            'tables': ['tile_templates', 'tile_sets', 'maps'],
+            'tables': ['tile_templates', 'tile_sets', 'maps', 'purpose_places'],
         },
         {
             'label': 'Species & Creatures',
@@ -906,6 +907,17 @@ class SqlTab(ttk.Frame):
             ('maps', 'default_tile_template'): 'Template for unset coordinates',
             ('maps', 'entrance_x'): 'Player spawn X when entering this map',
             ('maps', 'entrance_y'): 'Player spawn Y when entering this map',
+            # purpose_places
+            ('purpose_places', 'id'): 'Auto-increment zone ID',
+            ('purpose_places', 'map_name'): 'Map this zone belongs to',
+            ('purpose_places', 'purpose'): 'Zone purpose: trading, farming, hunting, worship, eating, sleeping, pairing, crafting, mining, fishing, gathering, training, healing, guarding, socializing, gossiping',
+            ('purpose_places', 'name'): 'Display name for this zone (e.g. "Market Square", "Temple of Aelora")',
+            ('purpose_places', 'x_min'): 'Left edge of zone (inclusive)',
+            ('purpose_places', 'y_min'): 'Top edge of zone (inclusive)',
+            ('purpose_places', 'z_min'): 'Bottom Z of zone (inclusive)',
+            ('purpose_places', 'x_max'): 'Right edge of zone (inclusive)',
+            ('purpose_places', 'y_max'): 'Bottom edge of zone (inclusive)',
+            ('purpose_places', 'z_max'): 'Top Z of zone (inclusive)',
             # nn_models
             ('nn_models', 'id'): 'Auto-increment row ID',
             ('nn_models', 'name'): 'Model lineage name (e.g. "alpha")',

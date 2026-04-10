@@ -477,6 +477,17 @@ def migrate_db():
             "ALTER TABLE items ADD COLUMN item_frame TEXT REFERENCES item_frames(key)",
             "ALTER TABLE items ADD COLUMN disassemblable INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE items ADD COLUMN crafter_uid INTEGER",
+            """CREATE TABLE IF NOT EXISTS purpose_places (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    map_name TEXT NOT NULL REFERENCES maps(name),
+    purpose TEXT NOT NULL,
+    name TEXT NOT NULL DEFAULT '',
+    x_min INTEGER NOT NULL,
+    y_min INTEGER NOT NULL,
+    z_min INTEGER NOT NULL DEFAULT 0,
+    x_max INTEGER NOT NULL,
+    y_max INTEGER NOT NULL,
+    z_max INTEGER NOT NULL DEFAULT 0)""",
         ]:
             try:
                 con.execute(stmt)
