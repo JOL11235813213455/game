@@ -218,16 +218,24 @@ def generate_arena(cols: int = 20, rows: int = 20,
                    species_mix: dict[str, float] = None,
                    mask_probability: float = 0.0,
                    mask_pool: list[str] = None) -> dict:
-    """Generate a random arena with fully-realized creatures.
+    """Generate a small world with purpose districts for training.
+
+    Creates a balanced map with distinct areas for different activities:
+    market (trading), tavern (eating/socializing), barracks (training/guarding),
+    temple (worship), farm (farming/gathering), sleeping quarters, hunting
+    grounds, workshop (crafting/mining), and a river.
+
+    Creatures spawn throughout with varied profiles. Food items are
+    scattered to enable hunger/eating learning.
 
     Args:
-        cols, rows: map dimensions
+        cols, rows: map dimensions (recommended: 15-25)
         num_creatures: how many creatures to place
-        obstacle_density: fraction of unwalkable tiles (0.0-1.0)
+        obstacle_density: fraction of unwalkable tiles
         profiles: stat profiles to cycle through
-        species_mix: {species: probability} for species selection
+        species_mix: {species: probability}
         mask_probability: chance each creature gets an observation mask
-        mask_pool: list of mask preset names to draw from
+        mask_pool: mask preset names to draw from
 
     Returns:
         dict with keys: map, creatures, cols, rows
@@ -237,48 +245,103 @@ def generate_arena(cols: int = 20, rows: int = 20,
     mask_pool = mask_pool or ['socially_deaf', 'blind', 'fearless', 'feral',
                               'impulsive', 'nearsighted']
 
-    # Normalize species probabilities
     species_list = list(species_mix.keys())
     species_weights = [species_mix[s] for s in species_list]
 
-    # Generate map with random obstacles
+    # --- Build tile grid ---
     tiles = {}
     for x in range(cols):
         for y in range(rows):
             walkable = random.random() >= obstacle_density
             tiles[MapKey(x, y, 0)] = Tile(walkable=walkable)
-
     tiles[MapKey(0, 0, 0)] = Tile(walkable=True)
 
-    # Scatter purpose tiles — creates small clusters of purposeful areas
-    from classes.actions import TILE_PURPOSES
-    used_purposes = random.sample(TILE_PURPOSES,
-                                  min(6, len(TILE_PURPOSES)))
-    walkable_keys = [k for k, t in tiles.items() if t.walkable]
-    for purpose in used_purposes:
-        if not walkable_keys:
-            break
-        center = random.choice(walkable_keys)
-        # Small 3x3 cluster
-        for dx in range(-1, 2):
-            for dy in range(-1, 2):
-                pk = MapKey(center.x + dx, center.y + dy, 0)
+    # --- Lay out purpose districts ---
+    # Divide the map into a grid of districts, each with a purpose
+    # Districts are ~5x5 tiles, placed in a grid pattern
+    district_purposes = [
+        'trading', 'eating', 'sleeping', 'worship',
+        'crafting', 'training', 'socializing', 'farming',
+        'hunting', 'gathering', 'gossiping', 'healing',
+    ]
+    random.shuffle(district_purposes)
+
+    # How many districts fit
+    district_size = max(3, min(5, cols // 4))
+    districts_x = max(1, cols // district_size)
+    districts_y = max(1, rows // district_size)
+    num_districts = districts_x * districts_y
+
+    for i in range(min(num_districts, len(district_purposes))):
+        dx = i % districts_x
+        dy = i // districts_x
+        purpose = district_purposes[i]
+        cx = dx * district_size + district_size // 2
+        cy = dy * district_size + district_size // 2
+        # Fill a cluster around the center
+        radius = district_size // 2
+        for ox in range(-radius, radius + 1):
+            for oy in range(-radius, radius + 1):
+                pk = MapKey(cx + ox, cy + oy, 0)
                 if pk in tiles and tiles[pk].walkable:
                     tiles[pk].purpose = purpose
 
-    game_map = Map(tile_set=tiles, entrance=(0, 0),
-                   x_max=cols, y_max=rows)
+    # --- Add a river (liquid tiles with flow) ---
+    river_x = cols // 2
+    for y in range(rows):
+        rk = MapKey(river_x, y, 0)
+        if rk in tiles:
+            tiles[rk] = Tile(walkable=True, liquid=True,
+                             flow_direction='S', flow_speed=2.0, depth=1)
+        # Shallow banks on either side
+        for bank_dx in [-1, 1]:
+            bk = MapKey(river_x + bank_dx, y, 0)
+            if bk in tiles:
+                tiles[bk] = Tile(walkable=True, liquid=True, depth=0)
 
-    walkable_tiles = [k for k, t in tiles.items() if t.walkable]
-    random.shuffle(walkable_tiles)
+    # --- Scatter food items on eating tiles ---
+    eating_tiles = [k for k, t in tiles.items()
+                    if t.walkable and getattr(t, '_purpose', None) == 'eating']
+    for k in eating_tiles[:5]:
+        food = Consumable(name='Bread', weight=0.3, value=3.0,
+                          quantity=random.randint(1, 3),
+                          heal_amount=3, duration=0)
+        food.is_food = True
+        tiles[k].inventory.items.append(food)
+
+    # --- Scatter gold and items ---
+    walkable_keys = [k for k, t in tiles.items()
+                     if t.walkable and not getattr(t, 'liquid', False)]
+    for _ in range(min(10, len(walkable_keys))):
+        k = random.choice(walkable_keys)
+        tiles[k].gold = random.randint(1, 15)
+
+    # Bury some loot
+    for _ in range(min(5, len(walkable_keys))):
+        k = random.choice(walkable_keys)
+        tiles[k].buried_gold = random.randint(5, 30)
+
+    # --- Scatter shovels for DIG action ---
+    for _ in range(2):
+        k = random.choice(walkable_keys)
+        shovel = Weapon(name='Shovel', weight=3.0, value=5.0,
+                        damage=2, range=1, slots=[Slot.HAND_R], slot_count=1)
+        tiles[k].inventory.items.append(shovel)
+
+    game_map = Map(tile_set=tiles, entrance=(0, 0),
+                   x_max=cols, y_max=rows, name='training_world')
+
+    # --- Spawn creatures ---
+    spawn_tiles = [k for k, t in tiles.items()
+                   if t.walkable and not getattr(t, 'liquid', False)]
+    random.shuffle(spawn_tiles)
 
     creatures = []
-    for i in range(min(num_creatures, len(walkable_tiles))):
-        loc = walkable_tiles[i]
+    for i in range(min(num_creatures, len(spawn_tiles))):
+        loc = spawn_tiles[i]
         profile = profiles[i % len(profiles)]
         species = random.choices(species_list, weights=species_weights, k=1)[0]
 
-        # Maybe apply observation mask
         mask = None
         if mask_probability > 0 and random.random() < mask_probability:
             mask = random.choice(mask_pool)
@@ -290,9 +353,17 @@ def generate_arena(cols: int = 20, rows: int = 20,
             profile=profile,
             observation_mask=mask,
         )
+        # Give some creatures food
+        if random.random() < 0.3:
+            food = Consumable(name='Apple', weight=0.2, value=2.0,
+                              quantity=random.randint(1, 3),
+                              heal_amount=2, duration=0)
+            food.is_food = True
+            c.inventory.items.append(food)
+
         creatures.append(c)
 
-    # Give some creatures pre-existing relationships
+    # Pre-existing relationships
     for c in creatures:
         for other in creatures:
             if other is c:
@@ -359,89 +430,5 @@ def _load_db_items():
 
 def generate_trade_scenario(cols: int = 25, rows: int = 25,
                             num_creatures: int = 10) -> dict:
-    """Generate an asymmetric trading scenario.
-
-    One creature (the merchant) gets every item in the DB and no gold.
-    All other creatures get lots of gold and no items.
-    Items are also scattered on random tiles.
-
-    Watch: items flow from merchant to buyers via trade,
-    gold flows from buyers to merchant, items get dropped and picked up.
-    """
-    db_items = _load_db_items()
-    if not db_items:
-        print('Warning: no items in DB, using default arena')
-        return generate_arena(cols=cols, rows=rows, num_creatures=num_creatures)
-
-    tiles = {}
-    for x in range(cols):
-        for y in range(rows):
-            walkable = random.random() >= 0.05
-            tiles[MapKey(x, y, 0)] = Tile(walkable=walkable)
-    tiles[MapKey(0, 0, 0)] = Tile(walkable=True)
-    game_map = Map(tile_set=tiles, entrance=(0, 0), x_max=cols, y_max=rows)
-
-    walkable_tiles = [k for k, t in tiles.items() if t.walkable]
-    random.shuffle(walkable_tiles)
-
-    creatures = []
-
-    # Creature 0: THE MERCHANT — all items, no gold
-    merchant = spawn_creature(
-        game_map=game_map, location=walkable_tiles[0],
-        species='human', profile='social', name='Merchant',
-        age=40,
-    )
-    merchant.gold = 0
-    # Give one copy of every item
-    import copy
-    for key, item in db_items.items():
-        item_copy = copy.deepcopy(item)
-        merchant.inventory.items.append(item_copy)
-        merchant._item_prices[id(item_copy)] = item_copy.value
-    creatures.append(merchant)
-
-    # Creatures 1-N: BUYERS — lots of gold, no items
-    species_options = ['human', 'orc']
-    for i in range(1, min(num_creatures, len(walkable_tiles))):
-        species = random.choice(species_options)
-        c = spawn_creature(
-            game_map=game_map, location=walkable_tiles[i],
-            species=species,
-            profile=random.choice(['fighter', 'mage', 'rogue', 'balanced']),
-        )
-        # Clear inventory, give lots of gold
-        c.inventory.items.clear()
-        c.equipment.clear()
-        c.gold = random.randint(100, 500)
-        creatures.append(c)
-
-    # Scatter some items on random tiles
-    for i, (key, item) in enumerate(db_items.items()):
-        if i >= 15:
-            break
-        tile_key = walkable_tiles[num_creatures + i] if num_creatures + i < len(walkable_tiles) else walkable_tiles[-1]
-        tile = tiles[tile_key]
-        item_copy = copy.deepcopy(item)
-        tile.inventory.items.append(item_copy)
-
-    # Scatter gold on some tiles
-    for i in range(10):
-        idx = num_creatures + 15 + i
-        if idx < len(walkable_tiles):
-            tiles[walkable_tiles[idx]].gold = random.randint(10, 50)
-
-    # Pre-existing relationships
-    for c in creatures:
-        for other in creatures:
-            if other is c:
-                continue
-            if random.random() < 0.3:
-                c.record_interaction(other, random.uniform(-3, 8))
-
-    return {
-        'map': game_map,
-        'creatures': creatures,
-        'cols': cols,
-        'rows': rows,
-    }
+    """Deprecated — use generate_arena which now creates a full world."""
+    return generate_arena(cols=cols, rows=rows, num_creatures=num_creatures)
