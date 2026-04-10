@@ -236,7 +236,8 @@ CREATE TABLE IF NOT EXISTS tile_templates (
     liquid         INTEGER NOT NULL DEFAULT 0,
     flow_direction TEXT,
     flow_speed     REAL NOT NULL DEFAULT 0.0,
-    depth          INTEGER NOT NULL DEFAULT 0
+    depth          INTEGER NOT NULL DEFAULT 0,
+    purpose        TEXT
 );
 CREATE TABLE IF NOT EXISTS tile_sets (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -265,7 +266,8 @@ CREATE TABLE IF NOT EXISTS tile_sets (
     liquid         INTEGER,
     flow_direction TEXT,
     flow_speed     REAL,
-    depth          INTEGER
+    depth          INTEGER,
+    purpose        TEXT
 );
 CREATE VIEW IF NOT EXISTS tile_set_names AS
     SELECT DISTINCT tile_set AS name FROM tile_sets ORDER BY tile_set;

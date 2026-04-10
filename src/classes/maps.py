@@ -43,6 +43,7 @@ class Tile(Trackable):
         ,flow_direction:str=None    # 'N', 'S', 'E', 'W' or None
         ,flow_speed:float=None      # tiles per second
         ,depth:int=None             # depth in tiles (0 = shallow, 1+ = deep)
+        ,purpose:str=None           # tile purpose: trading, farming, hunting, etc.
         ):
         super().__init__()
         tmpl = template or {}
@@ -58,6 +59,7 @@ class Tile(Trackable):
         self.flow_direction = flow_direction if flow_direction is not None else tmpl.get('flow_direction', None)
         self.flow_speed     = flow_speed     if flow_speed     is not None else tmpl.get('flow_speed',     0.0)
         self.depth          = depth          if depth          is not None else tmpl.get('depth',          0)
+        self.purpose        = purpose        if purpose        is not None else tmpl.get('purpose',        None)
         self.nested_map: Map = map
         self.inventory = Inventory(items=items or [])
         self.buried_inventory = Inventory()  # requires DIG action + shovel to access

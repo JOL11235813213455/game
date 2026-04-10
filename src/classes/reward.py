@@ -25,7 +25,8 @@ def _sln(x: float) -> float:
 
 
 def compute_reward(creature, prev: dict, curr: dict,
-                   breakdown: bool = False) -> float | tuple[float, dict]:
+                   breakdown: bool = False,
+                   last_action: int = None) -> float | tuple[float, dict]:
     """Compute reward for a single step.
 
     Args:
@@ -33,6 +34,7 @@ def compute_reward(creature, prev: dict, curr: dict,
         prev: previous snapshot from make_reward_snapshot()
         curr: current snapshot from make_reward_snapshot()
         breakdown: if True, also return per-signal dict
+        last_action: action just performed (for purpose alignment bonus)
 
     Returns:
         float reward value, or (float, dict) if breakdown=True
@@ -118,6 +120,15 @@ def compute_reward(creature, prev: dict, curr: dict,
     signals['crowding'] = -(nearby - 4) * 0.3 if nearby >= 5 else 0.0
 
     total = sum(signals.values())
+
+    # Purpose alignment: double reward when action matches tile purpose
+    if last_action is not None and total > 0:
+        from classes.actions import action_aligned_with_tile
+        tile = creature.current_map.tiles.get(creature.location)
+        if tile and action_aligned_with_tile(last_action, tile):
+            signals['purpose_bonus'] = total  # double the positive reward
+            total *= 2.0
+
     return (total, signals) if breakdown else total
 
 

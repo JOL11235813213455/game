@@ -81,6 +81,48 @@ class Action(IntEnum):
 
 NUM_ACTIONS = len(Action)
 
+# Tile purposes — what a tile is designated for
+TILE_PURPOSES = (
+    'trading', 'farming', 'hunting', 'worship', 'eating',
+    'sleeping', 'pairing', 'crafting', 'mining', 'fishing',
+    'gathering', 'training', 'healing', 'guarding', 'socializing',
+)
+
+# Action → tile purpose alignment
+# When an action is performed on a tile whose purpose matches,
+# the reward is doubled. Multiple purposes can align with one action.
+ACTION_PURPOSE = {
+    Action.TRADE: 'trading',
+    Action.BRIBE: 'trading',
+    Action.STEAL: 'trading',       # stealing at a market...
+    Action.MELEE_ATTACK: 'hunting',
+    Action.RANGED_ATTACK: 'hunting',
+    Action.GRAPPLE: 'hunting',
+    Action.CAST_SPELL: 'training',
+    Action.INTIMIDATE: 'socializing',
+    Action.DECEIVE: 'socializing',
+    Action.TALK: 'socializing',
+    Action.SHARE_RUMOR: 'socializing',
+    Action.SLEEP: 'sleeping',
+    Action.GUARD: 'guarding',
+    Action.SEARCH: 'gathering',
+    Action.PICKUP: 'gathering',
+    Action.DIG: 'mining',
+    Action.CRAFT: 'crafting',
+    Action.DISASSEMBLE: 'crafting',
+    Action.USE_ITEM: 'eating',     # consumables
+    Action.SET_TRAP: 'hunting',
+}
+
+
+def action_aligned_with_tile(action: int, tile) -> bool:
+    """Return True if the action matches the tile's purpose."""
+    purpose = getattr(tile, 'purpose', None)
+    if purpose is None:
+        return False
+    return ACTION_PURPOSE.get(action) == purpose
+
+
 # Action → god-tracking name
 ACTION_NAMES = {
     Action.MELEE_ATTACK: 'melee_attack', Action.RANGED_ATTACK: 'ranged_attack',

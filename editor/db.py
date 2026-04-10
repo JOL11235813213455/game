@@ -459,6 +459,8 @@ def migrate_db():
             "ALTER TABLE tile_sets ADD COLUMN flow_direction TEXT",
             "ALTER TABLE tile_sets ADD COLUMN flow_speed REAL",
             "ALTER TABLE tile_sets ADD COLUMN depth INTEGER",
+            "ALTER TABLE tile_templates ADD COLUMN purpose TEXT",
+            "ALTER TABLE tile_sets ADD COLUMN purpose TEXT",
             """CREATE TABLE IF NOT EXISTS item_frames (
     key TEXT PRIMARY KEY,
     name TEXT NOT NULL DEFAULT '',

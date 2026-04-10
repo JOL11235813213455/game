@@ -899,6 +899,8 @@ class SqlTab(ttk.Frame):
             ('tile_sets', 'flow_direction'): 'Override: flow direction for this tile',
             ('tile_sets', 'flow_speed'): 'Override: flow speed for this tile',
             ('tile_sets', 'depth'): 'Override: depth for this tile',
+            ('tile_templates', 'purpose'): 'Tile purpose (trading, farming, hunting, etc.) — aligned actions get 2x reward',
+            ('tile_sets', 'purpose'): 'Override: tile purpose for this placement',
             # maps
             ('maps', 'tile_set'): 'Tile set used to build this map',
             ('maps', 'default_tile_template'): 'Template for unset coordinates',

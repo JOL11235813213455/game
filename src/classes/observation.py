@@ -37,7 +37,7 @@ _SECTION_SIZES = {
     'self_weapon': 15, 'self_inv_texture': 13, 'self_crafting': 6,
     'self_social': 10, 'self_status': 16, 'self_quest': 10, 'self_movement': 8,
     'self_genetics': 7, 'self_reputation': 6,
-    'tile_deep': 18, 'tile_liquid': 10, 'spatial_walls': 25, 'spatial_features': 12,
+    'tile_deep': 18, 'tile_liquid': 25, 'spatial_walls': 25, 'spatial_features': 12,
     'tile_items': MAX_TILE_ITEMS * 9, 'census': 45, 'census_audio': 3,
     'world_time': 13, 'temporal': 14, 'trends': 11, 'time_since': 12,
     'reward_signals': 17,
@@ -546,6 +546,11 @@ def build_observation(creature, cols: int, rows: int,
     obs.append(1.0 if getattr(creature, 'can_swim', False) else 0.0)
     buried_count = len(tile.buried_inventory.items) if tile and hasattr(tile, 'buried_inventory') else 0
     obs.append(1.0 if buried_count > 0 or getattr(tile, 'buried_gold', 0) > 0 else 0.0)
+    # Tile purpose one-hot
+    from classes.actions import TILE_PURPOSES
+    tile_purpose = getattr(tile, 'purpose', None) if tile else None
+    for p in TILE_PURPOSES:
+        obs.append(1.0 if tile_purpose == p else 0.0)
 
     # ==== SECTION 17: SPATIAL WALLS + OPENNESS (25) ====
     _dirs8 = [(0,-1),(0,1),(1,0),(-1,0),(1,-1),(-1,-1),(1,1),(-1,1)]
@@ -1030,19 +1035,19 @@ SECTION_RANGES = {
     'self_identity':    (196, 221),
     'self_reputation':  (221, 227),
     'tile_deep':        (227, 245),
-    'tile_liquid':      (245, 255),
-    'spatial_walls':    (255, 280),
-    'spatial_features': (280, 296),     # +4 crowding metrics
-    'tile_items':       (296, 323),
-    'census_visible':   (323, 368),
-    'census_audible':   (368, 371),
-    'per_engaged':      (371, 641),
-    'world_time':       (641, 654),
-    'temporal':         (654, 668),
-    'trends':           (668, 679),
-    'time_since':       (679, 691),
-    'reward_signals':   (691, 708),
-    'transforms':       (708, OBSERVATION_SIZE),
+    'tile_liquid':      (245, 270),
+    'spatial_walls':    (270, 295),
+    'spatial_features': (295, 311),     # +4 crowding metrics
+    'tile_items':       (311, 338),
+    'census_visible':   (338, 383),
+    'census_audible':   (383, 386),
+    'per_engaged':      (386, 656),
+    'world_time':       (656, 669),
+    'temporal':         (669, 683),
+    'trends':           (683, 694),
+    'time_since':       (694, 706),
+    'reward_signals':   (706, 723),
+    'transforms':       (723, OBSERVATION_SIZE),
 }
 
 # Semantic groups for easy mask building
