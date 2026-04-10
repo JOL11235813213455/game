@@ -257,8 +257,12 @@ def generate_arena(cols: int = 20, rows: int = 20,
     tiles[MapKey(0, 0, 0)] = Tile(walkable=True)
 
     # --- Lay out purpose districts ---
-    # Divide the map into a grid of districts, each with a purpose
-    # Districts are ~5x5 tiles, placed in a grid pattern
+    # One district per purpose, each a single anchor tile with a small
+    # Manhattan radius around it. Districts are placed by random sampling
+    # with a minimum-separation constraint so adjacent purposes don't
+    # bleed into each other. Small-and-distinct > big-and-crowded: the
+    # creature can only be doing one thing at a time, so there's no
+    # value in giving a purpose a whole quadrant of the map.
     district_purposes = [
         'trading', 'eating', 'sleeping', 'worship',
         'crafting', 'training', 'socializing', 'farming',
@@ -267,22 +271,42 @@ def generate_arena(cols: int = 20, rows: int = 20,
     ]
     random.shuffle(district_purposes)
 
-    # How many districts fit
-    district_size = max(3, min(5, cols // 4))
-    districts_x = max(1, cols // district_size)
-    districts_y = max(1, rows // district_size)
-    num_districts = districts_x * districts_y
+    DISTRICT_RADIUS = 2                        # Manhattan radius around center
+    MIN_CENTER_SEPARATION = DISTRICT_RADIUS * 2 + 1   # edge-to-edge gap >= 1
 
-    for i in range(min(num_districts, len(district_purposes))):
-        dx = i % districts_x
-        dy = i // districts_x
-        purpose = district_purposes[i]
-        cx = dx * district_size + district_size // 2
-        cy = dy * district_size + district_size // 2
-        # Fill a cluster around the center
-        radius = district_size // 2
-        for ox in range(-radius, radius + 1):
-            for oy in range(-radius, radius + 1):
+    def _too_close(cx, cy, existing_centers):
+        for ex, ey in existing_centers:
+            if abs(cx - ex) + abs(cy - ey) < MIN_CENTER_SEPARATION:
+                return True
+        return False
+
+    centers: list[tuple[int, int]] = []
+    for purpose in district_purposes:
+        placed = False
+        # Try up to 50 random positions before giving up on this purpose.
+        # With radius 2 and 14 purposes on a 20x20 grid we have plenty of
+        # room, but failure to place is quietly tolerated (one fewer
+        # district is better than an overlap).
+        for _ in range(50):
+            # Keep centers away from map edges so the full radius fits.
+            cx = random.randint(DISTRICT_RADIUS, cols - 1 - DISTRICT_RADIUS)
+            cy = random.randint(DISTRICT_RADIUS, rows - 1 - DISTRICT_RADIUS)
+            # Also stay off the river and its banks (which get their own
+            # fishing purpose). The river is at cols // 2 with banks at ±1.
+            if abs(cx - cols // 2) <= 1:
+                continue
+            if _too_close(cx, cy, centers):
+                continue
+            placed = True
+            centers.append((cx, cy))
+            break
+        if not placed:
+            continue
+        # Fill the Manhattan-radius footprint with this purpose.
+        for ox in range(-DISTRICT_RADIUS, DISTRICT_RADIUS + 1):
+            for oy in range(-DISTRICT_RADIUS, DISTRICT_RADIUS + 1):
+                if abs(ox) + abs(oy) > DISTRICT_RADIUS:
+                    continue
                 pk = MapKey(cx + ox, cy + oy, 0)
                 if pk in tiles and tiles[pk].walkable:
                     tiles[pk].purpose = purpose
@@ -336,17 +360,29 @@ def generate_arena(cols: int = 20, rows: int = 20,
         food.is_food = True
         tiles[k].inventory.items.append(food)
 
-    # --- Scatter gold and items ---
+    # --- Gold: surface scatter + buried everywhere ---
     walkable_keys = [k for k, t in tiles.items()
                      if t.walkable and not getattr(t, 'liquid', False)]
+    # A handful of tiles have surface gold (free pickup)
     for _ in range(min(10, len(walkable_keys))):
         k = random.choice(walkable_keys)
         tiles[k].gold = random.randint(1, 15)
 
-    # Bury some loot
-    for _ in range(min(5, len(walkable_keys))):
-        k = random.choice(walkable_keys)
-        tiles[k].buried_gold = random.randint(5, 30)
+    # Every walkable, non-liquid tile has SOMETHING buried underneath —
+    # the DIG action has a reason to fire anywhere on the map, not just
+    # the handful of pre-seeded "loot" tiles. Most tiles are pocket
+    # change (1-8), a meaningful minority (20%) hold more (10-30), and
+    # a rare 5% hit a genuine pocket (40-150). Creates a long tail that
+    # rewards persistent digging while making sure any tile is worth
+    # something to check.
+    for k in walkable_keys:
+        roll = random.random()
+        if roll < 0.05:
+            tiles[k].buried_gold = random.randint(40, 150)
+        elif roll < 0.25:
+            tiles[k].buried_gold = random.randint(10, 30)
+        else:
+            tiles[k].buried_gold = random.randint(1, 8)
 
     # --- Scatter shovels for DIG action ---
     for _ in range(2):
