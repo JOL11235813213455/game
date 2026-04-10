@@ -569,12 +569,12 @@ def build_observation(creature, cols: int, rows: int,
     obs.append(1.0 if getattr(creature, 'can_swim', False) else 0.0)
     buried_count = len(tile.buried_inventory.items) if tile and hasattr(tile, 'buried_inventory') else 0
     obs.append(1.0 if buried_count > 0 or getattr(tile, 'buried_gold', 0) > 0 else 0.0)
-    # Visible distance to nearest purpose tile (per purpose type)
-    # 0.0 = standing on it, 1.0 = out of sight. Multiple transforms.
+    # Visible distance to nearest purpose source (tiles + objects)
+    # 0.0 = not visible, 1.0 = standing on it
     from classes.actions import TILE_PURPOSES
     _purpose_dists = {}
+    _sight = max(1, s[Stat.SIGHT_RANGE]())
     if tile:
-        _sight = max(1, s[Stat.SIGHT_RANGE]())
         for ddx in range(-_sight, _sight + 1):
             for ddy in range(-_sight, _sight + 1):
                 if abs(ddx) + abs(ddy) > _sight:
@@ -584,12 +584,20 @@ def build_observation(creature, cols: int, rows: int,
                     d = abs(ddx) + abs(ddy)
                     if pt.purpose not in _purpose_dists or d < _purpose_dists[pt.purpose]:
                         _purpose_dists[pt.purpose] = d
+    # Also scan visible objects with purpose (scaled by purpose_distance)
+    for _, obj in visible:
+        if getattr(obj, 'purpose', None):
+            d = abs(cx - obj.location.x) + abs(cy - obj.location.y)
+            max_range = _sight * getattr(obj, 'purpose_distance', 0.5)
+            if d <= max_range:
+                if obj.purpose not in _purpose_dists or d < _purpose_dists[obj.purpose]:
+                    _purpose_dists[obj.purpose] = d
     for p in TILE_PURPOSES:
         d = _purpose_dists.get(p)
         if d is not None:
-            obs.append(1.0 - min(d, _sight) / max(1, _sight))  # proximity: 1.0=on it, 0.0=at sight edge
+            obs.append(1.0 - min(d, _sight) / max(1, _sight))
         else:
-            obs.append(0.0)  # not visible
+            obs.append(0.0)
 
     # ==== SECTION 17: SPATIAL WALLS + OPENNESS (25) ====
     _dirs8 = [(0,-1),(0,1),(1,0),(-1,0),(1,-1),(-1,-1),(1,1),(-1,1)]

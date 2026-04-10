@@ -30,18 +30,21 @@ class GoalMixin:
             locs.pop(0)
 
     def update_spatial_memory(self, tick: int = 0):
-        """Scan all visible tiles for purpose and remember their locations.
+        """Scan visible tiles and objects for purpose, remember locations.
 
-        Creatures learn about purpose tiles they can see, not just the
-        tile they're standing on. This means seeing a market from 5 tiles
-        away is enough to remember where it is.
+        Sources of purpose (all contribute to spatial memory):
+        - Tiles: tile.purpose (full sight range)
+        - WorldObjects: structures, creatures, items with purpose set
+          (range = sight * obj.purpose_distance)
         """
         from classes.stats import Stat
         from classes.maps import MapKey
+        from classes.world_object import WorldObject
         map_name = getattr(self.current_map, 'name', '') or ''
         cx, cy, z = self.location.x, self.location.y, self.location.z
         sight = max(1, self.stats.active[Stat.SIGHT_RANGE]())
 
+        # Scan tiles at full sight range
         for dx in range(-sight, sight + 1):
             for dy in range(-sight, sight + 1):
                 if abs(dx) + abs(dy) > sight:
@@ -50,6 +53,16 @@ class GoalMixin:
                 tile = self.current_map.tiles.get(MapKey(tx, ty, z))
                 if tile and getattr(tile, 'purpose', None):
                     self.remember_location(tile.purpose, map_name, tx, ty, tick)
+
+        # Scan visible objects (structures, creatures, items) with purpose
+        for obj in WorldObject.on_map(self.current_map):
+            if obj is self or not getattr(obj, 'purpose', None):
+                continue
+            dist = abs(cx - obj.location.x) + abs(cy - obj.location.y)
+            max_range = sight * getattr(obj, 'purpose_distance', 0.5)
+            if dist <= max_range:
+                self.remember_location(obj.purpose, map_name,
+                                       obj.location.x, obj.location.y, tick)
 
     def set_goal(self, purpose: str, target_map: str, target_x: int, target_y: int,
                  tick: int = 0):

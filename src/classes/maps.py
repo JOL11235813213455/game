@@ -65,6 +65,15 @@ class Tile(Trackable):
         self.purpose_schedule: dict = {}
         self.nested_map: Map = map
         self.inventory = Inventory(items=items or [])
+        self.buried_inventory = Inventory()  # requires DIG action + shovel to access
+        self.buried_gold: int = 0            # buried gold (separate from surface gold)
+        self.gold: int = 0  # gold on the ground
+        self.tile_template = tile_template
+        self.linked_map    = linked_map
+        self.linked_location = (MapKey(linked_x, linked_y, linked_z or 0)
+                                if linked_x is not None else None)
+        self.link_auto     = link_auto
+        self.stat_mods     = stat_mods or {}
 
     @property
     def purpose(self) -> str | None:
@@ -96,15 +105,6 @@ class Tile(Trackable):
     @purpose.setter
     def purpose(self, value):
         self._purpose = value
-        self.buried_inventory = Inventory()  # requires DIG action + shovel to access
-        self.buried_gold: int = 0            # buried gold (separate from surface gold)
-        self.gold: int = 0  # gold on the ground
-        self.tile_template = tile_template
-        self.linked_map    = linked_map
-        self.linked_location = (MapKey(linked_x, linked_y, linked_z or 0)
-                                if linked_x is not None else None)
-        self.link_auto     = link_auto
-        self.stat_mods     = stat_mods or {}
 
 class Map(Trackable):
     def __init__(

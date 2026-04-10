@@ -15,6 +15,8 @@ class WorldObject(Trackable):
     z_index: int        = 0
     tile_scale: float   = 1.0
     collision: bool     = False
+    purpose: str        = None   # purpose this object projects (trading, crafting, etc.)
+    purpose_distance: float = 0.5  # 0-1 fraction of viewer's sight range
 
     # Per-map spatial index: map_id → WeakSet of WorldObjects on that map
     _by_map: dict[int, weakref.WeakSet] = defaultdict(weakref.WeakSet)

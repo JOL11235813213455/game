@@ -228,24 +228,35 @@ def make_reward_snapshot(creature) -> dict:
     except Exception:
         pass
 
-    # Distance to nearest visible tile of each purpose type
+    # Distance to nearest visible purpose source (tiles + objects)
     dist_to_purpose = {}
     try:
         sight = max(1, stats.active[Stat.SIGHT_RANGE]())
         cx, cy = creature.location.x, creature.location.y
         game_map = creature.current_map
         # Scan visible tiles for purpose
+        from classes.maps import MapKey as _MK
         for dx in range(-sight, sight + 1):
             for dy in range(-sight, sight + 1):
                 if abs(dx) + abs(dy) > sight:
                     continue
-                from classes.maps import MapKey as _MK
                 t = game_map.tiles.get(_MK(cx + dx, cy + dy, creature.location.z))
                 if t and getattr(t, 'purpose', None):
                     d = abs(dx) + abs(dy)
                     p = t.purpose
                     if p not in dist_to_purpose or d < dist_to_purpose[p]:
                         dist_to_purpose[p] = d
+        # Scan visible objects (structures, creatures, items) with purpose
+        from classes.world_object import WorldObject as _WO
+        for obj in _WO.on_map(game_map):
+            if obj is creature or not getattr(obj, 'purpose', None):
+                continue
+            d = abs(cx - obj.location.x) + abs(cy - obj.location.y)
+            max_range = sight * getattr(obj, 'purpose_distance', 0.5)
+            if d <= max_range:
+                p = obj.purpose
+                if p not in dist_to_purpose or d < dist_to_purpose[p]:
+                    dist_to_purpose[p] = d
     except Exception:
         pass
 
