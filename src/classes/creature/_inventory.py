@@ -84,6 +84,8 @@ class InventoryMixin:
         """Pick up an item from the current tile's inventory.
 
         Checks: item is on the tile, item is inventoriable, weight fits.
+        If the item is an ingredient for an auto_pop ItemFrame, the frame
+        is auto-created and the item placed inside it.
         Returns True if picked up.
         """
         tile = self.current_map.tiles.get(self.location)
@@ -95,7 +97,52 @@ class InventoryMixin:
             return False
         tile.inventory.items.remove(item)
         self.inventory.items.append(item)
+
+        # Auto-pop: check if this item triggers an ItemFrame creation
+        self._check_auto_pop(item)
+
         return True
+
+    def _check_auto_pop(self, item):
+        """If item is an ingredient for an auto_pop frame, create the frame."""
+        from classes.inventory import ItemFrame
+        try:
+            from data.db import ITEM_FRAMES
+        except (ImportError, AttributeError):
+            return  # ITEM_FRAMES not loaded yet
+
+        item_id = getattr(item, 'key', '') or getattr(item, 'name', '')
+
+        for frame_key, frame_data in ITEM_FRAMES.items():
+            if not frame_data.get('auto_pop'):
+                continue
+            recipe = frame_data.get('recipe', {})
+            if item_id not in recipe:
+                continue
+
+            # Check if we already have this frame in inventory
+            existing = None
+            for inv_item in self.inventory.items:
+                if isinstance(inv_item, ItemFrame) and inv_item.frame_key == frame_key:
+                    existing = inv_item
+                    break
+
+            if existing is None:
+                # Create the frame
+                existing = ItemFrame(
+                    frame_key=frame_key,
+                    recipe=dict(recipe),
+                    name=frame_data.get('name', f'Frame: {frame_key}'),
+                    description=frame_data.get('description', ''),
+                    auto_pop=True,
+                    composite_name=frame_data.get('composite_name'),
+                )
+                self.inventory.items.append(existing)
+
+            # Move item from inventory into the frame
+            if item in self.inventory.items:
+                self.inventory.items.remove(item)
+                existing.add_ingredient(item)
 
     def pickup_gold(self) -> int:
         """Pick up gold from the current tile. Returns amount picked up."""

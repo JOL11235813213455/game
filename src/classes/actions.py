@@ -75,6 +75,8 @@ class Action(IntEnum):
     # New actions
     DIG = 49
     PUSH = 50
+    CRAFT = 51
+    DISASSEMBLE = 52
 
 
 NUM_ACTIONS = len(Action)
@@ -93,6 +95,7 @@ ACTION_NAMES = {
     Action.CALL_BACKUP: 'call_backup', Action.SLEEP: 'sleep',
     Action.SET_TRAP: 'set_trap', Action.BLOCK_STANCE: 'block_stance',
     Action.DIG: 'dig', Action.PUSH: 'push',
+    Action.CRAFT: 'craft', Action.DISASSEMBLE: 'disassemble',
 }
 
 
@@ -337,5 +340,19 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
         dx = target.location.x - creature.location.x
         dy = target.location.y - creature.location.y
         return creature.push(target, dx, dy, cols, rows)
+
+    if action == Action.CRAFT:
+        return creature.craft()
+
+    if action == Action.DISASSEMBLE:
+        if item is None:
+            # Auto-select first disassemblable item
+            for inv_item in creature.inventory.items:
+                if getattr(inv_item, 'disassemblable', False):
+                    item = inv_item
+                    break
+            if item is None:
+                return {'success': False, 'reason': 'nothing_to_disassemble'}
+        return creature.disassemble(item)
 
     return {'success': False, 'reason': 'unknown_action'}

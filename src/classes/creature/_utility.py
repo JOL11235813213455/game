@@ -354,3 +354,92 @@ class UtilityMixin:
         target.record_interaction(self, -3.0)
 
         return result
+
+    def craft(self) -> dict:
+        """Attempt to complete the first ready ItemFrame in inventory.
+
+        Returns dict with success and the crafted item if any.
+        """
+        from classes.inventory import ItemFrame
+
+        result = {'success': False}
+
+        for inv_item in self.inventory.items:
+            if isinstance(inv_item, ItemFrame) and inv_item.is_complete:
+                output = inv_item.try_complete(self)
+                if output is not None:
+                    result['success'] = True
+                    result['crafted'] = output
+                    result['frame_key'] = inv_item.frame_key
+                    return result
+
+        result['reason'] = 'no_complete_frame'
+        return result
+
+    def disassemble(self, item) -> dict:
+        """Break a disassemblable item back into its recipe ingredients.
+
+        Creates an ItemFrame and populates it with ingredient copies.
+        The original item is destroyed.
+        """
+        from classes.inventory import ItemFrame
+
+        result = {'success': False}
+
+        if not getattr(item, 'disassemblable', False):
+            result['reason'] = 'not_disassemblable'
+            return result
+
+        if item not in self.inventory.items:
+            result['reason'] = 'not_in_inventory'
+            return result
+
+        # Look up which frame produces this item
+        try:
+            from data.db import ITEM_FRAMES
+        except (ImportError, AttributeError):
+            result['reason'] = 'no_frame_data'
+            return result
+
+        frame_data = None
+        item_name = getattr(item, 'key', '') or getattr(item, 'name', '')
+        for fk, fd in ITEM_FRAMES.items():
+            if fd.get('output_item_key') == item_name:
+                frame_data = fd
+                frame_data['key'] = fk
+                break
+
+        if frame_data is None:
+            result['reason'] = 'no_matching_frame'
+            return result
+
+        # Destroy the item
+        self.inventory.items.remove(item)
+
+        # Create an empty frame with the recipe
+        frame = ItemFrame(
+            frame_key=frame_data['key'],
+            recipe=dict(frame_data.get('recipe', {})),
+            name=frame_data.get('name', ''),
+            description=frame_data.get('description', ''),
+        )
+        self.inventory.items.append(frame)
+
+        # Create ingredient items from the recipe and add to frame
+        # (ingredients are basic copies — quality/stats are lost on disassembly)
+        try:
+            from data.db import ITEMS as DB_ITEMS
+            for ingredient_key, qty in frame_data.get('recipe', {}).items():
+                template = DB_ITEMS.get(ingredient_key)
+                if template:
+                    import copy
+                    for _ in range(qty):
+                        ing = copy.deepcopy(template)
+                        frame.add_ingredient(ing)
+        except (ImportError, AttributeError):
+            pass
+
+        result['success'] = True
+        result['frame_key'] = frame_data['key']
+        result['parts'] = len(frame.ingredients.items)
+        return result
