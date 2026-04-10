@@ -893,34 +893,45 @@ def seed():
            mappo=30000, es_gens=15, es_vars=30, es_steps=1500, ppo=80000,
            resume=4)
 
-    # Stage 6: Combat & Social
-    _stage(6, 'Combat & Social',
-           'Combat targets and social actions reward signals turn on. '
-           'Reputation and ally counts begin to matter. Reproduction still off '
-           'so the population stays static.',
+    # Stage 6: Trade & Social — reputation, allies, talking
+    # Combat stays OFF: peaceful exchange + social interaction first.
+    # The reputation and allies signals are what reward TALK / DECEIVE /
+    # INTIMIDATE / SHARE_RUMOR; failed_actions / fatigue / crowding are
+    # the shared penalty signals that always make sense once the world
+    # has consequences.
+    _stage(6, 'Trade & Social',
+           'Social actions and reputation signals turn on. Trading is now '
+           'embedded in a relationship context — friends trade cheaper, '
+           'enemies refuse. Combat stays disabled so creatures cannot '
+           'shortcut social problems with violence yet.',
            {'exploration': 0.2, 'hp': 0.5,
             'gold': 0.5, 'inventory': 0.5,
             'hunger': 0.7,
-            'wage': 0.5, 'trade': 0.7,
+            'wage': 0.5, 'trade': 1.0,
             'goal_progress': 0.5, 'goal_completed': 1.0,
             'purpose_proximity': 0.5,
-            'kills': 1.0, 'reputation': 1.0, 'allies': 0.5,
+            'reputation': 1.0, 'allies': 1.0,
             'failed_actions': 1.0, 'fatigue': 1.0, 'crowding': 1.0},
-           hunger=True, combat=True, gestation=False,
+           hunger=True, combat=False, gestation=False,
            mappo=30000, es_gens=10, es_vars=30, es_steps=1500, ppo=80000,
            resume=5)
 
-    # Stage 7: Lifecycle — reproduction and population dynamics
+    # Stage 7: Lifecycle — combat enabled AND reproduction enabled.
+    # The final stage turns on the two remaining big mechanics together:
+    # combat (kills, the final way creatures can resolve conflict) and
+    # reproduction (PAIR + gestation, the population dynamic). Every
+    # mechanic in the game is active here.
     _stage(7, 'Lifecycle',
-           'PAIR action and gestation enabled. Reproduction reward via life_goals. '
-           'Final stage — every mechanic active.',
+           'Combat targets and reproduction both turn on. PAIR action and '
+           'gestation enabled. Reproduction reward via life_goals; combat '
+           'reward via kills. Final stage — every mechanic active.',
            {'exploration': 0.2, 'hp': 0.5,
             'gold': 0.5, 'inventory': 0.5,
             'hunger': 0.7,
             'wage': 0.5, 'trade': 0.7,
             'goal_progress': 0.5, 'goal_completed': 1.0,
             'purpose_proximity': 0.5,
-            'kills': 0.7, 'reputation': 1.0, 'allies': 0.7,
+            'kills': 1.0, 'reputation': 1.0, 'allies': 0.7,
             'failed_actions': 1.0, 'fatigue': 1.0, 'crowding': 1.0,
             'life_goals': 1.0, 'piety': 0.5, 'quests': 0.5, 'xp': 0.5},
            hunger=True, combat=True, gestation=True,
@@ -948,7 +959,7 @@ def seed():
     print('  1 tool (shovel)')
     print('  7 jobs (farmer, miner, crafter, trader, hunter, healer, guard)')
     print('  9 processing recipes (bake, cook, jam, roast, dry, stew, smelt×2, charcoal)')
-    print('  7 curriculum stages (wander -> forage -> eat -> harvest -> trade -> combat -> lifecycle)')
+    print('  7 curriculum stages (wander -> forage -> eat -> harvest -> trade -> trade+social -> lifecycle)')
 
 
 if __name__ == '__main__':
