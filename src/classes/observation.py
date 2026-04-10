@@ -11,7 +11,7 @@ import math
 from classes.stats import Stat, BASE_STATS, DERIVED_STATS
 from classes.maps import MapKey
 
-MAX_ENGAGED = 6       # engaged creature slots
+MAX_ENGAGED = 10      # persistent perception slots for top visible creatures
 MAX_TILE_ITEMS = 3    # items on current tile to detail
 
 # Derived stat list in stable order for consistent indexing
@@ -44,7 +44,7 @@ _SECTION_SIZES = {
     'reward_signals': 17,
 }
 # Per-engaged and identity are variable (species/deity count)
-PER_ENGAGED_SIZE = 45
+PER_ENGAGED_SIZE = 51  # grew from 45: 4 placeholder zeros replaced + 6 new fields
 IDENTITY_BASE_SIZE = 14  # before species one-hot + deity
 
 
@@ -850,72 +850,151 @@ def build_observation(creature, cols: int, rows: int,
     else:
         obs.extend([0.0, 0.0])
 
-    # ==== SECTION 22: PER-ENGAGED CREATURE (45 × 6 = 270) ====
-    engaged = visible[:MAX_ENGAGED]
-    for idx in range(MAX_ENGAGED):
-        if idx < len(engaged):
-            dist, other = engaged[idx]
-            dx = other.location.x - cx
-            dy = other.location.y - cy
-            mag = max(1, abs(dx) + abs(dy))
-            rel = creature.relationships.get(other.uid)
-            other_rel = other.relationships.get(creature.uid)
-
-            obs.append(dist / max(1, sight))
-            obs.append(dx / mag)
-            obs.append(dy / mag)
-            obs.append(_clamp(rel[0] / 20.0) if rel else 0.0)
-            obs.append(_clamp(other_rel[0] / 20.0) if other_rel else 0.0)
-            obs.append(rel[1] / (rel[1] + 5) if rel else 0.0)
-            obs.append(1.0 / (1 + rel[1]) if rel else 1.0)
-            obs.append(_clamp(creature.rumor_opinion(other.uid, 0) / 10.0))
-            other_hp = other.stats.active[Stat.HP_CURR]() / max(1, other.stats.active[Stat.HP_MAX]())
-            obs.append(other_hp)
-            obs.append(1.0 if other.equipment else 0.0)
-            obs.append(1.0 if other.species == creature.species else 0.0)
-            obs.append(1.0 if other.deity == creature.deity and creature.deity else 0.0)
-            obs.append(1.0 if creature.deity and other.deity and
-                       creature.deity != other.deity else 0.0)  # opposed (simplified)
-            obs.append(1.0 if other.sex == 'male' else 0.0)
-            obs.append(1.0 if other.sex == 'female' else 0.0)
-            obs.append(1.0 if other.is_child else 0.0)
-            obs.append(1.0 if other.uid == getattr(creature, 'mother_uid', None)
-                       or other.uid == getattr(creature, 'father_uid', None) else 0.0)
-            obs.append(1.0 if getattr(other, 'mother_uid', None) == creature.uid
-                       or getattr(other, 'father_uid', None) == creature.uid else 0.0)
-            obs.append(1.0 if other.uid == creature.partner_uid else 0.0)
-            obs.append(1.0 if other.is_pregnant else 0.0)
-            obs.append(1.0 if other.is_abomination else 0.0)
-            obs.append(1.0 if getattr(other, 'is_sleeping', False) else 0.0)
-            obs.append(1.0 if getattr(other, 'is_guarding', False) else 0.0)
-            obs.append(1.0 if getattr(other, 'is_blocking', False) else 0.0)
-            obs.append(_ln(creature.debt_owed_to(other.uid, 0) + 1) / 5.0
-                       if hasattr(creature, 'debt_owed_to') else 0.0)
-            obs.append(_ln(other.debt_owed_to(creature.uid, 0) + 1) / 5.0
-                       if hasattr(other, 'debt_owed_to') else 0.0)
-            for sz in SIZE_CATEGORIES:
-                obs.append(1.0 if other.size == sz else 0.0)
-            obs.append(other.age / max(1, creature.OLD_MIN))
-            obs.append(1.0 if other_hp < 0.5 else 0.0)
-            obs.append(1.0 if other_hp < 0.2 else 0.0)
-            obs.append(1.0 if len(other.equipment) > 3 else 0.0)  # appears_wealthy
-            obs.append(1.0 if len(other.equipment) <= 1 else 0.0)  # appears_poor
-            # Could kill estimates
-            obs.append(0.0)  # could_kill_me (expensive)
-            obs.append(0.0)  # i_could_kill_them (expensive)
-            obs.append(0.0)  # fleeing_from_me (need last-tick tracking)
-            obs.append(0.0)  # approaching_me (need tracking)
-            other_allies = sum(1 for c in v_creatures
-                               if other.relationships.get(c.uid) and other.relationships[c.uid][0] > 5)
-            obs.append(1.0 if other_allies > 0 else 0.0)
-            obs.append(other_allies / 5.0)
-            obs.append(creature.desirability(other, creature)
-                       if hasattr(creature, 'desirability') else 0.0)
-            obs.append(1.0 if (other.sex != creature.sex and other.is_adult
-                               and not other.is_pregnant
-                               and other.species == creature.species) else 0.0)
-        else:
+    # ==== SECTION 22: PER-SLOT CREATURE (51 x 10 = 510) ====
+    # Persistent-slot design: each of the 10 slots holds a specific
+    # creature uid across ticks. When a creature leaves visibility
+    # their slot clears to zeros; when they return (or a new creature
+    # arrives) the first empty slot is filled. This gives the NN a
+    # stable per-creature signal the whole time that creature is in
+    # sight, instead of a scrambled closest-sorted list.
+    #
+    # Size numerology per slot:
+    #   base fields that were already there (kept): ~41
+    #   replaced placeholder zeros with real math (same size): 4
+    #   NEW fields added: 6
+    #     - relative_size (my size units / their size units)
+    #     - threat_them_to_me (valuation-style)
+    #     - threat_me_to_them
+    #     - approaching (1 if they moved toward me last tick)
+    #     - fleeing (1 if they moved away)
+    #     - slot_occupied (1 if this slot has a creature, else 0)
+    #   Total per slot: 51. Total section: 510.
+    from classes.creature import SIZE_UNITS as _SIZE_UNITS
+    slot_entries = creature.update_perception_slots(visible)
+    # Keep a quick lookup of current positions so we can update the
+    # last-seen table AFTER we've computed approaching/fleeing.
+    new_seen: dict = {}
+    for slot_idx, other, dist in slot_entries:
+        if other is None:
             obs.extend([0.0] * PER_ENGAGED_SIZE)
+            continue
+
+        dx = other.location.x - cx
+        dy = other.location.y - cy
+        mag = max(1, abs(dx) + abs(dy))
+        rel = creature.relationships.get(other.uid)
+        other_rel = other.relationships.get(creature.uid)
+
+        obs.append(dist / max(1, sight))
+        obs.append(dx / mag)
+        obs.append(dy / mag)
+        obs.append(_clamp(rel[0] / 20.0) if rel else 0.0)
+        obs.append(_clamp(other_rel[0] / 20.0) if other_rel else 0.0)
+        obs.append(rel[1] / (rel[1] + 5) if rel else 0.0)
+        obs.append(1.0 / (1 + rel[1]) if rel else 1.0)
+        obs.append(_clamp(creature.rumor_opinion(other.uid, 0) / 10.0))
+        other_hp = other.stats.active[Stat.HP_CURR]() / max(1, other.stats.active[Stat.HP_MAX]())
+        obs.append(other_hp)
+        obs.append(1.0 if other.equipment else 0.0)
+        obs.append(1.0 if other.species == creature.species else 0.0)
+        obs.append(1.0 if other.deity == creature.deity and creature.deity else 0.0)
+        obs.append(1.0 if creature.deity and other.deity and
+                   creature.deity != other.deity else 0.0)  # opposed (simplified)
+        obs.append(1.0 if other.sex == 'male' else 0.0)
+        obs.append(1.0 if other.sex == 'female' else 0.0)
+        obs.append(1.0 if other.is_child else 0.0)
+        obs.append(1.0 if other.uid == getattr(creature, 'mother_uid', None)
+                   or other.uid == getattr(creature, 'father_uid', None) else 0.0)
+        obs.append(1.0 if getattr(other, 'mother_uid', None) == creature.uid
+                   or getattr(other, 'father_uid', None) == creature.uid else 0.0)
+        obs.append(1.0 if other.uid == creature.partner_uid else 0.0)
+        obs.append(1.0 if other.is_pregnant else 0.0)
+        obs.append(1.0 if other.is_abomination else 0.0)
+        obs.append(1.0 if getattr(other, 'is_sleeping', False) else 0.0)
+        obs.append(1.0 if getattr(other, 'is_guarding', False) else 0.0)
+        obs.append(1.0 if getattr(other, 'is_blocking', False) else 0.0)
+        obs.append(_ln(creature.debt_owed_to(other.uid, 0) + 1) / 5.0
+                   if hasattr(creature, 'debt_owed_to') else 0.0)
+        obs.append(_ln(other.debt_owed_to(creature.uid, 0) + 1) / 5.0
+                   if hasattr(other, 'debt_owed_to') else 0.0)
+        for sz in SIZE_CATEGORIES:
+            obs.append(1.0 if other.size == sz else 0.0)
+        obs.append(other.age / max(1, creature.OLD_MIN))
+        obs.append(1.0 if other_hp < 0.5 else 0.0)
+        obs.append(1.0 if other_hp < 0.2 else 0.0)
+        obs.append(1.0 if len(other.equipment) > 3 else 0.0)  # appears_wealthy
+        obs.append(1.0 if len(other.equipment) <= 1 else 0.0)  # appears_poor
+
+        # --- Real computations replacing the old placeholder zeros ---
+        # Threat me<->them: use the creature helper that accounts for
+        # weapon, damage, armor, and expected hits.
+        my_hp = s[Stat.HP_CURR]()
+        their_hp = other.stats.active[Stat.HP_CURR]()
+        threat_to_me = creature._threat_score_against(other)
+        threat_to_them = other._threat_score_against(creature)
+        # Could-kill: normalize against the target's current HP
+        obs.append(_clamp(threat_to_me / max(1, my_hp) / 2))       # could_kill_me
+        obs.append(_clamp(threat_to_them / max(1, their_hp) / 2))  # i_could_kill_them
+
+        # Approaching/fleeing: compare current position to last-seen
+        last = creature._last_seen_positions.get(other.uid)
+        if last is not None:
+            last_dist = abs(cx - last[0]) + abs(cy - last[1])
+            if dist < last_dist:
+                approaching = 1.0
+                fleeing = 0.0
+            elif dist > last_dist:
+                approaching = 0.0
+                fleeing = 1.0
+            else:
+                approaching = 0.0
+                fleeing = 0.0
+        else:
+            approaching = 0.0
+            fleeing = 0.0
+        obs.append(fleeing)     # fleeing_from_me
+        obs.append(approaching)  # approaching_me
+
+        other_allies = sum(1 for c in v_creatures
+                           if other.relationships.get(c.uid) and other.relationships[c.uid][0] > 5)
+        obs.append(1.0 if other_allies > 0 else 0.0)
+        obs.append(other_allies / 5.0)
+        obs.append(creature.desirability(other, creature)
+                   if hasattr(creature, 'desirability') else 0.0)
+        obs.append(1.0 if (other.sex != creature.sex and other.is_adult
+                           and not other.is_pregnant
+                           and other.species == creature.species) else 0.0)
+
+        # --- NEW fields ---
+        # Relative size: ratio of my size_units to theirs. >1 means I
+        # am bigger. Clamped for stability.
+        my_size_u = _SIZE_UNITS.get(creature.size, 4)
+        their_size_u = _SIZE_UNITS.get(other.size, 4)
+        obs.append(_clamp(my_size_u / max(1, their_size_u) / 2.0))
+        # Threat scores (raw, clamped, so the NN sees both the
+        # ratio-form "could_kill" floats and the raw "how dangerous"
+        # floats — different downstream neurons may care about
+        # different framings).
+        obs.append(_clamp(threat_to_me / 20.0))
+        obs.append(_clamp(threat_to_them / 20.0))
+        # Approaching/fleeing are already in the placeholder slots
+        # above — here we'd add "direction alignment" or similar
+        # but keeping to 6 new fields, so for now emit explicit
+        # "known-hostile" and "known-ally" flags that correspond to
+        # fast decision gating.
+        obs.append(1.0 if (rel and rel[0] < -5) else 0.0)  # known_hostile
+        obs.append(1.0 if (rel and rel[0] > 5) else 0.0)   # known_ally
+        # Slot occupied flag — lets the NN distinguish "empty slot"
+        # zeros from "slotted creature with all-zero signals" (which
+        # shouldn't happen but gives the NN a definitive marker).
+        obs.append(1.0)
+
+        # Update last-seen table for next tick's approaching/fleeing
+        new_seen[other.uid] = (other.location.x, other.location.y)
+
+    # Replace the last-seen cache with only currently-slotted creatures
+    # (anyone not seen this tick shouldn't influence next tick's delta)
+    creature._last_seen_positions = new_seen
 
     # ==== SECTION 23: WORLD / TIME (13) ====
     if game_clock:

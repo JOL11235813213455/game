@@ -174,6 +174,16 @@ class Creature(
         self._perception_cache_tick: int = -1
         self._cached_visible: list = []   # list of (distance, creature)
         self._cached_heard: list = []     # list of (distance, creature)
+        # Persistent perception slots: a fixed-size list of creature
+        # uids that the NN sees as "the creatures I'm tracking right
+        # now." Stable across ticks — when someone leaves visibility
+        # their slot clears and the next new visible creature takes
+        # the empty slot. This gives the NN stable per-creature
+        # signals that don't scramble on every tick.
+        self._perception_slots: list = [None] * 10  # 10 slots
+        # Cache of (uid -> last-seen position) used to compute
+        # approaching/fleeing flags in the next perception pass.
+        self._last_seen_positions: dict = {}
 
         # Build Stats from species defaults + overrides
         species_stats = {k: v for k, v in species_data.items() if isinstance(k, Stat)}
@@ -277,6 +287,88 @@ class Creature(
     #   visible: (distance, other_creature) sorted by ascending distance
     #   heard:   (distance, other_creature) creatures within hearing
     #            range but NOT within sight range
+
+    def _threat_score_against(self, other) -> float:
+        """Estimate how much damage ``other`` could do to self in a fight.
+
+        Compact formula: their effective attack power minus my armor,
+        scaled by how many hits they could land before I regen.
+        Returns a float in roughly 0..20 range where 0 is "harmless"
+        and 20 is "could kill me this turn."
+        """
+        from classes.stats import Stat
+        their_melee = other.stats.active[Stat.MELEE_DMG]()
+        their_weapon = 0
+        try:
+            from classes.inventory import Weapon, Slot
+            w = other.equipment.get(Slot.HAND_R) or other.equipment.get(Slot.HAND_L)
+            if w and isinstance(w, Weapon):
+                their_weapon = getattr(w, 'damage', 0)
+        except Exception:
+            pass
+        my_armor = self.stats.active[Stat.ARMOR]()
+        per_hit = max(0, their_melee + their_weapon - my_armor)
+        # Rough approximation: ~5 hits before I can act defensively
+        return float(per_hit * 5)
+
+    def update_perception_slots(self, visible: list) -> list:
+        """Update the 10 persistent perception slots from a visible list.
+
+        ``visible`` is [(distance, creature), ...] as returned by
+        ``get_perception``. Slots are updated as follows:
+
+          1. Any slot whose creature is no longer in ``visible`` is
+             cleared to None. The slot index is NOT reused by another
+             creature this tick — leaving it empty is a signal to the
+             NN that that specific creature vanished.
+          2. Creatures already in slots keep their slot index.
+          3. New visible creatures (not in any slot) take the first
+             empty slot, in closest-first order.
+          4. If every slot is full and a new creature appears that's
+             closer than the currently-slotted farthest, we do NOT
+             evict. Slots are earned by arriving first. This keeps
+             signals stable — a new-but-closer arrival is captured
+             by the "rest of crowd" summary, not by kicking out a
+             known creature.
+
+        Returns a list of (slot_index, creature_or_None, distance)
+        triples where distance is None for empty slots. Length == 10.
+        """
+        visible_uids = {c.uid for _, c in visible}
+        visible_by_uid = {c.uid: (d, c) for d, c in visible}
+
+        # Pass 1: clear slots for creatures no longer visible
+        for i, uid in enumerate(self._perception_slots):
+            if uid is not None and uid not in visible_uids:
+                self._perception_slots[i] = None
+
+        # Pass 2: assign new visible creatures to empty slots in
+        # closest-first order. Creatures already slotted keep their
+        # position automatically.
+        slotted = {uid for uid in self._perception_slots if uid is not None}
+        new_arrivals = [(d, c) for d, c in visible if c.uid not in slotted]
+        for d, c in new_arrivals:
+            # Find first empty slot
+            for i, uid in enumerate(self._perception_slots):
+                if uid is None:
+                    self._perception_slots[i] = c.uid
+                    break
+            # If no empty slot, skip — creature goes to "rest of crowd"
+
+        # Pass 3: build the return list
+        result = []
+        for i, uid in enumerate(self._perception_slots):
+            if uid is None:
+                result.append((i, None, None))
+            else:
+                entry = visible_by_uid.get(uid)
+                if entry is None:
+                    # Shouldn't happen but be defensive
+                    result.append((i, None, None))
+                else:
+                    d, c = entry
+                    result.append((i, c, d))
+        return result
 
     def get_perception(self, tick: int) -> tuple[list, list]:
         """Return (visible, heard_only) lists for this creature at ``tick``.
