@@ -1590,7 +1590,7 @@ m44 = make_map(cols=10, rows=10)
 actor = make_creature(m44, x=5, y=5, stats={Stat.STR: 14, Stat.AGL: 12}, name='Actor')
 dummy = make_creature(m44, x=6, y=5, stats={Stat.VIT: 12, Stat.PER: 10, Stat.LVL: 3}, name='Dummy')
 
-check(f"NUM_ACTIONS = {NUM_ACTIONS}", NUM_ACTIONS == 49)
+check(f"NUM_ACTIONS = {NUM_ACTIONS}", NUM_ACTIONS == 53)
 
 # Move south via dispatch (east is blocked by dummy at 6,5)
 ctx = {'cols': 10, 'rows': 10}
