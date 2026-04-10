@@ -3827,6 +3827,123 @@ check("customer received ingot from trade",
           for i in customer.inventory.items))
 
 # ==========================================================================
+# Curriculum: reward mask + env toggles + stage loader
+# ==========================================================================
+print("\n--- Curriculum tests ---")
+
+# --- Reward mask: signal_scales kwarg ---
+from classes.reward import compute_reward, make_reward_snapshot
+
+cm = make_map(8, 8)
+ck = make_creature(cm, x=2, y=2, name='CurriculumProbe',
+                    stats={Stat.STR: 10, Stat.VIT: 10, Stat.AGL: 10,
+                           Stat.PER: 10, Stat.INT: 10, Stat.CHR: 10, Stat.LCK: 10})
+prev_snap = make_reward_snapshot(ck)
+# Force a delta on inv_value so the inventory signal fires
+from classes.inventory import Stackable as _S
+ck.inventory.items.append(_S(name='ProbeItem', value=10.0, quantity=1))
+curr_snap = make_reward_snapshot(ck)
+
+# No mask: legacy behavior, all signals contribute
+total_legacy, signals_legacy = compute_reward(
+    ck, prev_snap, curr_snap, breakdown=True)
+check("legacy compute_reward returns total != 0",
+      abs(total_legacy) > 0)
+
+# Mask with only exploration (no exploration delta -> total=0)
+total_only_explore, signals_explore = compute_reward(
+    ck, prev_snap, curr_snap, breakdown=True,
+    signal_scales={'exploration': 1.0})
+check("masked reward silences inventory signal",
+      abs(signals_explore.get('inventory', 0)) < 0.001)
+check("masked reward total is much smaller than legacy",
+      abs(total_only_explore) < abs(total_legacy))
+
+# Mask with inventory at 0.5 — signal scaled
+total_inv_half, signals_inv_half = compute_reward(
+    ck, prev_snap, curr_snap, breakdown=True,
+    signal_scales={'inventory': 0.5})
+inv_full = signals_legacy.get('inventory', 0)
+inv_half = signals_inv_half.get('inventory', 0)
+if abs(inv_full) > 0.001:
+    check(f"inventory scaled to ~half ({inv_half:.3f} vs {inv_full:.3f})",
+          abs(inv_half - inv_full * 0.5) < 0.001)
+
+# --- Env toggles: hunger_drain_enabled=False keeps creatures full ---
+# Build a Simulation directly with the toggle
+from editor.simulation.headless import Simulation
+no_hunger_arena = {
+    'map': make_map(5, 5),
+    'creatures': [],
+    'cols': 5, 'rows': 5,
+}
+nh_creature = make_creature(no_hunger_arena['map'], x=2, y=2, name='NoHungerProbe')
+nh_creature.hunger = 0.5
+no_hunger_arena['creatures'] = [nh_creature]
+
+nh_sim = Simulation(no_hunger_arena, hunger_drain_enabled=False)
+check("hunger_drain_enabled=False sets creature._hunger_drain to 0",
+      nh_creature._hunger_drain == 0.0)
+check("Simulation.hunger_drain_enabled flag stored",
+      nh_sim.hunger_drain_enabled is False)
+
+# Run a few hundred ticks — hunger should NOT drop
+initial_h = nh_creature.hunger
+for _ in range(200):
+    nh_sim.step()
+check(f"hunger did not drop with drain disabled "
+      f"(start={initial_h:.3f}, end={nh_creature.hunger:.3f})",
+      nh_creature.hunger >= initial_h - 0.001)
+
+# --- Combat toggle: dispatch short-circuits MELEE_ATTACK ---
+from classes.actions import dispatch as _dispatch, Action as _A
+combat_off_arena = {
+    'map': make_map(5, 5),
+    'creatures': [],
+    'cols': 5, 'rows': 5,
+}
+attacker = make_creature(combat_off_arena['map'], x=2, y=2, name='Attacker',
+                          stats={Stat.STR: 16})
+victim = make_creature(combat_off_arena['map'], x=3, y=2, name='Victim',
+                        stats={Stat.VIT: 12})
+combat_off_arena['creatures'] = [attacker, victim]
+co_sim = Simulation(combat_off_arena, combat_enabled=False)
+check("Simulation.combat_enabled=False flag stored",
+      co_sim.combat_enabled is False)
+hp_before = victim.stats.active[Stat.HP_CURR]()
+result = _dispatch(attacker, _A.MELEE_ATTACK,
+                    {'cols': 5, 'rows': 5,
+                     'target': victim, 'now': 0,
+                     'combat_enabled': False})
+check("MELEE_ATTACK with combat_enabled=False fails fast",
+      not result.get('success'))
+check("MELEE_ATTACK reason is combat_disabled",
+      result.get('reason') == 'combat_disabled')
+hp_after = victim.stats.active[Stat.HP_CURR]()
+check("victim HP unchanged when combat disabled",
+      hp_after == hp_before)
+
+# --- Gestation toggle: lifecycle pass is a noop ---
+from classes.inventory import Egg as _Egg
+gest_off_arena = {
+    'map': make_map(5, 5),
+    'creatures': [],
+    'cols': 5, 'rows': 5,
+}
+mum = make_creature(gest_off_arena['map'], x=0, y=0, name='Mum',
+                     sex='female', age=25)
+fake_egg = _Egg()
+fake_egg.gestation_days = 25
+mum.inventory.items.append(fake_egg)
+gest_off_arena['creatures'] = [mum]
+go_sim = Simulation(gest_off_arena, gestation_enabled=False)
+check("Simulation.gestation_enabled=False stored",
+      go_sim.gestation_enabled is False)
+go_sim._tick_lifecycle_day()
+check("egg gestation_days unchanged when gestation disabled",
+      fake_egg.gestation_days == 25)
+
+# ==========================================================================
 # DB catalog tests — MUST BE LAST because the DB loader replaces
 # classes.recipes.PROCESSING_RECIPES with DB-sourced entries whose
 # ingredient names differ from the hardcoded defaults. Earlier tests
@@ -3946,12 +4063,14 @@ print("\n--- Birth chain tests ---")
 from classes.inventory import Egg
 
 # Build a simple two-creature scenario: adult male + adult fertile female,
-# adjacent, same species, neither pregnant.
+# adjacent, same species, neither pregnant. The male is overwhelmingly
+# stronger so force_pairing's d20 grapple contest is effectively
+# deterministic — otherwise the test is a coinflip and flakes.
 bm = make_map(8, 8)
 male = make_creature(bm, x=3, y=3, name='BirthMale', sex='male', age=25,
-                      stats={Stat.STR: 12, Stat.VIT: 12, Stat.CHR: 12})
+                      stats={Stat.STR: 20, Stat.AGL: 20, Stat.VIT: 14, Stat.CHR: 12})
 female = make_creature(bm, x=3, y=4, name='BirthFemale', sex='female', age=25,
-                        stats={Stat.STR: 10, Stat.VIT: 14, Stat.CHR: 12})
+                        stats={Stat.STR: 6, Stat.AGL: 6, Stat.VIT: 14, Stat.CHR: 12})
 # Strong sentiment so the proposal isn't refused on relationship grounds
 male.record_interaction(female, 8.0)
 female.record_interaction(male, 8.0)
@@ -3959,7 +4078,8 @@ female.record_interaction(male, 8.0)
 # Force a pairing (skips willingness contest)
 pair_result = male.force_pairing(female, now=0)
 check("force_pairing completed", pair_result is not None)
-check("female is pregnant after pairing", female.is_pregnant)
+check(f"female is pregnant after pairing (reason: {pair_result.get('reason', 'ok')})",
+      female.is_pregnant)
 
 # Egg should be in female's inventory and equal to her _pregnancy_egg
 preg_eggs = [i for i in female.inventory.items if isinstance(i, Egg)]

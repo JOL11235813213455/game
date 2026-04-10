@@ -32,12 +32,27 @@ class Simulation:
     4. Return per-creature results
     """
 
-    def __init__(self, arena: dict, tick_ms: int = 500):
+    def __init__(self, arena: dict, tick_ms: int = 500,
+                 hunger_drain_enabled: bool = True,
+                 combat_enabled: bool = True,
+                 gestation_enabled: bool = True):
         """Initialize simulation from an arena dict.
 
         Args:
             arena: dict from generate_arena() with map, creatures, cols, rows
             tick_ms: milliseconds per simulation step
+            hunger_drain_enabled: when False, every creature spawned in
+                this simulation has its hunger drain disabled and stays
+                at its initial hunger value indefinitely. Used by early
+                curriculum stages so creatures can learn to navigate
+                without starvation pressure.
+            combat_enabled: when False, MELEE_ATTACK / RANGED_ATTACK /
+                GRAPPLE actions short-circuit to a noop in dispatch.
+                Used by early curriculum stages so creatures cannot
+                kill each other.
+            gestation_enabled: when False, the daily lifecycle pass
+                skips egg gestation/hatching entirely. Used by stages
+                where reproduction is not yet active.
         """
         self.game_map = arena['map']
         self.creatures = list(arena['creatures'])
@@ -46,6 +61,14 @@ class Simulation:
         self.tick_ms = tick_ms
         self.now = 0
         self.step_count = 0
+
+        # Curriculum env toggles — applied to every spawned creature
+        self.hunger_drain_enabled = hunger_drain_enabled
+        self.combat_enabled = combat_enabled
+        self.gestation_enabled = gestation_enabled
+        if not hunger_drain_enabled:
+            for c in self.creatures:
+                c._hunger_drain = 0.0
 
         # World data for god system
         from classes.gods import WorldData
@@ -83,7 +106,13 @@ class Simulation:
         produce eggs (via :meth:`Creature.propose_pairing` →
         :meth:`Creature._execute_pairing`); this method makes those
         eggs eventually become living creatures.
+
+        Curriculum-gated: when ``self.gestation_enabled`` is False
+        (early stages), this method is a noop. Eggs that exist still
+        sit in inventories untouched.
         """
+        if not self.gestation_enabled:
+            return
         from classes.inventory import Egg
 
         # --- Phase 1: tick gestation on every egg in the world ---

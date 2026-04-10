@@ -812,6 +812,121 @@ def seed():
             'material_charcoal', 2, 'material',
             {'material_coal': 1}, stamina=1)
 
+    # --- Curriculum stages (RL training plan) ---
+    # Soft fade design: when a stage activates a new signal, older signals
+    # stay on at reduced strength to prevent catastrophic forgetting. Each
+    # stage's signal_scales dict is a SUPERSET of the previous stage's,
+    # with old signals dropped to ~0.3 of full strength.
+    def _stage(num, name, desc, signals, hunger, combat, gestation,
+               mappo, es_gens, es_vars, es_steps, ppo, lr=0.0003, ent=0.05,
+               resume=None):
+        con.execute(
+            'INSERT OR REPLACE INTO curriculum_stages '
+            '(stage_number, name, description, active_signals, signal_scales, '
+            'hunger_drain, combat_enabled, gestation_enabled, '
+            'mappo_steps, es_generations, es_variants, es_steps, ppo_steps, '
+            'learning_rate, ent_coef, resume_from_stage) '
+            'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+            (num, name, desc,
+             _json.dumps(list(signals.keys())),
+             _json.dumps(signals),
+             1 if hunger else 0, 1 if combat else 0, 1 if gestation else 0,
+             mappo, es_gens, es_vars, es_steps, ppo, lr, ent, resume)
+        )
+
+    # Stage 1: Wander — learn to move purposefully
+    _stage(1, 'Wander',
+           'Learn to move and explore. No hunger pressure, no combat targets, '
+           'no economy. Reward only for visiting new tiles and meeting other creatures.',
+           {'exploration': 1.0, 'hp': 0.5},
+           hunger=False, combat=False, gestation=False,
+           mappo=30000, es_gens=0, es_vars=20, es_steps=1000, ppo=30000)
+
+    # Stage 2: Forage — pick stuff up
+    _stage(2, 'Forage',
+           'Learn to pick things up. Surface gold and items reward inventory growth. '
+           'Still no hunger or combat — focus is purely on grab-and-go.',
+           {'exploration': 0.4, 'hp': 0.3,
+            'gold': 1.0, 'inventory': 1.0},
+           hunger=False, combat=False, gestation=False,
+           mappo=30000, es_gens=0, es_vars=20, es_steps=1000, ppo=50000,
+           resume=1)
+
+    # Stage 3: Eat — survive hunger
+    _stage(3, 'Eat',
+           'Hunger drain enabled. Reward eating food (raises hunger ratio). '
+           'Foraging skills carry over but now matter for survival.',
+           {'exploration': 0.3, 'hp': 0.3,
+            'gold': 0.5, 'inventory': 0.5,
+            'hunger': 1.0},
+           hunger=True, combat=False, gestation=False,
+           mappo=30000, es_gens=0, es_vars=20, es_steps=1000, ppo=80000,
+           resume=2)
+
+    # Stage 4: Harvest & Process — make goods
+    _stage(4, 'Harvest & Process',
+           'Reward HARVEST, PROCESS, and FARM via the goal/purpose system. '
+           'Wage signals from JOB action begin to fire. Trade still off — '
+           'creatures learn the production chain in isolation first.',
+           {'exploration': 0.2, 'hp': 0.3,
+            'gold': 0.5, 'inventory': 0.7,
+            'hunger': 0.7,
+            'wage': 1.0,
+            'goal_progress': 0.5, 'goal_completed': 1.0,
+            'purpose_proximity': 0.5},
+           hunger=True, combat=False, gestation=False,
+           mappo=30000, es_gens=0, es_vars=20, es_steps=1000, ppo=80000,
+           resume=3)
+
+    # Stage 5: Trade — exchange goods for gold
+    _stage(5, 'Trade',
+           'Trade surplus rewards turn on. Creatures with goods learn to convert '
+           'them into gold and vice versa. ES phase enabled here for the first '
+           'time — economic loop benefits from gradient-free search.',
+           {'exploration': 0.2, 'hp': 0.3,
+            'gold': 0.7, 'inventory': 0.7,
+            'hunger': 0.7,
+            'wage': 0.7, 'trade': 1.0,
+            'goal_progress': 0.5, 'goal_completed': 1.0,
+            'purpose_proximity': 0.5},
+           hunger=True, combat=False, gestation=False,
+           mappo=30000, es_gens=15, es_vars=30, es_steps=1500, ppo=80000,
+           resume=4)
+
+    # Stage 6: Combat & Social
+    _stage(6, 'Combat & Social',
+           'Combat targets and social actions reward signals turn on. '
+           'Reputation and ally counts begin to matter. Reproduction still off '
+           'so the population stays static.',
+           {'exploration': 0.2, 'hp': 0.5,
+            'gold': 0.5, 'inventory': 0.5,
+            'hunger': 0.7,
+            'wage': 0.5, 'trade': 0.7,
+            'goal_progress': 0.5, 'goal_completed': 1.0,
+            'purpose_proximity': 0.5,
+            'kills': 1.0, 'reputation': 1.0, 'allies': 0.5,
+            'failed_actions': 1.0, 'fatigue': 1.0, 'crowding': 1.0},
+           hunger=True, combat=True, gestation=False,
+           mappo=30000, es_gens=10, es_vars=30, es_steps=1500, ppo=80000,
+           resume=5)
+
+    # Stage 7: Lifecycle — reproduction and population dynamics
+    _stage(7, 'Lifecycle',
+           'PAIR action and gestation enabled. Reproduction reward via life_goals. '
+           'Final stage — every mechanic active.',
+           {'exploration': 0.2, 'hp': 0.5,
+            'gold': 0.5, 'inventory': 0.5,
+            'hunger': 0.7,
+            'wage': 0.5, 'trade': 0.7,
+            'goal_progress': 0.5, 'goal_completed': 1.0,
+            'purpose_proximity': 0.5,
+            'kills': 0.7, 'reputation': 1.0, 'allies': 0.7,
+            'failed_actions': 1.0, 'fatigue': 1.0, 'crowding': 1.0,
+            'life_goals': 1.0, 'piety': 0.5, 'quests': 0.5, 'xp': 0.5},
+           hunger=True, combat=True, gestation=True,
+           mappo=30000, es_gens=10, es_vars=30, es_steps=1500, ppo=80000,
+           resume=6)
+
     con.commit()
     con.close()
 
@@ -833,6 +948,7 @@ def seed():
     print('  1 tool (shovel)')
     print('  7 jobs (farmer, miner, crafter, trader, hunter, healer, guard)')
     print('  9 processing recipes (bake, cook, jam, roast, dry, stew, smelt×2, charcoal)')
+    print('  7 curriculum stages (wander -> forage -> eat -> harvest -> trade -> combat -> lifecycle)')
 
 
 if __name__ == '__main__':

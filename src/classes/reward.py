@@ -53,7 +53,8 @@ def _resolve_action_purpose(creature, action: int) -> str | None:
 
 def compute_reward(creature, prev: dict, curr: dict,
                    breakdown: bool = False,
-                   last_action: int = None) -> float | tuple[float, dict]:
+                   last_action: int = None,
+                   signal_scales: dict = None) -> float | tuple[float, dict]:
     """Compute reward for a single step.
 
     Args:
@@ -62,6 +63,12 @@ def compute_reward(creature, prev: dict, curr: dict,
         curr: current snapshot from make_reward_snapshot()
         breakdown: if True, also return per-signal dict
         last_action: action just performed (for purpose alignment bonus)
+        signal_scales: optional dict mapping signal name -> scale factor.
+            When provided, every computed signal is multiplied by its
+            scale BEFORE summing. Signals with no entry default to 0.0
+            (silenced). When None, every signal uses its hardcoded
+            default weight (legacy behavior). Used by the curriculum
+            runner to mask reward components per training stage.
 
     Returns:
         float reward value, or (float, dict) if breakdown=True
@@ -188,11 +195,23 @@ def compute_reward(creature, prev: dict, curr: dict,
             if action_purpose and action_purpose == creature.current_goal:
                 signals['goal_completed'] = 3.0
 
+    # Apply curriculum signal mask: scale (or silence) individual signals
+    # before summing. Signals without an entry are silenced (multiplied
+    # by 0). When signal_scales is None, all signals pass through
+    # unchanged (legacy behavior).
+    if signal_scales is not None:
+        for k in list(signals.keys()):
+            signals[k] = signals[k] * signal_scales.get(k, 0.0)
+
     total = sum(signals.values())
 
     # Purpose proximity: reward scales with distance to visible purpose tile
     # On the tile: reward^2. In sight: reward^(1+1/d). Out of sight: -0.25
-    if last_action is not None and total != 0:
+    # Also masked by signal_scales['purpose_proximity'] when curriculum
+    # masking is active.
+    pp_scale = (signal_scales.get('purpose_proximity', 0.0)
+                if signal_scales is not None else 1.0)
+    if last_action is not None and total != 0 and pp_scale > 0:
         action_purpose = _resolve_action_purpose(creature, last_action)
         if action_purpose:
             dist_to_purpose = curr.get('dist_to_purpose', {}).get(action_purpose)
@@ -202,16 +221,19 @@ def compute_reward(creature, prev: dict, curr: dict,
                 exponent = 1 + 1.0 / d
                 if total > 0:
                     boosted = total ** exponent
-                    signals['purpose_proximity'] = boosted - total
-                    total = boosted
+                    delta = (boosted - total) * pp_scale
+                    signals['purpose_proximity'] = delta
+                    total += delta
                 else:
                     # Negative reward — reduce penalty when near purpose tile
-                    signals['purpose_proximity'] = abs(total) * (1.0 / d) * 0.5
-                    total += signals['purpose_proximity']
+                    delta = abs(total) * (1.0 / d) * 0.5 * pp_scale
+                    signals['purpose_proximity'] = delta
+                    total += delta
             else:
                 # No matching purpose tile visible — slight penalty
-                signals['purpose_proximity'] = -0.25
-                total -= 0.25
+                delta = -0.25 * pp_scale
+                signals['purpose_proximity'] = delta
+                total += delta
 
     return (total, signals) if breakdown else total
 

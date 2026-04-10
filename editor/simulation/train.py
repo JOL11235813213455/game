@@ -327,7 +327,9 @@ def _creature_final_state(c) -> dict:
 
 def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
               arena_kwargs: dict = None, rollout_len: int = 4096,
-              sink=None, goal_net=None, goal_ppo=None) -> TorchCreatureNet:
+              sink=None, goal_net=None, goal_ppo=None,
+              signal_scales: dict = None,
+              sim_kwargs: dict = None) -> TorchCreatureNet:
     """Phase 1: Multi-agent PPO — all creatures share weights.
 
     If goal_net is provided, runs hierarchical goal selection every
@@ -345,8 +347,9 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
     GOAL_INTERVAL = 50  # re-evaluate goals every 50 action steps
 
     episode_rewards = []
+    sim_kwargs = sim_kwargs or {}
     arena = generate_arena(**arena_kwargs)
-    sim = Simulation(arena)
+    sim = Simulation(arena, **sim_kwargs)
 
     # Disable built-in behavior — training loop controls all actions
     for c in sim.creatures:
@@ -428,7 +431,8 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
                     break
 
             dispatch(c, action, {'cols': sim.cols, 'rows': sim.rows,
-                                 'target': target, 'now': sim.now})
+                                 'target': target, 'now': sim.now,
+                                 'combat_enabled': sim.combat_enabled})
             action_counts[action] = action_counts.get(action, 0) + 1
             trail_actions.append((step, action))
 
@@ -457,7 +461,8 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             curr_rew = make_reward_snapshot(c)
             if prev_rew:
                 reward, signals = compute_reward(c, prev_rew, curr_rew,
-                                                 breakdown=True, last_action=action)
+                                                 breakdown=True, last_action=action,
+                                                 signal_scales=signal_scales)
             else:
                 reward, signals = 0.0, {}
             sim._reward_snapshots[c.uid] = curr_rew
@@ -558,7 +563,7 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             total_reward = 0.0
             ep_steps = 0
             arena = generate_arena(**arena_kwargs)
-            sim = Simulation(arena)
+            sim = Simulation(arena, **sim_kwargs)
             for c in sim.creatures:
                 c.behavior = None
                 c.unregister_tick('behavior')
@@ -573,7 +578,8 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
 
 def run_es(net: TorchCreatureNet, generations: int = 50,
            variants: int = 50, steps_per_variant: int = 2000,
-           noise_scale: float = 0.02, arena_kwargs: dict = None) -> TorchCreatureNet:
+           noise_scale: float = 0.02, arena_kwargs: dict = None,
+           sim_kwargs: dict = None) -> TorchCreatureNet:
     """Phase 2: Evolutionary Strategies — diversify weights."""
     print(f'\n=== ES Phase ({generations} gens × {variants} variants) ===')
     arena_kwargs = arena_kwargs or {
@@ -583,6 +589,7 @@ def run_es(net: TorchCreatureNet, generations: int = 50,
                       'feral', 'impulsive', 'nearsighted', 'paranoid',
                       'amnesiac', 'greedy', 'zealot'],
     }
+    sim_kwargs = sim_kwargs or {}
 
     # Flatten weights for ES
     base_params = torch.nn.utils.parameters_to_vector(net.parameters()).detach().clone()
@@ -616,7 +623,7 @@ def run_es(net: TorchCreatureNet, generations: int = 50,
             np_net.load(tmp_path)
 
             arena = generate_arena(**arena_kwargs)
-            sim = Simulation(arena)
+            sim = Simulation(arena, **sim_kwargs)
             total_r = 0.0
             for _ in range(steps_per_variant):
                 results = sim.step()
@@ -677,7 +684,9 @@ def run_es(net: TorchCreatureNet, generations: int = 50,
 def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             checkpoint_dir: Path = None,
             arena_kwargs: dict = None, rollout_len: int = 2048,
-            sink=None, goal_net=None, goal_ppo=None) -> TorchCreatureNet:
+            sink=None, goal_net=None, goal_ppo=None,
+            signal_scales: dict = None,
+            sim_kwargs: dict = None) -> TorchCreatureNet:
     """Phase 3: Single-agent PPO against diverse opponents."""
     print(f'\n=== PPO Phase ({steps} steps) ===')
     arena_kwargs = arena_kwargs or {
@@ -700,8 +709,9 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
     print(f'  Opponent pool: {len(opponent_nets)} checkpoints + StatWeighted')
 
     episode_rewards = []
+    sim_kwargs = sim_kwargs or {}
     arena = generate_arena(**arena_kwargs)
-    sim = Simulation(arena)
+    sim = Simulation(arena, **sim_kwargs)
 
     agent = sim.creatures[0]
     agent.behavior = None
@@ -768,7 +778,8 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
                         break
 
             dispatch(agent, action, {'cols': sim.cols, 'rows': sim.rows,
-                                     'target': target, 'now': sim.now})
+                                     'target': target, 'now': sim.now,
+                                     'combat_enabled': sim.combat_enabled})
             ppo_action_counts[action] = ppo_action_counts.get(action, 0) + 1
             ppo_trail_actions.append((step, action))
 
@@ -792,7 +803,8 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
         last_act = action if agent.is_alive else None
         if prev_rew:
             reward, signals = compute_reward(agent, prev_rew, curr_rew,
-                                             breakdown=True, last_action=last_act)
+                                             breakdown=True, last_action=last_act,
+                                             signal_scales=signal_scales)
         else:
             reward, signals = 0.0, {}
         sim._reward_snapshots[agent.uid] = curr_rew
@@ -878,7 +890,7 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
 
             total_reward = 0.0
             arena = generate_arena(**arena_kwargs)
-            sim = Simulation(arena)
+            sim = Simulation(arena, **sim_kwargs)
             agent = sim.creatures[0]
             agent.behavior = None
             for c in sim.creatures[1:]:
@@ -898,7 +910,275 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
 
 
 # ---------------------------------------------------------------------------
-# Main Pipeline
+# Curriculum Pipeline — staged training
+# ---------------------------------------------------------------------------
+
+def _load_curriculum_stage(stage_number: int) -> dict:
+    """Load a curriculum stage row from the DB. Returns a normalized dict."""
+    import sqlite3, json as _json
+    con = sqlite3.connect(DB_PATH)
+    con.row_factory = sqlite3.Row
+    row = con.execute(
+        'SELECT * FROM curriculum_stages WHERE stage_number = ?',
+        (stage_number,)
+    ).fetchone()
+    con.close()
+    if row is None:
+        raise ValueError(f'No curriculum stage {stage_number} found in DB')
+    return {
+        'stage_number':     row['stage_number'],
+        'name':             row['name'],
+        'description':      row['description'],
+        'active_signals':   _json.loads(row['active_signals'] or '[]'),
+        'signal_scales':    _json.loads(row['signal_scales'] or '{}'),
+        'hunger_drain':     bool(row['hunger_drain']),
+        'combat_enabled':   bool(row['combat_enabled']),
+        'gestation_enabled': bool(row['gestation_enabled']),
+        'mappo_steps':      int(row['mappo_steps']),
+        'es_generations':   int(row['es_generations']),
+        'es_variants':      int(row['es_variants']),
+        'es_steps':         int(row['es_steps']),
+        'ppo_steps':        int(row['ppo_steps']),
+        'learning_rate':    float(row['learning_rate']),
+        'ent_coef':         float(row['ent_coef']),
+        'resume_from_stage': row['resume_from_stage'],
+    }
+
+
+def _list_curriculum_stages() -> list[dict]:
+    """Return all curriculum stages in order."""
+    import sqlite3
+    con = sqlite3.connect(DB_PATH)
+    con.row_factory = sqlite3.Row
+    rows = con.execute(
+        'SELECT stage_number FROM curriculum_stages ORDER BY stage_number'
+    ).fetchall()
+    con.close()
+    return [_load_curriculum_stage(r['stage_number']) for r in rows]
+
+
+def train_curriculum_stage(stage_number: int, model_name: str,
+                            arena_cols: int = 25, arena_rows: int = 25,
+                            num_creatures: int = 16,
+                            resume_override: str = None,
+                            seed: int = None) -> int:
+    """Run one curriculum stage and save the resulting model.
+
+    The stage's config (active signals, env toggles, step counts, lr,
+    entropy coefficient) is loaded from the curriculum_stages table.
+    Resume behavior:
+      * If ``resume_override`` is set (e.g. "model_name:5"), use that.
+      * Else if the stage has a ``resume_from_stage`` and a model with
+        that name+stage version exists in nn_models, resume from it.
+      * Else start fresh (TorchCreatureNet random init).
+
+    Saves the resulting model as ``<model_name>:<new_version>``. The
+    version number is whatever the next available is for that name —
+    we don't try to encode the stage in the version number, but the
+    notes column gets the stage label so the Models tab can show it.
+
+    Returns the saved version number.
+    """
+    global _writer, SAVE_DIR
+    from torch.utils.tensorboard import SummaryWriter
+
+    stage = _load_curriculum_stage(stage_number)
+    print(f'\n{"="*60}')
+    print(f'CURRICULUM STAGE {stage_number}: {stage["name"]}')
+    print(f'{"="*60}')
+    print(f'  {stage["description"]}')
+    print(f'  Active signals: {", ".join(stage["active_signals"])}')
+    print(f'  Env: hunger_drain={stage["hunger_drain"]} '
+          f'combat={stage["combat_enabled"]} gestation={stage["gestation_enabled"]}')
+    print(f'  Pipeline: MAPPO {stage["mappo_steps"]} -> '
+          f'ES {stage["es_generations"]}x{stage["es_variants"]}x{stage["es_steps"]} -> '
+          f'PPO {stage["ppo_steps"]}')
+
+    if seed is not None:
+        torch.manual_seed(seed)
+        np.random.seed(seed)
+        random.seed(seed)
+
+    run_tag = f'{model_name}_s{stage_number}_{time.strftime("%Y%m%d_%H%M%S")}'
+    SAVE_DIR = Path(__file__).parent.parent / 'models' / run_tag
+    SAVE_DIR.mkdir(parents=True, exist_ok=True)
+    _writer = SummaryWriter(log_dir=LOG_DIR / run_tag)
+
+    # Net + optimizer with stage-specific entropy coefficient
+    net = TorchCreatureNet()
+    parent_version = None
+
+    # Resume logic — explicit override > automatic previous-stage > fresh
+    resume_target = resume_override
+    if resume_target is None and stage['resume_from_stage'] is not None:
+        # Look up the latest version of this model name. We don't
+        # encode the stage in the version number; we just resume from
+        # whatever the previous run wrote, and trust the user to run
+        # stages in order.
+        try:
+            existing = [m for m in _list_models_from_db() if m['name'] == model_name]
+            if existing:
+                latest = max(m['version'] for m in existing)
+                resume_target = f'{model_name}:{latest}'
+        except Exception as e:
+            print(f'  (no auto-resume target: {e})')
+
+    if resume_target:
+        try:
+            parts = resume_target.split(':', 1)
+            rname = parts[0]
+            rver = int(parts[1]) if len(parts) > 1 and parts[1] else None
+            net, row_info = _load_model_from_db(net, rname, rver)
+            parent_version = row_info['version']
+            print(f'  Resumed from: {rname} v{parent_version}')
+        except Exception as e:
+            print(f'  Resume failed ({e}) — starting fresh')
+
+    ppo = PPO(net, lr=stage['learning_rate'], ent_coef=stage['ent_coef'])
+
+    # Goal net (same shape across stages — never collapses to a different size)
+    from editor.simulation.torch_net import TorchGoalNet
+    from classes.goal_net import GOAL_OBSERVATION_SIZE
+    goal_net = TorchGoalNet(input_size=GOAL_OBSERVATION_SIZE)
+    if resume_target and parent_version is not None:
+        try:
+            import sqlite3 as _sq, io as _io
+            _con = _sq.connect(DB_PATH)
+            _row = _con.execute(
+                'SELECT goal_weights FROM nn_models WHERE name=? AND version=?',
+                (resume_target.split(':')[0], parent_version)
+            ).fetchone()
+            _con.close()
+            if _row and _row[0]:
+                _gbuf = _io.BytesIO(_row[0])
+                goal_state = torch.load(_gbuf, weights_only=True)
+                goal_net.load_state_dict(goal_state, strict=False)
+                print(f'  Goal net resumed')
+        except Exception as e:
+            print(f'  Goal net: fresh init ({e})')
+    goal_ppo = PPO(goal_net, lr=stage['learning_rate'], ent_coef=stage['ent_coef'])
+
+    # Build sim_kwargs with stage env toggles
+    sim_kwargs = {
+        'hunger_drain_enabled': stage['hunger_drain'],
+        'combat_enabled':       stage['combat_enabled'],
+        'gestation_enabled':    stage['gestation_enabled'],
+    }
+
+    arena_kwargs = {
+        'cols': arena_cols, 'rows': arena_rows,
+        'num_creatures': num_creatures,
+        'mask_probability': 0.0,  # masks off during curriculum — keep things clean
+    }
+
+    pipeline_t0 = time.time()
+    signal_scales = stage['signal_scales']
+
+    # MAPPO
+    if stage['mappo_steps'] > 0:
+        mappo_t0 = time.time()
+        net = run_mappo(net, ppo, steps=stage['mappo_steps'],
+                        arena_kwargs=arena_kwargs,
+                        goal_net=goal_net, goal_ppo=goal_ppo,
+                        signal_scales=signal_scales,
+                        sim_kwargs=sim_kwargs)
+        net.export_to_numpy(SAVE_DIR / 'mappo.npz')
+        print(f'  MAPPO complete in {time.time() - mappo_t0:.0f}s')
+
+    # ES (skip if generations == 0)
+    if stage['es_generations'] > 0:
+        es_t0 = time.time()
+        net = run_es(net, generations=stage['es_generations'],
+                     variants=stage['es_variants'],
+                     steps_per_variant=stage['es_steps'],
+                     arena_kwargs=arena_kwargs,
+                     sim_kwargs=sim_kwargs)
+        print(f'  ES complete in {time.time() - es_t0:.0f}s')
+
+    # PPO
+    if stage['ppo_steps'] > 0:
+        ppo_t0 = time.time()
+        ppo = PPO(net, lr=stage['learning_rate'], ent_coef=stage['ent_coef'])
+        net = run_ppo(net, ppo, steps=stage['ppo_steps'],
+                      checkpoint_dir=SAVE_DIR,
+                      arena_kwargs=arena_kwargs,
+                      goal_net=goal_net, goal_ppo=goal_ppo,
+                      signal_scales=signal_scales,
+                      sim_kwargs=sim_kwargs)
+        print(f'  PPO complete in {time.time() - ppo_t0:.0f}s')
+
+    total_seconds = time.time() - pipeline_t0
+    training_params = {
+        'curriculum_stage': stage_number,
+        'stage_name': stage['name'],
+        'mappo_steps': stage['mappo_steps'],
+        'es_generations': stage['es_generations'],
+        'es_variants': stage['es_variants'],
+        'es_steps': stage['es_steps'],
+        'ppo_steps': stage['ppo_steps'],
+        'lr': stage['learning_rate'],
+        'ent_coef': stage['ent_coef'],
+        'arena_cols': arena_cols, 'arena_rows': arena_rows,
+        'num_creatures': num_creatures,
+        'observation_size': OBSERVATION_SIZE,
+        'num_actions': NUM_ACTIONS,
+        'signal_scales': signal_scales,
+        'hunger_drain': stage['hunger_drain'],
+        'combat_enabled': stage['combat_enabled'],
+        'gestation_enabled': stage['gestation_enabled'],
+    }
+    training_stats = {
+        'total_seconds': round(total_seconds, 1),
+        'curriculum_stage': stage_number,
+    }
+    notes = f'Curriculum stage {stage_number}: {stage["name"]}'
+    version = _save_model_to_db(
+        net, model_name, parent_version,
+        training_params, training_stats, total_seconds,
+        notes=notes, goal_net=goal_net,
+    )
+    print(f'\nStage {stage_number} saved as {model_name}:v{version}')
+    print(f'Total: {total_seconds:.0f}s ({total_seconds/60:.1f} min)')
+    return version
+
+
+def train_curriculum_full(model_name: str,
+                          start_stage: int = 1,
+                          arena_cols: int = 25, arena_rows: int = 25,
+                          num_creatures: int = 16,
+                          seed: int = None):
+    """Run the full curriculum from start_stage to the last stage in order.
+
+    Each stage's saved model becomes the resume target for the next.
+    """
+    stages = _list_curriculum_stages()
+    stages = [s for s in stages if s['stage_number'] >= start_stage]
+    if not stages:
+        raise ValueError(f'No curriculum stages >= {start_stage}')
+
+    print(f'\n{"#"*60}')
+    print(f'FULL CURRICULUM RUN: model="{model_name}"')
+    print(f'  Stages: {[s["stage_number"] for s in stages]}')
+    print(f'{"#"*60}')
+
+    pipeline_t0 = time.time()
+    for s in stages:
+        train_curriculum_stage(
+            stage_number=s['stage_number'],
+            model_name=model_name,
+            arena_cols=arena_cols, arena_rows=arena_rows,
+            num_creatures=num_creatures,
+            seed=seed,
+        )
+
+    total = time.time() - pipeline_t0
+    print(f'\n{"#"*60}')
+    print(f'CURRICULUM COMPLETE in {total:.0f}s ({total/60:.1f} min)')
+    print(f'{"#"*60}')
+
+
+# ---------------------------------------------------------------------------
+# Main Pipeline (legacy non-curriculum train)
 # ---------------------------------------------------------------------------
 
 def train(cycles: int = 3, mappo_steps: int = 100000,
@@ -1142,23 +1422,54 @@ if __name__ == '__main__':
     parser.add_argument('--arena-cols', type=int, default=25, help='Arena width in tiles')
     parser.add_argument('--arena-rows', type=int, default=25, help='Arena height in tiles')
     parser.add_argument('--num-creatures', type=int, default=16, help='Creatures per arena')
+    parser.add_argument('--curriculum-stage', type=int, default=None,
+                        help='Run a single curriculum stage by number (e.g. --curriculum-stage 1)')
+    parser.add_argument('--curriculum-full', action='store_true',
+                        help='Run the full curriculum (all stages in order)')
+    parser.add_argument('--curriculum-start', type=int, default=1,
+                        help='Starting stage when running --curriculum-full')
     args = parser.parse_args()
 
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
 
-    train(
-        cycles=args.cycles,
-        mappo_steps=args.mappo_steps,
-        es_generations=args.es_generations,
-        es_variants=args.es_variants,
-        es_steps=args.es_steps,
-        ppo_steps=args.ppo_steps,
-        lr=args.lr,
-        model_name=args.model,
-        resume_from=args.resume,
-        arena_cols=args.arena_cols,
-        arena_rows=args.arena_rows,
-        num_creatures=args.num_creatures,
-    )
+    # Curriculum modes take precedence over the legacy train() pipeline
+    if args.curriculum_full:
+        if not args.model:
+            args.model = f'curriculum_{time.strftime("%Y%m%d_%H%M%S")}'
+        train_curriculum_full(
+            model_name=args.model,
+            start_stage=args.curriculum_start,
+            arena_cols=args.arena_cols,
+            arena_rows=args.arena_rows,
+            num_creatures=args.num_creatures,
+            seed=args.seed,
+        )
+    elif args.curriculum_stage is not None:
+        if not args.model:
+            args.model = f'curriculum_{time.strftime("%Y%m%d_%H%M%S")}'
+        train_curriculum_stage(
+            stage_number=args.curriculum_stage,
+            model_name=args.model,
+            arena_cols=args.arena_cols,
+            arena_rows=args.arena_rows,
+            num_creatures=args.num_creatures,
+            resume_override=args.resume,
+            seed=args.seed,
+        )
+    else:
+        train(
+            cycles=args.cycles,
+            mappo_steps=args.mappo_steps,
+            es_generations=args.es_generations,
+            es_variants=args.es_variants,
+            es_steps=args.es_steps,
+            ppo_steps=args.ppo_steps,
+            lr=args.lr,
+            model_name=args.model,
+            resume_from=args.resume,
+            arena_cols=args.arena_cols,
+            arena_rows=args.arena_rows,
+            num_creatures=args.num_creatures,
+        )

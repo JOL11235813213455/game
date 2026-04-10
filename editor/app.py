@@ -127,8 +127,8 @@ class EditorApp(tk.Tk):
         return DialogueTab(parent)
 
     def _make_training(self, parent):
-        from editor.training_tab import TrainingTab
-        return TrainingTab(parent)
+        from editor.training_master_tab import TrainingMasterTab
+        return TrainingMasterTab(parent)
 
     def _make_sql(self, parent):
         from editor.sql_tab import SqlTab

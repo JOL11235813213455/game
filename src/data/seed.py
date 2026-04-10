@@ -162,6 +162,24 @@ CREATE TABLE IF NOT EXISTS processing_recipe_inputs (
     quantity              INTEGER NOT NULL DEFAULT 1,
     UNIQUE(recipe_key, ingredient_item_key)
 );
+CREATE TABLE IF NOT EXISTS curriculum_stages (
+    stage_number       INTEGER PRIMARY KEY,
+    name               TEXT NOT NULL,
+    description        TEXT NOT NULL DEFAULT '',
+    active_signals     TEXT NOT NULL DEFAULT '[]',
+    signal_scales      TEXT NOT NULL DEFAULT '{}',
+    hunger_drain       INTEGER NOT NULL DEFAULT 1,
+    combat_enabled     INTEGER NOT NULL DEFAULT 1,
+    gestation_enabled  INTEGER NOT NULL DEFAULT 1,
+    mappo_steps        INTEGER NOT NULL DEFAULT 50000,
+    es_generations     INTEGER NOT NULL DEFAULT 0,
+    es_variants        INTEGER NOT NULL DEFAULT 20,
+    es_steps           INTEGER NOT NULL DEFAULT 1000,
+    ppo_steps          INTEGER NOT NULL DEFAULT 50000,
+    learning_rate      REAL NOT NULL DEFAULT 0.0003,
+    ent_coef           REAL NOT NULL DEFAULT 0.05,
+    resume_from_stage  INTEGER
+);
 CREATE TABLE IF NOT EXISTS creature_stats (
     creature_key TEXT NOT NULL REFERENCES creatures(key),
     stat         TEXT NOT NULL,

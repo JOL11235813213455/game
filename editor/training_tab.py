@@ -20,7 +20,12 @@ MODELS_DIR = EDITOR_DIR / 'models'
 RUNS_DIR = EDITOR_DIR / 'runs'
 
 
-class TrainingTab(ttk.Frame):
+class TrainingStandardTab(ttk.Frame):
+    """Original Training tab — manual MAPPO/ES/PPO config and launch.
+
+    This is the legacy tab, now embedded as one of the three sub-tabs of
+    the Training top-level notebook (alongside Curriculum and Models).
+    """
 
     def __init__(self, parent):
         super().__init__(parent)
@@ -342,3 +347,18 @@ class TrainingTab(ttk.Frame):
                 self.models_list.insert(tk.END, line)
         except Exception:
             self.models_list.insert(tk.END, '(no models in DB)')
+
+
+# Backward compat: anything that imports `TrainingTab` now gets the
+# multi-sub-tab parent. Use TrainingStandardTab to embed only the
+# legacy tab without the wrapper.
+def _make_TrainingTab():
+    from editor.training_master_tab import TrainingMasterTab
+    return TrainingMasterTab
+
+
+def __getattr__(name):
+    if name == 'TrainingTab':
+        from editor.training_master_tab import TrainingMasterTab
+        return TrainingMasterTab
+    raise AttributeError(name)

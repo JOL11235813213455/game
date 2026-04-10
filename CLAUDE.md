@@ -139,7 +139,29 @@ Every new feature must touch ALL of these layers. Do not skip any.
 - [ ] Update `src/simulation/net.py` layer sizes if input/output dimensions changed
 - [ ] Retrain model after significant observation/action changes
 
-### 7.6 Review for loose ends again - incomplete features, features implied but not existing
+### 7.6 Curriculum (REQUIRED for any RL-affecting feature)
+The training pipeline runs in 7 staged curriculum stages stored in
+the `curriculum_stages` table. When you add or change a mechanic that
+affects training, you MUST decide which stage(s) it belongs to and
+update the seed accordingly:
+- [ ] Identify which stage first introduces this feature (Wander,
+      Forage, Eat, Harvest & Process, Trade, Combat & Social, Lifecycle)
+- [ ] If the feature adds a new reward signal, add it to that stage's
+      `signal_scales` dict in `src/data/seed_content.py` AND every
+      later stage at full or fade strength (soft fade preserves the
+      previous signals at ~0.3-0.5 to prevent catastrophic forgetting)
+- [ ] If the feature adds a new environment toggle, add a column to
+      `curriculum_stages` and gate it in `editor/simulation/headless.py`
+      `Simulation.__init__` and the runner in `editor/simulation/train.py`
+- [ ] If the feature changes the action space, evaluate which stage
+      should first reward use of the new action — add it to that
+      stage's `signal_scales` for the relevant proxy signal
+- [ ] Add a form field to `editor/training_curriculum_tab.py` if a
+      new stage column was added
+- [ ] Re-run `python data/seed_content.py` from `src/` after editing
+      seed_content.py so the DB stages match
+
+### 7.7 Review for loose ends again - incomplete features, features implied but not existing
 
 ### 8. Headless Tests
 - [ ] Add or extend tests in `src/tests/test_mechanics.py` for the new feature

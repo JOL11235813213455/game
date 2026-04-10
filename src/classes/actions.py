@@ -225,6 +225,13 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
     target = context.get('target')
     item = context.get('item')
     now = context.get('now', 0)
+    # Curriculum: combat may be disabled by the runner. When disabled,
+    # MELEE_ATTACK / RANGED_ATTACK / GRAPPLE / CAST_SPELL all early-fail
+    # so creatures cannot kill each other in early training stages.
+    combat_enabled = context.get('combat_enabled', True)
+    if not combat_enabled and action in (Action.MELEE_ATTACK, Action.RANGED_ATTACK,
+                                          Action.GRAPPLE, Action.CAST_SPELL):
+        return {'success': False, 'reason': 'combat_disabled'}
 
     # -- Movement --
     if 0 <= action <= 7:
