@@ -145,7 +145,7 @@ class Creature(
         # Hunger: 1.0 = full, 0.0 = neutral, -1.0 = starving
         # Full bar (1.0 to -1.0) depletes in 1 game day (24 min real time)
         # 1440 ticks/day, 2.0 range → ~0.00139/tick
-        self.hunger: float = 0.5  # start half-full
+        self.hunger: float = 1.0  # start full — gives a full game day before hunger pressure
         self._hunger_drain: float = 2.0 / 1440.0  # per hunger tick
 
         # Spatial memory: {purpose_str: [(map_name, x, y, tick_discovered), ...]}
