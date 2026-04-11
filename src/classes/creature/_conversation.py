@@ -160,6 +160,18 @@ class ConversationMixin:
             self.record_interaction(target, effects['sentiment'])
             target.record_interaction(self, effects['sentiment'])
 
+        # Quest acceptance — effect sets {"start_quest": "quest_name"}
+        # The NPC is offering a quest; the speaker (self) accepts it
+        # into their own quest log. Looks up the quest definition
+        # from QUESTS and calls the quest_log.accept_quest API.
+        if 'start_quest' in effects:
+            from data.db import QUESTS
+            quest_name = effects['start_quest']
+            quest_def = QUESTS.get(quest_name)
+            if quest_def is not None and hasattr(self, 'quest_log'):
+                now = getattr(self, '_last_update_time', 0)
+                self.quest_log.accept_quest(quest_name, quest_def, now)
+
         # Behavior trigger
         behavior = node.get('behavior')
         if behavior == 'trade':

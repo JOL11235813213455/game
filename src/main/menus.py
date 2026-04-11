@@ -458,6 +458,160 @@ class QuestLogMenu:
 
 
 # ---------------------------------------------------------------------------
+# Dialogue Menu
+# ---------------------------------------------------------------------------
+
+class DialogueMenu:
+    """Modal dialogue: NPC line at the top, numbered player replies below.
+
+    Navigation:
+      Up/Down       move cursor between reply options
+      Enter or 1-9  select reply (or end if no replies)
+      Esc           end conversation immediately
+    """
+
+    def __init__(self, player, target):
+        self.player = player
+        self.target = target
+        self.font = None
+        self.font_sm = None
+        self.font_lg = None
+        self.cursor = 0
+        # Current NPC line + list of player reply child nodes
+        self.current_node = None
+        self.replies: list = []
+        # Start the conversation. The backend returns a list of valid
+        # root nodes (usually one); we pick the first.
+        roots = player.start_conversation(target)
+        if roots:
+            self._advance_to(roots[0])
+
+    def _ensure_fonts(self):
+        if self.font is None:
+            self.font = pygame.font.SysFont('arial', 20)
+            self.font_sm = pygame.font.SysFont('arial', 14)
+            self.font_lg = pygame.font.SysFont('arial', 24, bold=True)
+
+    def _advance_to(self, node):
+        """Advance the conversation to ``node``. Fetches the player
+        reply options (node's children) and sets up the next display."""
+        self.current_node = node
+        # If this is an NPC line, the player's replies are its children.
+        # If this is a player line, we auto-advance through the NPC
+        # rejoinder (the next child).
+        children = self.player.advance_dialogue(node['id'], self.target)
+        # Filter by speaker. Player replies come from NPC nodes.
+        if node.get('speaker') == 'npc':
+            self.replies = [c for c in children if c.get('speaker') == 'player']
+            # If there are no player replies but there are NPC follow-ups,
+            # the NPC is continuing alone — queue the next NPC node.
+            if not self.replies:
+                npc_follow = [c for c in children if c.get('speaker') == 'npc']
+                if npc_follow:
+                    self._advance_to(npc_follow[0])
+                    return
+        else:
+            # Player line — auto-advance to the NPC rejoinder (first child)
+            npc_follow = [c for c in children if c.get('speaker') == 'npc']
+            if npc_follow:
+                self._advance_to(npc_follow[0])
+                return
+            self.replies = []
+        self.cursor = 0
+
+    def handle_event(self, event, player):
+        if event.type != pygame.KEYDOWN:
+            return None
+        k = event.key
+        if k == pygame.K_ESCAPE:
+            player.end_conversation()
+            return 'close'
+        if not self.replies:
+            # No replies — any key ends the conversation
+            if k in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_t):
+                player.end_conversation()
+                return 'close'
+            return None
+        if k == pygame.K_UP:
+            self.cursor = (self.cursor - 1) % len(self.replies)
+        elif k == pygame.K_DOWN:
+            self.cursor = (self.cursor + 1) % len(self.replies)
+        elif k == pygame.K_RETURN:
+            reply = self.replies[self.cursor]
+            self._advance_to(reply)
+            if self.current_node is None or not self.replies:
+                # Conversation may have ended after advancing
+                pass
+        elif pygame.K_1 <= k <= pygame.K_9:
+            idx = k - pygame.K_1
+            if idx < len(self.replies):
+                self.cursor = idx
+                reply = self.replies[idx]
+                self._advance_to(reply)
+        return None
+
+    def draw(self, surface, player):
+        self._ensure_fonts()
+        if self.current_node is None:
+            return
+        sw, sh = surface.get_size()
+        pw = int(sw * 0.85)
+        ph = int(sh * 0.45)
+        px = (sw - pw) // 2
+        py = sh - ph - 48  # leave room for the keybind strip at the bottom
+        rect = pygame.Rect(px, py, pw, ph)
+
+        speaker_name = getattr(self.target, 'name', '?')
+        _draw_panel(surface, rect, speaker_name, self.font_lg)
+
+        # NPC line
+        text = self.current_node.get('text', '')
+        lines = self._wrap(text, pw - 40, self.font)
+        ly = py + 48
+        for line in lines:
+            surface.blit(self.font.render(line, True, C_TEXT), (px + 20, ly))
+            ly += 24
+
+        # Player replies
+        ly += 12
+        if self.replies:
+            pygame.draw.line(surface, C_BORDER,
+                             (px + 20, ly),
+                             (px + pw - 20, ly), 1)
+            ly += 8
+            for i, reply in enumerate(self.replies):
+                reply_text = f'{i + 1}. {reply.get("text", "")}'
+                color = C_GOLD_BRIGHT if i == self.cursor else C_TEXT_DIM
+                row_rect = pygame.Rect(px + 16, ly - 2, pw - 32, 24)
+                if i == self.cursor:
+                    pygame.draw.rect(surface, C_PANEL_LIGHT, row_rect)
+                    pygame.draw.rect(surface, C_GOLD, row_rect, 2)
+                surface.blit(self.font.render(reply_text, True, color),
+                             (px + 24, ly))
+                ly += 26
+        else:
+            # No replies — prompt to end the conversation
+            end_text = self.font_sm.render(
+                '(press Enter or Esc to end)', True, C_TEXT_DIM)
+            surface.blit(end_text, (px + 20, py + ph - 32))
+
+    def _wrap(self, text, max_width, font):
+        words = text.split()
+        lines = []
+        current = ''
+        for w in words:
+            test = current + (' ' if current else '') + w
+            if font.size(test)[0] > max_width and current:
+                lines.append(current)
+                current = w
+            else:
+                current = test
+        if current:
+            lines.append(current)
+        return lines
+
+
+# ---------------------------------------------------------------------------
 # Rich HUD overlay
 # ---------------------------------------------------------------------------
 
@@ -548,6 +702,97 @@ class HUD:
             surface.blit(surf, (ix, iy))
             iy += 20
 
-        # Top-right: keybind hint
-        hint = self.font_sm.render('I=Inventory  Q=Quests  Esc=Menu', True, C_TEXT_DIM)
-        surface.blit(hint, (sw - hint.get_width() - 12, 12))
+
+# ---------------------------------------------------------------------------
+# Bottom-of-screen contextual keybind strip
+# ---------------------------------------------------------------------------
+
+class KeybindStrip:
+    """Renders the set of currently-relevant keybindings as a compact
+    strip across the bottom of the screen.
+
+    The main loop passes a mode string each frame: 'gameplay', 'pause',
+    'inventory', 'quest', 'dialogue'. The strip picks the right set of
+    hints.
+    """
+
+    MODES = {
+        'gameplay': [
+            ('Arrows',   'move'),
+            ('T',        'talk'),
+            ('Enter',    'use / enter'),
+            ('I',        'inventory'),
+            ('Q',        'quests'),
+            ('+/-',      'zoom'),
+            ('Esc',      'menu'),
+        ],
+        'pause': [
+            ('Up/Down',  'choose'),
+            ('Enter',    'select'),
+            ('Esc',      'resume'),
+        ],
+        'inventory': [
+            ('Up/Down',  'select'),
+            ('Tab/<>',   'switch tab'),
+            ('E/Enter',  'use / equip'),
+            ('D',        'drop'),
+            ('Esc/I',    'close'),
+        ],
+        'quest': [
+            ('Up/Down',  'select'),
+            ('Esc/Q',    'close'),
+        ],
+        'dialogue': [
+            ('Up/Down',  'choose'),
+            ('1-9',      'quick reply'),
+            ('Enter',    'select'),
+            ('Esc',      'end'),
+        ],
+    }
+
+    def __init__(self):
+        self.font = None
+
+    def _ensure_fonts(self):
+        if self.font is None:
+            self.font = pygame.font.SysFont('arial', 13, bold=True)
+
+    def draw(self, surface, mode: str = 'gameplay'):
+        self._ensure_fonts()
+        sw, sh = surface.get_size()
+        hints = self.MODES.get(mode, self.MODES['gameplay'])
+        # Bottom strip: dark background across the full width, 24px tall
+        strip_h = 24
+        strip_rect = pygame.Rect(0, sh - strip_h, sw, strip_h)
+        # Semi-transparent background
+        overlay = pygame.Surface((sw, strip_h), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180))
+        surface.blit(overlay, (0, sh - strip_h))
+        pygame.draw.line(surface, C_BORDER,
+                         (0, sh - strip_h),
+                         (sw, sh - strip_h), 1)
+        # Render each (key, label) pair with gold key + dim label
+        x = 12
+        gap = 22
+        for key, label in hints:
+            key_surf = self.font.render(key, True, C_GOLD_BRIGHT)
+            surface.blit(key_surf, (x, sh - strip_h + 5))
+            x += key_surf.get_width() + 6
+            label_surf = self.font.render(label, True, C_TEXT)
+            surface.blit(label_surf, (x, sh - strip_h + 5))
+            x += label_surf.get_width() + gap
+            if x > sw - 100:
+                break   # avoid overflow
+
+    @classmethod
+    def mode_for(cls, paused, save_ui, inv_menu, quest_menu, dialogue_menu):
+        """Resolve the correct mode string given the set of open UI elements."""
+        if dialogue_menu is not None:
+            return 'dialogue'
+        if inv_menu is not None:
+            return 'inventory'
+        if quest_menu is not None:
+            return 'quest'
+        if paused or save_ui is not None:
+            return 'pause'
+        return 'gameplay'

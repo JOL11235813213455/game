@@ -29,7 +29,7 @@ from main.rendering import camera_offset, draw_map_row, draw_menu, draw_debug
 from main.save_ui import SaveLoadUI, set_player
 from main.game_clock import GameClock
 from main.lighting import draw_ambient_overlay, make_shadow, apply_top_highlight
-from main.menus import InventoryMenu, QuestLogMenu, HUD
+from main.menus import InventoryMenu, QuestLogMenu, DialogueMenu, HUD, KeybindStrip
 
 def main():
     load_db()
@@ -82,7 +82,9 @@ def main():
     save_ui    = None   # SaveLoadUI instance when open, else None
     inv_menu   = None   # InventoryMenu instance when open
     quest_menu = None   # QuestLogMenu instance when open
+    dialogue_menu = None  # DialogueMenu instance when talking to an NPC
     hud        = HUD()  # always-visible meters
+    keybind_strip = KeybindStrip()  # contextual keybind hints at screen bottom
     game_clock = GameClock(start_hour=8.0)
 
     running = True
@@ -120,6 +122,12 @@ def main():
                     if r == 'close':
                         quest_menu = None
 
+                # ---- dialogue is open --------------------------------------
+                elif dialogue_menu is not None:
+                    r = dialogue_menu.handle_event(event, player)
+                    if r == 'close':
+                        dialogue_menu = None
+
                 elif event.type == pygame.KEYDOWN:
                     # ---- pause menu -----------------------------------------i want to add this repo to my github. i want to change my global git e-mail to github@jasonlackey.com, which is the same as my github login e-mail.
 
@@ -151,6 +159,24 @@ def main():
                             inv_menu = InventoryMenu()
                         if event.key == pygame.K_q:
                             quest_menu = QuestLogMenu()
+                        if event.key == pygame.K_t:
+                            # Find the nearest adjacent creature (Manhattan
+                            # distance <= 1) on the current map and open
+                            # a dialogue with them.
+                            nearest_npc = None
+                            for obj in WorldObject.on_map(player.current_map):
+                                if not isinstance(obj, Creature) or obj is player:
+                                    continue
+                                d = (abs(obj.location.x - player.location.x)
+                                     + abs(obj.location.y - player.location.y))
+                                if d <= 1:
+                                    nearest_npc = obj
+                                    break
+                            if nearest_npc is not None:
+                                dialogue_menu = DialogueMenu(player, nearest_npc)
+                                if dialogue_menu.current_node is None:
+                                    # NPC has no dialogue tree — cancel
+                                    dialogue_menu = None
                         if event.key == pygame.K_RETURN:
                             if not player.enter():
                                 player.exit()
@@ -253,6 +279,15 @@ def main():
 
         if quest_menu is not None:
             quest_menu.draw(screen, player)
+
+        if dialogue_menu is not None:
+            dialogue_menu.draw(screen, player)
+
+        # Contextual keybind strip across the bottom of the screen.
+        # Resolved based on which UI element is currently open.
+        mode = KeybindStrip.mode_for(
+            paused, save_ui, inv_menu, quest_menu, dialogue_menu)
+        keybind_strip.draw(screen, mode)
 
         if DEBUG:
             draw_debug(screen, clock)
