@@ -22,25 +22,37 @@ from classes.actions import NUM_ACTIONS
 
 
 class TorchCreatureNet(nn.Module):
-    """PyTorch version of CreatureNet for training with autograd."""
+    """PyTorch version of CreatureNet for training with autograd.
+
+    5 hidden layers (was 3): input -> 1536 -> 1024 -> 768 -> 384 -> 192
+    -> {policy, value}. The wider top layer absorbs the new perception
+    section (10 slots * 51 floats = 510 plus social topology and
+    hearing) without bottlenecking the gradient. Roughly 5M parameters
+    vs the previous ~2M.
+    """
 
     def __init__(self, input_size: int = OBSERVATION_SIZE,
-                 h1: int = 1024, h2: int = 512, h3: int = 256,
+                 h1: int = 1536, h2: int = 1024, h3: int = 768,
+                 h4: int = 384, h5: int = 192,
                  output_size: int = NUM_ACTIONS):
         super().__init__()
         self.fc1 = nn.Linear(input_size, h1)
         self.fc2 = nn.Linear(h1, h2)
         self.fc3 = nn.Linear(h2, h3)
+        self.fc4 = nn.Linear(h3, h4)
+        self.fc5 = nn.Linear(h4, h5)
         # Policy head: action probabilities
-        self.policy_head = nn.Linear(h3, output_size)
+        self.policy_head = nn.Linear(h5, output_size)
         # Value head: state value estimate
-        self.value_head = nn.Linear(h3, 1)
+        self.value_head = nn.Linear(h5, 1)
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Forward pass returning (action_logits, state_value)."""
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         x = F.relu(self.fc3(x))
+        x = F.relu(self.fc4(x))
+        x = F.relu(self.fc5(x))
         logits = self.policy_head(x)
         value = self.value_head(x)
         return logits, value
@@ -74,7 +86,12 @@ class TorchCreatureNet(nn.Module):
         return log_probs, values.squeeze(-1), entropy
 
     def export_to_numpy(self, path: str | Path):
-        """Export weights to .npz for NumPy CreatureNet to load."""
+        """Export weights to .npz for NumPy CreatureNet to load.
+
+        Layer numbering: w1..w5 = fc1..fc5, w_pol/b_pol = policy head,
+        w_val/b_val = value head. Older 3-layer exports remain
+        importable via import_from_numpy's backward-compat path.
+        """
         state = self.state_dict()
         np_weights = {
             'w1': state['fc1.weight'].T.numpy(),
@@ -83,23 +100,31 @@ class TorchCreatureNet(nn.Module):
             'b2': state['fc2.bias'].numpy(),
             'w3': state['fc3.weight'].T.numpy(),
             'b3': state['fc3.bias'].numpy(),
-            'w4': state['policy_head.weight'].T.numpy(),
-            'b4': state['policy_head.bias'].numpy(),
+            'w4': state['fc4.weight'].T.numpy(),
+            'b4': state['fc4.bias'].numpy(),
+            'w5': state['fc5.weight'].T.numpy(),
+            'b5': state['fc5.bias'].numpy(),
+            'w_pol': state['policy_head.weight'].T.numpy(),
+            'b_pol': state['policy_head.bias'].numpy(),
+            'w_val': state['value_head.weight'].T.numpy(),
+            'b_val': state['value_head.bias'].numpy(),
         }
         np.savez(str(path), **np_weights)
 
     def import_from_numpy(self, path: str | Path):
-        """Load weights from .npz (NumPy CreatureNet format).
+        """Load weights from .npz. Handles two layouts:
+          1. New 5-layer format with w1..w5 and w_pol/b_pol/w_val/b_val
+          2. Legacy 3-layer format with w1..w4 (w4 is policy head)
 
-        Handles observation size changes: if saved w1 has fewer input
+        Input padding still works: if the saved w1 has fewer input
         columns than current fc1 expects, pads with zeros.
         """
         data = np.load(str(path))
         state = self.state_dict()
 
-        # Handle input size change on w1 (stored transposed: in×h → h×in)
-        w1_saved = data['w1']  # shape (old_input, h1)
-        w1_target = state['fc1.weight']  # shape (h1, new_input)
+        # Handle input size change on w1 (stored transposed: in × h)
+        w1_saved = data['w1']
+        w1_target = state['fc1.weight']
         if w1_saved.shape[0] != w1_target.shape[1]:
             old_in, h1 = w1_saved.shape
             new_in = w1_target.shape[1]
@@ -107,14 +132,34 @@ class TorchCreatureNet(nn.Module):
                 padded = np.zeros((new_in, h1), dtype=np.float32)
                 padded[:old_in, :] = w1_saved
                 w1_saved = padded
+            elif new_in < old_in:
+                w1_saved = w1_saved[:new_in, :]
         state['fc1.weight'] = torch.FloatTensor(w1_saved.T)
         state['fc1.bias'] = torch.FloatTensor(data['b1'])
         state['fc2.weight'] = torch.FloatTensor(data['w2'].T)
         state['fc2.bias'] = torch.FloatTensor(data['b2'])
         state['fc3.weight'] = torch.FloatTensor(data['w3'].T)
         state['fc3.bias'] = torch.FloatTensor(data['b3'])
-        state['policy_head.weight'] = torch.FloatTensor(data['w4'].T)
-        state['policy_head.bias'] = torch.FloatTensor(data['b4'])
+
+        if 'w5' in data.files:
+            # New 5-layer format
+            state['fc4.weight'] = torch.FloatTensor(data['w4'].T)
+            state['fc4.bias'] = torch.FloatTensor(data['b4'])
+            state['fc5.weight'] = torch.FloatTensor(data['w5'].T)
+            state['fc5.bias'] = torch.FloatTensor(data['b5'])
+            state['policy_head.weight'] = torch.FloatTensor(data['w_pol'].T)
+            state['policy_head.bias'] = torch.FloatTensor(data['b_pol'])
+            if 'w_val' in data.files:
+                state['value_head.weight'] = torch.FloatTensor(data['w_val'].T)
+                state['value_head.bias'] = torch.FloatTensor(data['b_val'])
+        else:
+            # Legacy 3-layer format: w4 was policy head. Leave fc4 and
+            # fc5 at random initialization (effectively a partial
+            # warm start that loses the old policy head's weights but
+            # keeps the feature extractor).
+            state['policy_head.weight'] = torch.FloatTensor(data['w4'].T)
+            state['policy_head.bias'] = torch.FloatTensor(data['b4'])
+
         self.load_state_dict(state, strict=False)
 
     def param_count(self) -> int:

@@ -838,61 +838,109 @@ def seed():
     # Failed actions are penalized from stage 1 because wall-bashing
     # is the single biggest form of wasted movement. Water danger is
     # also on from day one so non-swimmers learn water is death.
+    # Wipe any pre-existing curriculum stages so the seed is the
+    # canonical source. Old stages 1-7 from the prior 7-stage
+    # curriculum get cleaned up.
+    con.execute('DELETE FROM curriculum_stages')
+
+    # ==================================================================
+    # 14-STAGE GRANULAR CURRICULUM
+    # Each stage introduces one new mechanic at full strength while
+    # fading older signals to ~0.3-0.5. Designed to match the rebuilt
+    # perception system (10-slot persistent ids, social topology,
+    # water awareness, hearing).
+    # ==================================================================
+
+    # S1 — Wander
     _stage(1, 'Wander',
-           'Learn to move and explore. No hunger pressure, no combat targets, '
-           'no economy. Reward only for visiting new tiles and meeting other '
-           'creatures. Failed actions penalized to discourage wall-bashing. '
-           'Water danger penalized so non-swimmers learn to stay away.',
-           {'exploration': 1.0, 'hp': 0.5,
+           'Move and explore. No hunger, no combat, no economy. '
+           'Failed actions and water danger penalized.',
+           {'exploration': 1.0, 'hp': 0.3,
             'failed_actions': 0.5, 'water_danger': 1.0},
            hunger=False, combat=False, gestation=False,
-           mappo=30000, es_gens=0, es_vars=20, es_steps=1000, ppo=30000)
+           mappo=20000, es_gens=0, es_vars=20, es_steps=1000, ppo=20000)
 
-    # Stage 2: Forage — pick stuff up
-    _stage(2, 'Forage',
-           'Learn to pick things up. Surface gold and items reward inventory growth. '
-           'Still no hunger or combat — focus is purely on grab-and-go. '
-           'Water danger still active (foragers must avoid the river).',
-           {'exploration': 0.4, 'hp': 0.3,
+    # S2 — Pickup
+    _stage(2, 'Pickup',
+           'Grab items and surface gold off the ground. No hunger yet.',
+           {'exploration': 0.5, 'hp': 0.3,
             'gold': 1.0, 'inventory': 1.0,
             'failed_actions': 0.5, 'water_danger': 1.0},
            hunger=False, combat=False, gestation=False,
-           mappo=30000, es_gens=0, es_vars=20, es_steps=1000, ppo=50000,
+           mappo=20000, es_gens=0, es_vars=20, es_steps=1000, ppo=30000,
            resume=1)
 
-    # Stage 3: Eat — survive hunger
-    _stage(3, 'Eat',
-           'Hunger drain enabled. Reward eating food (raises hunger ratio). '
-           'Foraging skills carry over but now matter for survival.',
+    # S3 — Hunger
+    _stage(3, 'Hunger',
+           'Hunger drain enabled. Eating food gives a bonus.',
            {'exploration': 0.3, 'hp': 0.3,
             'gold': 0.5, 'inventory': 0.5,
             'hunger': 1.0,
-            'failed_actions': 0.5, 'water_danger': 1.0},
+            'failed_actions': 0.5, 'water_danger': 0.7},
            hunger=True, combat=False, gestation=False,
-           mappo=30000, es_gens=0, es_vars=20, es_steps=1000, ppo=80000,
+           mappo=20000, es_gens=0, es_vars=20, es_steps=1000, ppo=50000,
            resume=2)
 
-    # Stage 4: Harvest & Process — make goods
-    _stage(4, 'Harvest & Process',
-           'Reward HARVEST, PROCESS, and FARM via the goal/purpose system. '
-           'Wage signals from JOB action begin to fire. Trade still off — '
-           'creatures learn the production chain in isolation first.',
-           {'exploration': 0.2, 'hp': 0.3,
+    # S4 — Purpose
+    _stage(4, 'Purpose',
+           'Tile-purpose alignment matters. Goal progress and '
+           'completion signals turn on.',
+           {'exploration': 0.3, 'hp': 0.3,
+            'gold': 0.5, 'inventory': 0.5,
+            'hunger': 0.7,
+            'goal_progress': 0.7, 'goal_completed': 1.0,
+            'purpose_proximity': 1.0,
+            'failed_actions': 0.5, 'water_danger': 0.7},
+           hunger=True, combat=False, gestation=False,
+           mappo=20000, es_gens=0, es_vars=20, es_steps=1000, ppo=50000,
+           resume=3)
+
+    # S5 — Harvest
+    _stage(5, 'Harvest',
+           'HARVEST action becomes valuable via inventory delta on '
+           'resource tiles.',
+           {'exploration': 0.3, 'hp': 0.3,
             'gold': 0.5, 'inventory': 0.7,
+            'hunger': 0.7,
+            'goal_progress': 0.5, 'goal_completed': 1.0,
+            'purpose_proximity': 0.7,
+            'failed_actions': 0.5, 'water_danger': 0.7},
+           hunger=True, combat=False, gestation=False,
+           mappo=20000, es_gens=0, es_vars=20, es_steps=1000, ppo=60000,
+           resume=4)
+
+    # S6 — Process
+    _stage(6, 'Process',
+           'PROCESS action becomes valuable: refined items have '
+           'higher value and more healing.',
+           {'exploration': 0.3, 'hp': 0.3,
+            'gold': 0.5, 'inventory': 1.0,
+            'hunger': 0.7,
+            'goal_progress': 0.5, 'goal_completed': 1.0,
+            'purpose_proximity': 0.5,
+            'failed_actions': 0.5, 'water_danger': 0.5},
+           hunger=True, combat=False, gestation=False,
+           mappo=20000, es_gens=0, es_vars=20, es_steps=1000, ppo=60000,
+           resume=5)
+
+    # S7 — Jobs
+    _stage(7, 'Jobs',
+           'JOB action wages turn on. Creatures learn schedule-based '
+           'work at workplace tiles.',
+           {'exploration': 0.3, 'hp': 0.3,
+            'gold': 0.7, 'inventory': 0.7,
             'hunger': 0.7,
             'wage': 1.0,
             'goal_progress': 0.5, 'goal_completed': 1.0,
             'purpose_proximity': 0.5,
-            'failed_actions': 0.5, 'water_danger': 0.7},
+            'failed_actions': 0.5, 'water_danger': 0.5},
            hunger=True, combat=False, gestation=False,
-           mappo=30000, es_gens=0, es_vars=20, es_steps=1000, ppo=80000,
-           resume=3)
+           mappo=20000, es_gens=10, es_vars=20, es_steps=1500, ppo=60000,
+           resume=6)
 
-    # Stage 5: Trade — exchange goods for gold
-    _stage(5, 'Trade',
-           'Trade surplus rewards turn on. Creatures with goods learn to convert '
-           'them into gold and vice versa. ES phase enabled here for the first '
-           'time — economic loop benefits from gradient-free search.',
+    # S8 — Trade
+    _stage(8, 'Trade',
+           'Trade surplus rewards turn on. ES phase enabled.',
            {'exploration': 0.2, 'hp': 0.3,
             'gold': 0.7, 'inventory': 0.7,
             'hunger': 0.7,
@@ -901,55 +949,117 @@ def seed():
             'purpose_proximity': 0.5,
             'failed_actions': 0.5, 'water_danger': 0.5},
            hunger=True, combat=False, gestation=False,
-           mappo=30000, es_gens=15, es_vars=30, es_steps=1500, ppo=80000,
-           resume=4)
+           mappo=20000, es_gens=15, es_vars=30, es_steps=1500, ppo=80000,
+           resume=7)
 
-    # Stage 6: Trade & Social — reputation, allies, talking
-    # Combat stays OFF: peaceful exchange + social interaction first.
-    # The reputation and allies signals are what reward TALK / DECEIVE /
-    # INTIMIDATE / SHARE_RUMOR; failed_actions / fatigue / crowding are
-    # the shared penalty signals that always make sense once the world
-    # has consequences.
-    _stage(6, 'Trade & Social',
-           'Social actions and reputation signals turn on. Trading is now '
-           'embedded in a relationship context — friends trade cheaper, '
-           'enemies refuse. Combat stays disabled so creatures cannot '
-           'shortcut social problems with violence yet.',
-           {'exploration': 0.2, 'hp': 0.5,
+    # S9 — Schedule
+    _stage(9, 'Schedule',
+           'Fatigue and crowding penalties added. Sleep at night '
+           'becomes meaningful.',
+           {'exploration': 0.2, 'hp': 0.3,
             'gold': 0.5, 'inventory': 0.5,
             'hunger': 0.7,
-            'wage': 0.5, 'trade': 1.0,
+            'wage': 0.7, 'trade': 0.7,
+            'goal_progress': 0.5, 'goal_completed': 1.0,
+            'purpose_proximity': 0.5,
+            'fatigue': 1.0, 'crowding': 1.0,
+            'failed_actions': 0.5, 'water_danger': 0.5},
+           hunger=True, combat=False, gestation=False,
+           mappo=20000, es_gens=10, es_vars=30, es_steps=1500, ppo=60000,
+           resume=8)
+
+    # S10 — Reputation
+    _stage(10, 'Reputation',
+           'Reputation and ally count signals turn on. Building '
+           'relationships starts to matter.',
+           {'exploration': 0.2, 'hp': 0.3,
+            'gold': 0.5, 'inventory': 0.5,
+            'hunger': 0.7,
+            'wage': 0.5, 'trade': 0.7,
             'goal_progress': 0.5, 'goal_completed': 1.0,
             'purpose_proximity': 0.5,
             'reputation': 1.0, 'allies': 1.0,
-            'failed_actions': 1.0, 'fatigue': 1.0, 'crowding': 1.0,
-            'water_danger': 0.5},
+            'fatigue': 1.0, 'crowding': 1.0,
+            'failed_actions': 0.7, 'water_danger': 0.5},
            hunger=True, combat=False, gestation=False,
-           mappo=30000, es_gens=10, es_vars=30, es_steps=1500, ppo=80000,
-           resume=5)
+           mappo=20000, es_gens=10, es_vars=30, es_steps=1500, ppo=60000,
+           resume=9)
 
-    # Stage 7: Lifecycle — combat enabled AND reproduction enabled.
-    # The final stage turns on the two remaining big mechanics together:
-    # combat (kills, the final way creatures can resolve conflict) and
-    # reproduction (PAIR + gestation, the population dynamic). Every
-    # mechanic in the game is active here.
-    _stage(7, 'Lifecycle',
-           'Combat targets and reproduction both turn on. PAIR action and '
-           'gestation enabled. Reproduction reward via life_goals; combat '
-           'reward via kills. Final stage — every mechanic active.',
+    # S11 — Combat
+    _stage(11, 'Combat',
+           'Combat enabled. Kill rewards turn on. Creatures can '
+           'attack each other but should already have a productive '
+           'baseline from earlier stages.',
+           {'exploration': 0.2, 'hp': 0.7,
+            'gold': 0.5, 'inventory': 0.5,
+            'hunger': 0.7,
+            'wage': 0.5, 'trade': 0.5,
+            'goal_progress': 0.5, 'goal_completed': 1.0,
+            'purpose_proximity': 0.5,
+            'reputation': 0.7, 'allies': 0.7,
+            'kills': 1.0,
+            'fatigue': 1.0, 'crowding': 1.0,
+            'failed_actions': 1.0, 'water_danger': 0.5},
+           hunger=True, combat=True, gestation=False,
+           mappo=20000, es_gens=10, es_vars=30, es_steps=1500, ppo=80000,
+           resume=10)
+
+    # S12 — Lifecycle
+    _stage(12, 'Lifecycle',
+           'PAIR action and gestation enabled. Reproduction reward '
+           'via life_goals.',
+           {'exploration': 0.2, 'hp': 0.5,
+            'gold': 0.5, 'inventory': 0.5,
+            'hunger': 0.7,
+            'wage': 0.5, 'trade': 0.5,
+            'goal_progress': 0.5, 'goal_completed': 1.0,
+            'purpose_proximity': 0.5,
+            'reputation': 0.7, 'allies': 0.7,
+            'kills': 0.7,
+            'fatigue': 1.0, 'crowding': 1.0,
+            'life_goals': 1.0,
+            'failed_actions': 1.0, 'water_danger': 0.5},
+           hunger=True, combat=True, gestation=True,
+           mappo=20000, es_gens=10, es_vars=30, es_steps=1500, ppo=80000,
+           resume=11)
+
+    # S13 — Religion
+    _stage(13, 'Religion',
+           'Piety, quests, and xp signals turn on.',
+           {'exploration': 0.2, 'hp': 0.5,
+            'gold': 0.5, 'inventory': 0.5,
+            'hunger': 0.7,
+            'wage': 0.5, 'trade': 0.5,
+            'goal_progress': 0.5, 'goal_completed': 1.0,
+            'purpose_proximity': 0.5,
+            'reputation': 0.7, 'allies': 0.7,
+            'kills': 0.7,
+            'fatigue': 1.0, 'crowding': 1.0,
+            'life_goals': 0.7,
+            'piety': 1.0, 'quests': 1.0, 'xp': 0.5,
+            'failed_actions': 1.0, 'water_danger': 0.5},
+           hunger=True, combat=True, gestation=True,
+           mappo=20000, es_gens=10, es_vars=30, es_steps=1500, ppo=60000,
+           resume=12)
+
+    # S14 — Mastery
+    _stage(14, 'Mastery',
+           'Final stage. Every mechanic active at calibrated weights.',
            {'exploration': 0.2, 'hp': 0.5,
             'gold': 0.5, 'inventory': 0.5,
             'hunger': 0.7,
             'wage': 0.5, 'trade': 0.7,
             'goal_progress': 0.5, 'goal_completed': 1.0,
             'purpose_proximity': 0.5,
-            'kills': 1.0, 'reputation': 1.0, 'allies': 0.7,
-            'failed_actions': 1.0, 'fatigue': 1.0, 'crowding': 1.0,
-            'life_goals': 1.0, 'piety': 0.5, 'quests': 0.5, 'xp': 0.5,
-            'water_danger': 0.5},
+            'reputation': 0.7, 'allies': 0.7,
+            'kills': 0.7,
+            'fatigue': 1.0, 'crowding': 1.0,
+            'life_goals': 1.0,
+            'piety': 0.7, 'quests': 0.7, 'xp': 0.5,
+            'failed_actions': 1.0, 'water_danger': 0.5},
            hunger=True, combat=True, gestation=True,
-           mappo=30000, es_gens=10, es_vars=30, es_steps=1500, ppo=80000,
-           resume=6)
+           mappo=20000, es_gens=15, es_vars=40, es_steps=2000, ppo=120000,
+           resume=13)
 
     con.commit()
     con.close()
@@ -972,7 +1082,9 @@ def seed():
     print('  1 tool (shovel)')
     print('  7 jobs (farmer, miner, crafter, trader, hunter, healer, guard)')
     print('  9 processing recipes (bake, cook, jam, roast, dry, stew, smelt×2, charcoal)')
-    print('  7 curriculum stages (wander -> forage -> eat -> harvest -> trade -> trade+social -> lifecycle)')
+    print('  14 curriculum stages (wander -> pickup -> hunger -> purpose -> harvest ->')
+    print('                          process -> jobs -> trade -> schedule -> reputation ->')
+    print('                          combat -> lifecycle -> religion -> mastery)')
 
 
 if __name__ == '__main__':
