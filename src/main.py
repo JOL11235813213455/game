@@ -57,7 +57,78 @@ def main():
         species='human',
         stats={Stat.VIT: 10},
     )
-    # Spawn the seeded test-town NPCs at their stored locations.
+    # Place decorative structures on the map from a hand-laid list.
+    # Each entry: (map_name, x, y, sprite_name, z_index).
+    # Only fires when the matching map is the currently-loaded one.
+    _structures = [
+        # --- test_town structures ---
+        ('test_town', 8,  8,  's_house_wood',      3),  # NW house
+        ('test_town', 15, 8,  's_house_wood',      3),  # NE house
+        ('test_town', 8,  15, 's_house_wood',      3),  # SW house
+        ('test_town', 15, 15, 's_house_wood',      3),  # SE house
+        ('test_town', 15, 5,  's_house_wood',      3),  # far N house
+        ('test_town', 12, 11, 's_well',            2),  # well in town square
+        ('test_town', 1,  12, 's_cave_entrance',   3),  # cave entrance (west)
+        ('test_town', 12, 2,  's_sign',            2),  # town sign (north)
+        ('test_town', 21, 12, 's_sign',            2),  # signpost east
+        # --- cave interior ---
+        ('cave_test', 4,  3,  's_chest',           2),  # locket's hiding spot
+        ('cave_test', 8,  3,  's_treasure',        2),  # bonus treasure
+    ]
+
+    spawned_structures = []  # strong refs to keep Structure instances alive
+    for (smap, sx, sy, sprite_name, z) in _structures:
+        if smap != game_map.name:
+            continue
+        s = Structure(
+            name=sprite_name,
+            sprite_name=sprite_name,
+            inventoriable=False,
+            footprint=[[0, 0]],
+        )
+        s.z_index = z
+        # Place on the map via current_map setter (registers in _by_map)
+        s.current_map = game_map
+        s.location = MapKey(sx, sy, 0)
+        spawned_structures.append(s)
+
+    # Spawn some house interior props per map (beds, hearth, chest)
+    _interior_props = [
+        ('house_north_west', [(2, 1, 's_bed'), (5, 1, 's_hearth'), (1, 5, 's_chest')]),
+        ('house_north_east', [(2, 1, 's_bed'), (5, 1, 's_hearth'), (1, 5, 's_chest')]),
+        ('house_south_west', [(2, 1, 's_bed'), (5, 1, 's_hearth'), (1, 5, 's_chest')]),
+        ('house_south_east', [(2, 1, 's_bed'), (5, 1, 's_hearth'), (1, 5, 's_chest')]),
+        ('house_far_north',  [(2, 1, 's_bed'), (5, 1, 's_hearth'), (1, 5, 's_chest')]),
+    ]
+    for (house_map, props) in _interior_props:
+        if house_map != game_map.name:
+            continue
+        for (px, py, psprite) in props:
+            s = Structure(name=psprite, sprite_name=psprite,
+                          inventoriable=False, footprint=[[0, 0]])
+            s.z_index = 2
+            s.current_map = game_map
+            s.location = MapKey(px, py, 0)
+            spawned_structures.append(s)
+
+    # Per-NPC composite override — maps the seeded test-town NPC keys
+    # to the villager composite sprites so they render with distinct
+    # hats instead of the default human sprite. Other maps fall back
+    # to whatever the species's default composite is.
+    _npc_composite_overrides = {
+        'npc_mayor':  'villager_mayor',
+        'npc_farmer': 'villager_farmer',
+        'npc_smith':  'villager_smith',
+        'npc_trader': 'villager_trader',
+        'npc_healer': 'villager_healer',
+        'npc_guard':  'villager_guard',
+    }
+
+    # Spawn the seeded test-town NPCs at their stored locations. Kept
+    # in an explicit list so Python's GC doesn't collect them between
+    # spawn time and the next render pass (WorldObject._by_map is a
+    # WeakSet).
+    spawned_npcs = []
     for npc_key, npc_block in CREATURES.items():
         if npc_block.get('spawn_map') == game_map.name:
             sx = npc_block.get('spawn_x') or 0
@@ -74,6 +145,11 @@ def main():
             )
             # Stash the dialogue tree key so the player can talk to them
             npc.dialogue_tree = npc_block.get('dialogue_tree')
+            # Override composite sprite so the villager layers render
+            override = _npc_composite_overrides.get(npc_key)
+            if override:
+                npc.composite_name = override
+            spawned_npcs.append(npc)
 
     clock_font = pygame.font.SysFont(None, 24)
     last_move  = 0

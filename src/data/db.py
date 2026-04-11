@@ -607,6 +607,16 @@ def _load_creatures(con: sqlite3.Connection) -> None:
             block['prudishness'] = r['prudishness']
         if r['behavior'] is not None:
             block['behavior'] = r['behavior']
+        # Spawn hints — used by the game runtime (main.py) to place
+        # seeded NPCs at fixed positions when a map loads.
+        for field in ('spawn_map', 'spawn_x', 'spawn_y', 'dialogue_tree',
+                       'deity', 'gold', 'description', 'title'):
+            try:
+                val = r[field]
+            except (KeyError, IndexError):
+                val = None
+            if val is not None:
+                block[field] = val
         # Resolve job from the DB reference — JOBS was populated earlier
         # in the load sequence. Unknown or missing job_key → wanderer.
         try:
