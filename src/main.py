@@ -23,12 +23,13 @@ from classes.inventory import Structure
 from classes.world_object import WorldObject
 from classes.levels import exp_for_level
 from classes.maps import MapKey
-from data.db import load as load_db
+from data.db import load as load_db, MAPS, CREATURES, ITEMS
 from main.map_gen import make_map
-from main.rendering import camera_offset, draw_map_row, draw_menu, draw_hud, draw_debug
+from main.rendering import camera_offset, draw_map_row, draw_menu, draw_debug
 from main.save_ui import SaveLoadUI, set_player
 from main.game_clock import GameClock
 from main.lighting import draw_ambient_overlay, make_shadow, apply_top_highlight
+from main.menus import InventoryMenu, QuestLogMenu, HUD
 
 def main():
     load_db()
@@ -37,29 +38,51 @@ def main():
     pygame.display.set_caption("Game")
     clock = pygame.time.Clock()
 
-    cols = (SCREEN_WIDTH  // get_block_size()) * 3
-    rows = (SCREEN_HEIGHT // get_block_size()) * 3
-
-    nested_map = make_map(cols, rows)
-    game_map   = make_map(cols, rows, nested_map=nested_map)
+    # Spawn into the seeded test_town if it exists, otherwise fall back
+    # to a generated map (preserves backward compat for users who haven't
+    # run seed_test_world.py yet).
+    game_map = MAPS.get('test_town')
+    if game_map is None:
+        cols = (SCREEN_WIDTH  // get_block_size()) * 3
+        rows = (SCREEN_HEIGHT // get_block_size()) * 3
+        nested_map = make_map(cols, rows)
+        game_map   = make_map(cols, rows, nested_map=nested_map)
+    cols = game_map.x_max + 1
+    rows = game_map.y_max + 1
 
     player = Creature(
         current_map=game_map,
         location=MapKey(*game_map.entrance, 0),
+        name='Hero',
         species='human',
         stats={Stat.VIT: 10},
     )
-    # Place NPC on a walkable tile near the entrance
-    npc_loc = MapKey(game_map.entrance[0] + 3, game_map.entrance[1] + 2, 0)
-    Creature(current_map=game_map, location=npc_loc, species='automaton',
-             behavior=RandomWanderBehavior())
+    # Spawn the seeded test-town NPCs at their stored locations.
+    for npc_key, npc_block in CREATURES.items():
+        if npc_block.get('spawn_map') == game_map.name:
+            sx = npc_block.get('spawn_x') or 0
+            sy = npc_block.get('spawn_y') or 0
+            npc = Creature(
+                current_map=game_map,
+                location=MapKey(sx, sy, 0),
+                name=npc_block.get('name', npc_key),
+                species=npc_block.get('species', 'human'),
+                sex=npc_block.get('sex'),
+                age=npc_block.get('age', 25),
+                stats=npc_block.get('stats', {}),
+                behavior=RandomWanderBehavior(),
+            )
+            # Stash the dialogue tree key so the player can talk to them
+            npc.dialogue_tree = npc_block.get('dialogue_tree')
 
-    font       = pygame.font.SysFont(None, 28)
     clock_font = pygame.font.SysFont(None, 24)
     last_move  = 0
     paused     = False
     menu_idx   = 0
     save_ui    = None   # SaveLoadUI instance when open, else None
+    inv_menu   = None   # InventoryMenu instance when open
+    quest_menu = None   # QuestLogMenu instance when open
+    hud        = HUD()  # always-visible meters
     game_clock = GameClock(start_hour=8.0)
 
     running = True
@@ -84,6 +107,18 @@ def main():
                             paused  = False
                             for c in Creature.all():
                                 c._last_move = now
+
+                # ---- inventory menu is open --------------------------------
+                elif inv_menu is not None:
+                    r = inv_menu.handle_event(event, player)
+                    if r == 'close':
+                        inv_menu = None
+
+                # ---- quest log is open -------------------------------------
+                elif quest_menu is not None:
+                    r = quest_menu.handle_event(event, player)
+                    if r == 'close':
+                        quest_menu = None
 
                 elif event.type == pygame.KEYDOWN:
                     # ---- pause menu -----------------------------------------i want to add this repo to my github. i want to change my global git e-mail to github@jasonlackey.com, which is the same as my github login e-mail.
@@ -112,6 +147,10 @@ def main():
                         if event.key == pygame.K_ESCAPE:
                             paused   = True
                             menu_idx = 0
+                        if event.key == pygame.K_i:
+                            inv_menu = InventoryMenu()
+                        if event.key == pygame.K_q:
+                            quest_menu = QuestLogMenu()
                         if event.key == pygame.K_RETURN:
                             if not player.enter():
                                 player.exit()
@@ -193,7 +232,8 @@ def main():
         # ambient day/night overlay (after all world rendering, before UI)
         draw_ambient_overlay(screen, game_clock.hour, game_clock.moon_brightness)
 
-        draw_hud(screen, player, font)
+        # Rich HUD with HP/STA/MP/HUNGER meters + name/level/gold
+        hud.draw(screen, player)
 
         # clock display with moon phase at night
         time_str = f'{game_clock.format_time()}  {game_clock.format_period()}'
@@ -202,11 +242,17 @@ def main():
         time_surf = clock_font.render(time_str, True, (200, 200, 200))
         screen.blit(time_surf, (SCREEN_WIDTH - time_surf.get_width() - 10, SCREEN_HEIGHT - 26))
 
-        if paused and save_ui is None:
+        if paused and save_ui is None and inv_menu is None and quest_menu is None:
             draw_menu(screen, menu_idx)
 
         if save_ui is not None:
             save_ui.draw(screen)
+
+        if inv_menu is not None:
+            inv_menu.draw(screen, player)
+
+        if quest_menu is not None:
+            quest_menu.draw(screen, player)
 
         if DEBUG:
             draw_debug(screen, clock)
