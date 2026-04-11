@@ -195,20 +195,58 @@ _DIRS = {
 
 
 def dispatch(creature, action: int, context: dict) -> dict:
-    """Execute an action for a creature. Records action in god counters
-    and bumps the creature's failed_actions counter on failure so the
-    'failed_actions' reward signal has data to penalize.
+    """Execute an action for a creature. Records action in god counters,
+    bumps failed_actions on failure, and emits a sound event for any
+    action that should be audible to nearby creatures.
     """
     result = _dispatch_inner(creature, action, context)
     succeeded = result.get('success', result.get('hit', False))
     if succeeded:
         _record_god_action(action)
+        _emit_action_sound(creature, action, context)
     else:
         # Failed action: bump the counter so reward.py can penalize.
         # Reward scale is per-stage; the curriculum mask decides
         # whether the penalty actually fires.
         creature.failed_actions = getattr(creature, 'failed_actions', 0) + 1
     return result
+
+
+# Map action ranges/identifiers to the sound type they emit on success.
+# Actions not in this map are silent. Movement is intentionally low-
+# volume so it doesn't dominate the hearing buffer.
+def _emit_action_sound(creature, action: int, context: dict):
+    from classes.sound import emit_sound
+
+    # Movement actions (0-23): footstep
+    if 0 <= action <= 23:
+        emit_sound(creature, 'footstep', tick=context.get('now', 0))
+        return
+
+    # Combat
+    if action in (Action.MELEE_ATTACK, Action.RANGED_ATTACK,
+                   Action.GRAPPLE, Action.CAST_SPELL):
+        emit_sound(creature, 'combat', tick=context.get('now', 0))
+        return
+
+    # Social — speech
+    if action in (Action.TALK, Action.INTIMIDATE, Action.DECEIVE,
+                   Action.SHARE_RUMOR, Action.TRADE, Action.BRIBE):
+        emit_sound(creature, 'speech', tick=context.get('now', 0))
+        return
+
+    # Economic
+    if action in (Action.HARVEST, Action.FARM, Action.PROCESS, Action.JOB):
+        emit_sound(creature, 'harvest', tick=context.get('now', 0))
+        return
+
+    if action in (Action.DROP, Action.PICKUP):
+        emit_sound(creature, 'drop', tick=context.get('now', 0))
+        return
+
+    if action == Action.PUSH:
+        emit_sound(creature, 'struggle', tick=context.get('now', 0))
+        return
 
 
 def _dispatch_inner(creature, action: int, context: dict) -> dict:

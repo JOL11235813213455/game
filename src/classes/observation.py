@@ -42,6 +42,7 @@ _SECTION_SIZES = {
     'tile_items': MAX_TILE_ITEMS * 9, 'census': 45, 'census_audio': 3,
     'world_time': 13, 'temporal': 14, 'trends': 11, 'time_since': 12,
     'reward_signals': 17, 'social_topology': 17, 'water_awareness': 5,
+    'hearing_section': 12,
 }
 # Per-engaged and identity are variable (species/deity count)
 PER_ENGAGED_SIZE = 51  # grew from 45: 4 placeholder zeros replaced + 6 new fields
@@ -1052,6 +1053,13 @@ def build_observation(creature, cols: int, rows: int,
     in_water = 1.0 if (tile and getattr(tile, 'liquid', False)) else 0.0
     obs.append(in_water * (1.0 - can_swim))  # water_danger_flag
     obs.append(can_swim)
+
+    # ==== SECTION 22d: HEARING (12) ====
+    # Sound events emitted by other creatures during this tick — see
+    # classes/sound.py. Gives the NN awareness of activity outside its
+    # visual range: combat to the east, harvesting to the north, etc.
+    from classes.sound import hearing_observation
+    obs.extend(hearing_observation(creature, observation_tick or 0))
 
     # ==== SECTION 23: WORLD / TIME (13) ====
     if game_clock:

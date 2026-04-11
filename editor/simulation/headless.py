@@ -180,6 +180,13 @@ class Simulation:
         self.now += self.tick_ms
         self.step_count += 1
 
+        # Clear sound buffer at the START of the tick. Action handlers
+        # called during the creature update pass will emit fresh sounds
+        # into this empty buffer; the perception delivery pass at the
+        # end of the tick reads them.
+        from classes.sound import clear_sounds, deliver_sounds
+        clear_sounds(self.game_map)
+
         # Advance game clock: 1 tick = 1 game minute, matching the hunger
         # drain convention (2.0 / 1440 ticks = full depletion per game day).
         # GameClock.update takes real seconds and maps 1 real second = 1
@@ -199,6 +206,15 @@ class Simulation:
         for c in self.creatures:
             if c.is_alive:
                 c.update(self.now, self.cols, self.rows)
+
+        # Deliver any sound events that fired during this tick to
+        # creatures within range. Done after all creature updates so
+        # ordering doesn't matter — every creature sees every sound
+        # emitted on this tick (including ones from creatures processed
+        # later in the loop).
+        for c in self.creatures:
+            if c.is_alive:
+                deliver_sounds(c, self.step_count)
 
         # Grow tile resources every 50 steps (~1 game minute at 500ms ticks)
         if self.step_count % 50 == 0:
