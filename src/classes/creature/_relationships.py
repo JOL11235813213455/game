@@ -2,7 +2,14 @@ from __future__ import annotations
 
 
 class RelationshipsMixin:
-    """Relationship tracking and loan methods for Creature."""
+    """Relationship tracking and loan methods for Creature.
+
+    All relationship and rumor state lives in the centralized
+    ``RelationshipGraph`` singleton (``GRAPH``). These methods are
+    ergonomic wrappers so call sites can write
+    ``creature.record_interaction(other, 2.0)`` rather than
+    ``GRAPH.record_interaction(creature.uid, other.uid, 2.0)``.
+    """
 
     def record_interaction(self, other, score: float):
         """Record an interaction with another creature.
@@ -11,32 +18,26 @@ class RelationshipsMixin:
             other: the creature interacted with
             score: positive = good, negative = bad
         """
-        uid = other.uid
-        if uid in self.relationships:
-            rel = self.relationships[uid]
-            rel[0] += score       # sentiment
-            rel[1] += 1           # count
-            if score < rel[2]:
-                rel[2] = score    # min_score
-            if score > rel[3]:
-                rel[3] = score    # max_score
-        else:
-            self.relationships[uid] = [score, 1, score, score]
+        from classes.relationship_graph import GRAPH
+        GRAPH.record_interaction(self.uid, other.uid, score)
 
     def get_relationship(self, other):
-        """Return (sentiment, count, min_score, max_score) or None."""
-        return self.relationships.get(other.uid)
+        """Return [sentiment, count, min_score, max_score] or None."""
+        from classes.relationship_graph import GRAPH
+        return GRAPH.get_edge(self.uid, other.uid)
 
     def relationship_confidence(self, other) -> float:
         """Return 0.0–1.0 confidence based on interaction count."""
-        rel = self.relationships.get(other.uid)
+        from classes.relationship_graph import GRAPH
+        rel = GRAPH.get_edge(self.uid, other.uid)
         if rel is None:
             return 0.0
         return rel[1] / (rel[1] + 5)
 
     def curiosity_toward(self, other) -> float:
         """Return curiosity score (high for strangers, decays with familiarity)."""
-        rel = self.relationships.get(other.uid)
+        from classes.relationship_graph import GRAPH
+        rel = GRAPH.get_edge(self.uid, other.uid)
         if rel is None:
             return 1.0
         return 1 / (1 + rel[1])
@@ -46,11 +47,9 @@ class RelationshipsMixin:
     def receive_rumor(self, source, subject_uid: int,
                       sentiment: float, confidence: float, tick: int):
         """Receive a rumor about a third party from a source creature."""
-        entry = (source.uid, sentiment, confidence, tick)
-        if subject_uid in self.rumors:
-            self.rumors[subject_uid].append(entry)
-        else:
-            self.rumors[subject_uid] = [entry]
+        from classes.relationship_graph import GRAPH
+        GRAPH.add_rumor(self.uid, subject_uid, source.uid,
+                        sentiment, confidence, tick)
 
     def rumor_opinion(self, subject_uid: int, current_tick: int,
                       decay_rate: float = 0.001) -> float:
@@ -59,18 +58,18 @@ class RelationshipsMixin:
         Weights: source_trust * confidence * time_decay.
         Returns 0.0 if no rumors exist.
         """
-        rumors = self.rumors.get(subject_uid)
+        from classes.relationship_graph import GRAPH
+        rumors = GRAPH.get_rumors(self.uid, subject_uid)
         if not rumors:
             return 0.0
         total_weight = 0.0
         weighted_sentiment = 0.0
         for source_uid, sentiment, confidence, tick in rumors:
-            source_rel = self.relationships.get(source_uid)
+            source_rel = GRAPH.get_edge(self.uid, source_uid)
             if source_rel is not None:
-                # Trust the source based on our relationship with them
                 source_trust = max(0.0, source_rel[0] / (abs(source_rel[0]) + 5))
             else:
-                source_trust = 0.1  # slight trust for strangers
+                source_trust = 0.1
             age = current_tick - tick
             time_decay = 1 / (1 + decay_rate * age)
             weight = source_trust * confidence * time_decay
@@ -86,12 +85,6 @@ class RelationshipsMixin:
                   daily_rate: float = 0.05, now: int = 0) -> bool:
         """Lend gold to another creature.
 
-        Args:
-            borrower: creature receiving the loan
-            amount: gold amount
-            daily_rate: daily interest rate (0.05 = 5% per day)
-            now: current game tick (for interest calculation)
-
         Returns True if loan was given.
         """
         if self.gold < amount or amount <= 0:
@@ -104,7 +97,6 @@ class RelationshipsMixin:
         borrower.loans[self.uid] = loan
         self.loans_given[borrower.uid] = loan
 
-        # Lending is a positive social act
         self.record_interaction(borrower, 2.0)
         borrower.record_interaction(self, 3.0)
         return True
@@ -149,25 +141,22 @@ class RelationshipsMixin:
         remaining = owed - payment
         result['remaining'] = remaining
 
-        if remaining <= 0.5:  # close enough to zero — clear the loan
+        if remaining <= 0.5:
             del self.loans[lender.uid]
             if self.uid in lender.loans_given:
                 del lender.loans_given[self.uid]
             result['fully_repaid'] = True
-            # Repaying in full is a positive act
             self.record_interaction(lender, 2.0)
             lender.record_interaction(self, 2.0)
         else:
-            # Update principal to remaining balance
             self.loans[lender.uid]['principal'] = remaining
-            self.loans[lender.uid]['originated'] = now  # reset clock
+            self.loans[lender.uid]['originated'] = now
 
         return result
 
     def collect_debt(self, borrower, now: int) -> dict:
-        """Attempt to collect on a loan. Borrower pays what they can.
+        """Attempt to collect on a loan.
 
-        If borrower can't pay, negative sentiment. If they pay, positive.
         Returns dict: collected, remaining, defaulted.
         """
         result = {'collected': 0.0, 'remaining': 0.0, 'defaulted': False}
@@ -179,20 +168,16 @@ class RelationshipsMixin:
         result['remaining'] = owed
 
         if borrower.gold >= owed:
-            # Full payment
             repay = borrower.repay_loan(self, owed, now)
             result['collected'] = repay['paid']
             result['remaining'] = repay['remaining']
         elif borrower.gold > 0:
-            # Partial payment
             repay = borrower.repay_loan(self, borrower.gold, now)
             result['collected'] = repay['paid']
             result['remaining'] = repay['remaining']
-            # Partial payment strains relationship
             self.record_interaction(borrower, -1.0)
             borrower.record_interaction(self, -1.0)
         else:
-            # Default — can't pay anything
             result['defaulted'] = True
             self.record_interaction(borrower, -5.0)
             borrower.record_interaction(self, -3.0)

@@ -198,16 +198,10 @@ class Creature(
         # Active conversation state: {target_uid, conversation, current_node_id}
         self.dialogue = None  # None = not in conversation
 
-        # Relationships: {uid: [sentiment, count, min_score, max_score]}
-        # sentiment = raw cumulative score, count = number of interactions,
-        # min/max = bounds of individual interaction scores
-        self.relationships: dict[int, list] = {}
-
-        # Rumors: {subject_uid: [(source_uid, sentiment, confidence, tick)]}
-        # Inherited opinions from other creatures about third parties.
-        # confidence = source's relationship confidence with the subject
-        # tick = game tick when rumor was received (for decay)
-        self.rumors: dict[int, list] = {}
+        # Relationships and rumors live in the centralized
+        # RelationshipGraph (src/classes/relationship_graph.py).
+        # Access via GRAPH.edges_from(self.uid), GRAPH.rumors_of(self.uid),
+        # etc. — no per-creature dicts.
 
         # Behavior module for non-player creatures (NPC AI, monster AI, etc.)
         self.behavior = behavior
@@ -245,6 +239,23 @@ class Creature(
 
         # Spatial memory: learn locations of purpose zones each tick
         self.register_tick('spatial_memory', 500, lambda now: self.update_spatial_memory(now))
+
+    # -- Pickle migration for centralized relationship graph ---------------
+    # Saves created before the graph refactor have ``relationships`` and
+    # ``rumors`` dicts directly in the creature's ``__dict__``. We
+    # intercept ``__setstate__`` (called by pickle) and migrate those
+    # dicts into the central GRAPH so the creature can unpickle cleanly.
+
+    def __setstate__(self, state):
+        legacy_rels = state.pop('relationships', None)
+        legacy_rumors = state.pop('rumors', None)
+        self.__dict__.update(state)
+        if legacy_rels:
+            from classes.relationship_graph import GRAPH
+            GRAPH.set_edges_from(self.uid, legacy_rels)
+        if legacy_rumors:
+            from classes.relationship_graph import GRAPH
+            GRAPH.set_rumors_of(self.uid, legacy_rumors)
 
     # -- Location property override (spatial grid registration) -----------
     #
