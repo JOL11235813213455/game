@@ -102,7 +102,14 @@ class CombatMixin:
 
         # Apply damage
         hp = target.stats.active[Stat.HP_CURR]()
+        final_dmg = min(hp, damage)  # can't deal more than remaining HP
         target.stats.base[Stat.HP_CURR] = max(0, hp - damage)
+        self._damage_dealt = getattr(self, '_damage_dealt', 0) + final_dmg
+
+        # Track kill if target died from this hit
+        if target.stats.active[Stat.HP_CURR]() <= 0:
+            self._kills = getattr(self, '_kills', 0) + 1
+            self.gain_exp(10)
 
         # Stagger check
         staggered = not target.stats.resist_check(weapon_impact, Stat.STAGGER_RESIST)
@@ -232,8 +239,15 @@ class CombatMixin:
 
         # Apply damage
         hp = target.stats.active[Stat.HP_CURR]()
+        final_dmg = min(hp, damage)
         target.stats.base[Stat.HP_CURR] = max(0, hp - damage)
+        self._damage_dealt = getattr(self, '_damage_dealt', 0) + final_dmg
         target.on_hit(now)
+
+        # Track kill if target died from this hit
+        if target.stats.active[Stat.HP_CURR]() <= 0:
+            self._kills = getattr(self, '_kills', 0) + 1
+            self.gain_exp(10)
 
         # Record interaction
         if target.can_see(self):
@@ -318,7 +332,14 @@ class CombatMixin:
             damage = max(1, int(spell['damage'] + magic_dmg))
             result['damage'] = damage
             hp = target.stats.active[Stat.HP_CURR]()
+            final_dmg = min(hp, damage)
             target.stats.base[Stat.HP_CURR] = max(0, hp - damage)
+            if target is not self:
+                self._damage_dealt = getattr(self, '_damage_dealt', 0) + final_dmg
+                # Track kill if target died from this hit
+                if target.stats.active[Stat.HP_CURR]() <= 0:
+                    self._kills = getattr(self, '_kills', 0) + 1
+                    self.gain_exp(10)
             target.on_hit(now)
             result['effect_applied'] = True
             if target is not self:

@@ -136,6 +136,8 @@ class Creature(
         self.life_goal_attainment: int = 0  # pairing, hatch, child milestones
         self.failed_actions: int = 0        # actions failed due to resources
         self._kills: int = 0
+        self._damage_dealt: int = 0
+        self._social_wins: int = 0
         self._tiles_explored: int = 0
         self._quests_completed: int = 0
         self._quest_steps_completed: int = 0

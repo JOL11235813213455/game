@@ -114,6 +114,7 @@ class UtilityMixin:
                     result['success'] = True
                     result['item'] = inv_item
                     result['amount'] = amount - overflow
+                    self.gain_exp(2)
                     return result
             clone = _copy.copy(template)
             clone.quantity = amount
@@ -121,6 +122,7 @@ class UtilityMixin:
             result['success'] = True
             result['item'] = clone
             result['amount'] = amount
+            self.gain_exp(2)
             return result
 
         # Fallback (no DB catalog): use the legacy runtime construction
@@ -131,6 +133,7 @@ class UtilityMixin:
                 result['success'] = True
                 result['item'] = inv_item
                 result['amount'] = amount - overflow
+                self.gain_exp(2)
                 return result
         harvested = Stackable(
             name=resource_name,
@@ -146,6 +149,7 @@ class UtilityMixin:
         result['success'] = True
         result['item'] = harvested
         result['amount'] = amount
+        self.gain_exp(2)
         return result
 
     def farm(self) -> dict:
@@ -254,6 +258,7 @@ class UtilityMixin:
         result['success'] = True
         result['recipe'] = recipe.name
         result['output'] = output
+        self.gain_exp(3)
         return result
 
     def do_job(self, now: int = 0) -> dict:

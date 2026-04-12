@@ -25,6 +25,7 @@ class SocialMixin:
         result['margin'] = margin
         if won:
             result['success'] = True
+            self._social_wins = getattr(self, '_social_wins', 0) + 1
             # Target may accept dominance — slight positive for intimidator
             target.record_interaction(self, -3.0)
             self.record_interaction(target, 1.0)
@@ -52,6 +53,7 @@ class SocialMixin:
         result['margin'] = margin
         if won:
             result['success'] = True
+            self._social_wins = getattr(self, '_social_wins', 0) + 1
             # Victim doesn't know they've been deceived
         else:
             result['reason'] = 'detected'
@@ -204,6 +206,8 @@ class SocialMixin:
                     getattr(target, '_trade_surplus_accumulated', 0.0)
                     + deal['seller_surplus']
                 )
+                self._social_wins = getattr(self, '_social_wins', 0) + 1
+                self.gain_exp(1)
                 result.update(tx)
                 result['direction'] = 'bought'
                 result['surplus'] = deal['buyer_surplus']
@@ -232,6 +236,8 @@ class SocialMixin:
                 getattr(target, '_trade_surplus_accumulated', 0.0)
                 + deal['buyer_surplus']
             )
+            self._social_wins = getattr(self, '_social_wins', 0) + 1
+            self.gain_exp(1)
             result.update(tx)
             result['direction'] = 'sold'
             result['surplus'] = deal['seller_surplus']
@@ -349,6 +355,7 @@ class SocialMixin:
 
         if bribe_value >= threshold:
             result['accepted'] = True
+            self._social_wins = getattr(self, '_social_wins', 0) + 1
             # Transfer items
             for item in items:
                 self.inventory.items.remove(item)
@@ -392,6 +399,7 @@ class SocialMixin:
 
         if won:
             result['success'] = True
+            self._social_wins = getattr(self, '_social_wins', 0) + 1
             target.inventory.items.remove(item)
             self.inventory.items.append(item)
             # Victim doesn't know (unless detected later)
@@ -428,6 +436,7 @@ class SocialMixin:
         # Sharing is a social interaction
         self.record_interaction(target, 1.0)
         target.record_interaction(self, 1.0)
+        self._social_wins = getattr(self, '_social_wins', 0) + 1
         return True
 
     def solicit_rumor(self, target, tick: int) -> bool:

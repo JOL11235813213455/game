@@ -122,8 +122,18 @@ def compute_reward(creature, prev: dict, curr: dict,
     # ---- 7. Ally count (scale 1.0, raw delta) ----
     signals['allies'] = (curr['allies'] - prev['allies']) * 1.0
 
+    # Social success: immediate reward for successful social actions
+    social_delta = curr.get('social_wins', 0) - prev.get('social_wins', 0)
+    if social_delta > 0:
+        signals['social_success'] = social_delta * 0.5
+
     # ---- 8. Kills (scale 3.0) ----
     signals['kills'] = (curr['kills'] - prev['kills']) * 3.0
+
+    # Damage dealt: reward proportional to HP reduced on others
+    dmg_delta = curr.get('damage_dealt', 0) - prev.get('damage_dealt', 0)
+    if dmg_delta > 0:
+        signals['damage_dealt'] = math.log(1 + dmg_delta) * 1.0
 
     # ---- 9. Exploration (scale 0.5) ----
     new_tiles = curr['tiles_explored'] - prev['tiles_explored']
@@ -159,6 +169,12 @@ def compute_reward(creature, prev: dict, curr: dict,
 
     fatigue_delta = curr['fatigue'] - prev['fatigue']
     signals['fatigue'] = -fatigue_delta * 1.5 if fatigue_delta > 0 else 0.0
+
+    # Sleep quality: positive reward when sleep reduces fatigue
+    prev_fatigue = prev.get('fatigue', 0)
+    curr_fatigue = curr.get('fatigue', 0)
+    if curr_fatigue < prev_fatigue:
+        signals['sleep_quality'] = (prev_fatigue - curr_fatigue) * 1.0
 
     nearby = curr.get('nearby_count', 0)
     signals['crowding'] = -(nearby - 4) * 0.3 if nearby >= 5 else 0.0
@@ -357,7 +373,7 @@ def make_reward_snapshot(creature) -> dict:
         'debt': debt,
         'disposable': disposable,
         'inv_value': inv_value,
-        'eq_kpi': 0,  # simplified — full KPI expensive
+        'eq_kpi': eq_value,  # sum of equipment values (cheap proxy for full KPI)
         'reputation': reputation,
         'allies': allies,
         'kills': getattr(creature, '_kills', 0),
@@ -380,4 +396,6 @@ def make_reward_snapshot(creature) -> dict:
         'wage_accumulated': getattr(creature, '_wage_accumulated', 0.0),
         'trade_surplus': getattr(creature, '_trade_surplus_accumulated', 0.0),
         'gold': getattr(creature, 'gold', 0),
+        'social_wins': getattr(creature, '_social_wins', 0),
+        'damage_dealt': getattr(creature, '_damage_dealt', 0),
     }
