@@ -35,7 +35,8 @@ class Simulation:
     def __init__(self, arena: dict, tick_ms: int = 500,
                  hunger_drain_enabled: bool = True,
                  combat_enabled: bool = True,
-                 gestation_enabled: bool = True):
+                 gestation_enabled: bool = True,
+                 fatigue_enabled: bool = True):
         """Initialize simulation from an arena dict.
 
         Args:
@@ -53,6 +54,9 @@ class Simulation:
             gestation_enabled: when False, the daily lifecycle pass
                 skips egg gestation/hatching entirely. Used by stages
                 where reproduction is not yet active.
+            fatigue_enabled: when False, creatures never accumulate
+                sleep debt or fatigue. Used by early curriculum stages
+                so creatures can learn without rest pressure.
         """
         self.game_map = arena['map']
         self.creatures = list(arena['creatures'])
@@ -66,9 +70,14 @@ class Simulation:
         self.hunger_drain_enabled = hunger_drain_enabled
         self.combat_enabled = combat_enabled
         self.gestation_enabled = gestation_enabled
+        self.fatigue_enabled = fatigue_enabled
         if not hunger_drain_enabled:
             for c in self.creatures:
                 c._hunger_drain = 0.0
+        if not fatigue_enabled:
+            for c in self.creatures:
+                c.sleep_debt = 0
+                c._fatigue_level = 0
 
         # Rebuild the map's spatial grid from scratch. The arena generator
         # constructs creatures with locations, but if it did so before

@@ -819,19 +819,22 @@ def seed():
     # with old signals dropped to ~0.3 of full strength.
     def _stage(num, name, desc, signals, hunger, combat, gestation,
                mappo, es_gens, es_vars, es_steps, ppo, lr=0.0003, ent=0.05,
-               resume=None):
+               resume=None, allowed_actions=None, fatigue_enabled=True):
         con.execute(
             'INSERT OR REPLACE INTO curriculum_stages '
             '(stage_number, name, description, active_signals, signal_scales, '
             'hunger_drain, combat_enabled, gestation_enabled, '
             'mappo_steps, es_generations, es_variants, es_steps, ppo_steps, '
-            'learning_rate, ent_coef, resume_from_stage) '
-            'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+            'learning_rate, ent_coef, resume_from_stage, '
+            'allowed_actions, fatigue_enabled) '
+            'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
             (num, name, desc,
              _json.dumps(list(signals.keys())),
              _json.dumps(signals),
              1 if hunger else 0, 1 if combat else 0, 1 if gestation else 0,
-             mappo, es_gens, es_vars, es_steps, ppo, lr, ent, resume)
+             mappo, es_gens, es_vars, es_steps, ppo, lr, ent, resume,
+             _json.dumps(allowed_actions or []),
+             1 if fatigue_enabled else 0)
         )
 
     # Stage 1: Wander — learn to move purposefully
@@ -849,7 +852,44 @@ def seed():
     # fading older signals to ~0.3-0.5. Designed to match the rebuilt
     # perception system (10-slot persistent ids, social topology,
     # water awareness, hearing).
+    #
+    # Progressive action masking: each stage unlocks a cumulative set
+    # of actions. Actions outside the mask are impossible for the net
+    # to select, so the policy focuses on what's relevant.
     # ==================================================================
+
+    # Action groups for progressive unlock
+    _MOVE8 = list(range(0, 8))          # MOVE_N through MOVE_NW
+    _RUN8 = list(range(8, 16))          # RUN_N through RUN_NW
+    _SNEAK8 = list(range(16, 24))       # SNEAK_N through SNEAK_NW
+    _COMBAT = [24, 25, 26, 27]          # MELEE, RANGED, GRAPPLE, CAST
+    _SOCIAL = [28, 29, 30, 31, 32, 33, 34]  # INTIMIDATE..TALK
+    _UTILITY_BASIC = [38, 40]           # WAIT, SEARCH
+    _PICKUP_DROP = [35, 36]             # PICKUP, DROP
+    _USE = [37]                         # USE_ITEM
+    _FOLLOW = [42]                      # FOLLOW
+    _HARVEST = [49, 53, 55]             # DIG, HARVEST, FARM
+    _PROCESS = [51, 52, 56]             # CRAFT, DISASSEMBLE, PROCESS
+    _JOB = [54]                         # JOB
+    _TRADE = [30, 31, 32]              # TRADE, BRIBE, STEAL
+    _SLEEP = [39, 44, 48]              # GUARD, SLEEP, EXIT_GUARD
+    _SOCIAL_TALK = [28, 29, 33, 34, 43]  # INTIMIDATE, DECEIVE, SHARE_RUMOR, TALK, CALL_BACKUP
+    _COMBAT_FULL = [24, 25, 26, 27, 41, 45, 46, 47, 50]  # combat + FLEE, SET_TRAP, BLOCK, EXIT_BLOCK, PUSH
+    _PAIR = [57]                        # PAIR
+
+    # Build cumulative action sets per stage
+    _s1_actions = sorted(_MOVE8 + _UTILITY_BASIC)
+    _s2_actions = sorted(_s1_actions + _PICKUP_DROP)
+    _s3_actions = sorted(_s2_actions + _USE + _RUN8)
+    _s4_actions = sorted(_s3_actions + _FOLLOW + _SNEAK8)
+    _s5_actions = sorted(_s4_actions + _HARVEST)
+    _s6_actions = sorted(_s5_actions + _PROCESS)
+    _s7_actions = sorted(_s6_actions + _JOB)
+    _s8_actions = sorted(_s7_actions + _TRADE)
+    _s9_actions = sorted(_s8_actions + _SLEEP)
+    _s10_actions = sorted(_s9_actions + _SOCIAL_TALK)
+    _s11_actions = sorted(_s10_actions + _COMBAT_FULL)
+    _s12_actions = sorted(_s11_actions + _PAIR)  # all 58
 
     # S1 — Wander
     _stage(1, 'Wander',
@@ -858,7 +898,8 @@ def seed():
            {'exploration': 1.0, 'hp': 0.3,
             'failed_actions': 0.5, 'water_danger': 1.0},
            hunger=False, combat=False, gestation=False,
-           mappo=20000, es_gens=0, es_vars=20, es_steps=1000, ppo=20000)
+           mappo=20000, es_gens=0, es_vars=20, es_steps=1000, ppo=20000,
+           allowed_actions=_s1_actions, fatigue_enabled=False)
 
     # S2 — Pickup
     _stage(2, 'Pickup',
@@ -868,7 +909,7 @@ def seed():
             'failed_actions': 0.5, 'water_danger': 1.0},
            hunger=False, combat=False, gestation=False,
            mappo=20000, es_gens=0, es_vars=20, es_steps=1000, ppo=30000,
-           resume=1)
+           resume=1, allowed_actions=_s2_actions, fatigue_enabled=False)
 
     # S3 — Hunger
     _stage(3, 'Hunger',
@@ -879,7 +920,7 @@ def seed():
             'failed_actions': 0.5, 'water_danger': 0.7},
            hunger=True, combat=False, gestation=False,
            mappo=20000, es_gens=0, es_vars=20, es_steps=1000, ppo=50000,
-           resume=2)
+           resume=2, allowed_actions=_s3_actions, fatigue_enabled=False)
 
     # S4 — Purpose
     _stage(4, 'Purpose',
@@ -888,12 +929,13 @@ def seed():
            {'exploration': 0.3, 'hp': 0.3,
             'gold': 0.5, 'inventory': 0.5,
             'hunger': 0.7,
+            'xp': 0.1,
             'goal_progress': 0.7, 'goal_completed': 1.0,
             'purpose_proximity': 1.0,
             'failed_actions': 0.5, 'water_danger': 0.7},
            hunger=True, combat=False, gestation=False,
            mappo=20000, es_gens=0, es_vars=20, es_steps=1000, ppo=50000,
-           resume=3)
+           resume=3, allowed_actions=_s4_actions, fatigue_enabled=False)
 
     # S5 — Harvest
     _stage(5, 'Harvest',
@@ -902,12 +944,13 @@ def seed():
            {'exploration': 0.3, 'hp': 0.3,
             'gold': 0.5, 'inventory': 0.7,
             'hunger': 0.7,
+            'xp': 0.1, 'equipment': 0.3,
             'goal_progress': 0.5, 'goal_completed': 1.0,
             'purpose_proximity': 0.7,
             'failed_actions': 0.5, 'water_danger': 0.7},
            hunger=True, combat=False, gestation=False,
            mappo=20000, es_gens=0, es_vars=20, es_steps=1000, ppo=60000,
-           resume=4)
+           resume=4, allowed_actions=_s5_actions, fatigue_enabled=False)
 
     # S6 — Process
     _stage(6, 'Process',
@@ -916,12 +959,13 @@ def seed():
            {'exploration': 0.3, 'hp': 0.3,
             'gold': 0.5, 'inventory': 1.0,
             'hunger': 0.7,
+            'xp': 0.1, 'equipment': 0.3,
             'goal_progress': 0.5, 'goal_completed': 1.0,
             'purpose_proximity': 0.5,
             'failed_actions': 0.5, 'water_danger': 0.5},
            hunger=True, combat=False, gestation=False,
            mappo=20000, es_gens=0, es_vars=20, es_steps=1000, ppo=60000,
-           resume=5)
+           resume=5, allowed_actions=_s6_actions, fatigue_enabled=False)
 
     # S7 — Jobs
     _stage(7, 'Jobs',
@@ -931,12 +975,13 @@ def seed():
             'gold': 0.7, 'inventory': 0.7,
             'hunger': 0.7,
             'wage': 1.0,
+            'xp': 0.2, 'equipment': 0.3,
             'goal_progress': 0.5, 'goal_completed': 1.0,
             'purpose_proximity': 0.5,
             'failed_actions': 0.5, 'water_danger': 0.5},
            hunger=True, combat=False, gestation=False,
            mappo=20000, es_gens=10, es_vars=20, es_steps=1500, ppo=60000,
-           resume=6)
+           resume=6, allowed_actions=_s7_actions, fatigue_enabled=False)
 
     # S8 — Trade
     _stage(8, 'Trade',
@@ -945,12 +990,13 @@ def seed():
             'gold': 0.7, 'inventory': 0.7,
             'hunger': 0.7,
             'wage': 0.7, 'trade': 1.0,
+            'xp': 0.2, 'equipment': 0.5, 'debt': 0.5,
             'goal_progress': 0.5, 'goal_completed': 1.0,
             'purpose_proximity': 0.5,
             'failed_actions': 0.5, 'water_danger': 0.5},
            hunger=True, combat=False, gestation=False,
            mappo=20000, es_gens=15, es_vars=30, es_steps=1500, ppo=80000,
-           resume=7)
+           resume=7, allowed_actions=_s8_actions, fatigue_enabled=False)
 
     # S9 — Schedule
     _stage(9, 'Schedule',
@@ -960,13 +1006,14 @@ def seed():
             'gold': 0.5, 'inventory': 0.5,
             'hunger': 0.7,
             'wage': 0.7, 'trade': 0.7,
+            'xp': 0.2, 'equipment': 0.5, 'debt': 0.5,
             'goal_progress': 0.5, 'goal_completed': 1.0,
             'purpose_proximity': 0.5,
             'fatigue': 1.0, 'crowding': 1.0,
             'failed_actions': 0.5, 'water_danger': 0.5},
            hunger=True, combat=False, gestation=False,
            mappo=20000, es_gens=10, es_vars=30, es_steps=1500, ppo=60000,
-           resume=8)
+           resume=8, allowed_actions=_s9_actions, fatigue_enabled=True)
 
     # S10 — Reputation
     _stage(10, 'Reputation',
@@ -976,6 +1023,7 @@ def seed():
             'gold': 0.5, 'inventory': 0.5,
             'hunger': 0.7,
             'wage': 0.5, 'trade': 0.7,
+            'xp': 0.3, 'equipment': 0.5, 'debt': 0.7,
             'goal_progress': 0.5, 'goal_completed': 1.0,
             'purpose_proximity': 0.5,
             'reputation': 1.0, 'allies': 1.0,
@@ -983,7 +1031,7 @@ def seed():
             'failed_actions': 0.7, 'water_danger': 0.5},
            hunger=True, combat=False, gestation=False,
            mappo=20000, es_gens=10, es_vars=30, es_steps=1500, ppo=60000,
-           resume=9)
+           resume=9, allowed_actions=_s10_actions, fatigue_enabled=True)
 
     # S11 — Combat
     _stage(11, 'Combat',
@@ -994,6 +1042,7 @@ def seed():
             'gold': 0.5, 'inventory': 0.5,
             'hunger': 0.7,
             'wage': 0.5, 'trade': 0.5,
+            'xp': 0.3, 'equipment': 0.7, 'debt': 0.7,
             'goal_progress': 0.5, 'goal_completed': 1.0,
             'purpose_proximity': 0.5,
             'reputation': 0.7, 'allies': 0.7,
@@ -1002,7 +1051,7 @@ def seed():
             'failed_actions': 1.0, 'water_danger': 0.5},
            hunger=True, combat=True, gestation=False,
            mappo=20000, es_gens=10, es_vars=30, es_steps=1500, ppo=80000,
-           resume=10)
+           resume=10, allowed_actions=_s11_actions, fatigue_enabled=True)
 
     # S12 — Lifecycle
     _stage(12, 'Lifecycle',
@@ -1012,16 +1061,17 @@ def seed():
             'gold': 0.5, 'inventory': 0.5,
             'hunger': 0.7,
             'wage': 0.5, 'trade': 0.5,
+            'xp': 0.3, 'equipment': 0.7, 'debt': 0.7,
             'goal_progress': 0.5, 'goal_completed': 1.0,
             'purpose_proximity': 0.5,
             'reputation': 0.7, 'allies': 0.7,
             'kills': 0.7,
-            'fatigue': 1.0, 'crowding': 1.0,
+            'fatigue': 1.0, 'crowding': 0.5,
             'life_goals': 1.0,
             'failed_actions': 1.0, 'water_danger': 0.5},
            hunger=True, combat=True, gestation=True,
            mappo=20000, es_gens=10, es_vars=30, es_steps=1500, ppo=80000,
-           resume=11)
+           resume=11, allowed_actions=_s12_actions, fatigue_enabled=True)
 
     # S13 — Religion
     _stage(13, 'Religion',
@@ -1030,17 +1080,18 @@ def seed():
             'gold': 0.5, 'inventory': 0.5,
             'hunger': 0.7,
             'wage': 0.5, 'trade': 0.5,
+            'xp': 0.5, 'equipment': 0.7, 'debt': 0.7,
             'goal_progress': 0.5, 'goal_completed': 1.0,
             'purpose_proximity': 0.5,
             'reputation': 0.7, 'allies': 0.7,
             'kills': 0.7,
-            'fatigue': 1.0, 'crowding': 1.0,
+            'fatigue': 1.0, 'crowding': 0.5,
             'life_goals': 0.7,
-            'piety': 1.0, 'quests': 1.0, 'xp': 0.5,
+            'piety': 1.0, 'quests': 1.0,
             'failed_actions': 1.0, 'water_danger': 0.5},
            hunger=True, combat=True, gestation=True,
            mappo=20000, es_gens=10, es_vars=30, es_steps=1500, ppo=60000,
-           resume=12)
+           resume=12, allowed_actions=_s12_actions, fatigue_enabled=True)
 
     # S14 — Mastery
     _stage(14, 'Mastery',
@@ -1049,17 +1100,18 @@ def seed():
             'gold': 0.5, 'inventory': 0.5,
             'hunger': 0.7,
             'wage': 0.5, 'trade': 0.7,
+            'xp': 0.5, 'equipment': 0.7, 'debt': 0.7,
             'goal_progress': 0.5, 'goal_completed': 1.0,
             'purpose_proximity': 0.5,
             'reputation': 0.7, 'allies': 0.7,
             'kills': 0.7,
-            'fatigue': 1.0, 'crowding': 1.0,
+            'fatigue': 1.0, 'crowding': 0.5,
             'life_goals': 1.0,
-            'piety': 0.7, 'quests': 0.7, 'xp': 0.5,
+            'piety': 0.7, 'quests': 0.7,
             'failed_actions': 1.0, 'water_danger': 0.5},
            hunger=True, combat=True, gestation=True,
            mappo=20000, es_gens=15, es_vars=40, es_steps=2000, ppo=120000,
-           resume=13)
+           resume=13, allowed_actions=_s12_actions, fatigue_enabled=True)
 
     con.commit()
     con.close()

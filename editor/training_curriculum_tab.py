@@ -101,15 +101,19 @@ class TrainingCurriculumTab(ttk.Frame):
         self.v_hunger = tk.BooleanVar()
         self.v_combat = tk.BooleanVar()
         self.v_gestation = tk.BooleanVar()
+        self.v_fatigue = tk.BooleanVar()
         cb1 = ttk.Checkbutton(toggles_row, text='Hunger drain', variable=self.v_hunger)
         cb1.pack(side=tk.LEFT, padx=4)
         add_tooltip(cb1, 'When off, creatures never starve in this stage')
         cb2 = ttk.Checkbutton(toggles_row, text='Combat', variable=self.v_combat)
         cb2.pack(side=tk.LEFT, padx=4)
-        add_tooltip(cb2, 'When off, MELEE/RANGED/GRAPPLE/CAST_SPELL short-circuit to noop')
+        add_tooltip(cb2, 'When off, MELEE/RANGED/GRAPPLE/CAST_SPELL short-circuit to noop (advisory — action mask is authoritative)')
         cb3 = ttk.Checkbutton(toggles_row, text='Gestation', variable=self.v_gestation)
         cb3.pack(side=tk.LEFT, padx=4)
         add_tooltip(cb3, 'When off, eggs never gestate or hatch — population stays static')
+        cb4 = ttk.Checkbutton(toggles_row, text='Fatigue', variable=self.v_fatigue)
+        cb4.pack(side=tk.LEFT, padx=4)
+        add_tooltip(cb4, 'When off, creatures never accumulate sleep debt or fatigue')
         row += 1
 
         # Pipeline shape
@@ -157,6 +161,27 @@ class TrainingCurriculumTab(ttk.Frame):
                                sticky='ew', padx=6, pady=2)
         add_tooltip(self.scales_text,
                     'JSON dict mapping signal name to scale, e.g. {"exploration": 1.0, "hp": 0.5}')
+        row += 1
+
+        # Allowed actions (progressive action masking)
+        ttk.Separator(f, orient=tk.HORIZONTAL).grid(
+            row=row, column=0, columnspan=2, sticky='ew', pady=6)
+        row += 1
+        ttk.Label(f, text='Allowed actions (mask)', font=('TkDefaultFont', 9, 'bold')
+                  ).grid(row=row, column=0, columnspan=2, sticky='w', padx=6, pady=2)
+        row += 1
+        ttk.Label(f, text='(JSON list of action indices, empty = all allowed)',
+                  foreground='gray').grid(row=row, column=0, columnspan=2,
+                                           sticky='w', padx=6)
+        row += 1
+
+        self.actions_text = tk.Text(f, width=50, height=3, wrap=tk.NONE,
+                                     font=('monospace', 9))
+        self.actions_text.grid(row=row, column=0, columnspan=2,
+                                sticky='ew', padx=6, pady=2)
+        add_tooltip(self.actions_text,
+                    'JSON list of allowed action indices, e.g. [0,1,2,3,4,5,6,7,38,40]. '
+                    'Empty list [] means all actions are allowed.')
         row += 1
 
         # Action buttons
@@ -254,6 +279,7 @@ class TrainingCurriculumTab(ttk.Frame):
         self.v_hunger.set(bool(r['hunger_drain']))
         self.v_combat.set(bool(r['combat_enabled']))
         self.v_gestation.set(bool(r['gestation_enabled']))
+        self.v_fatigue.set(bool(r['fatigue_enabled']) if r['fatigue_enabled'] is not None else True)
         self.v_mappo.set(str(r['mappo_steps']))
         self.v_es_gens.set(str(r['es_generations']))
         self.v_es_vars.set(str(r['es_variants']))
@@ -269,6 +295,13 @@ class TrainingCurriculumTab(ttk.Frame):
             scales = {}
         self.scales_text.delete('1.0', tk.END)
         self.scales_text.insert('1.0', json.dumps(scales, indent=2))
+        # Pretty-print allowed actions for editing
+        try:
+            allowed = json.loads(r['allowed_actions'] or '[]')
+        except Exception:
+            allowed = []
+        self.actions_text.delete('1.0', tk.END)
+        self.actions_text.insert('1.0', json.dumps(allowed))
 
     def _save_stage(self):
         if self._selected_stage is None:
@@ -280,6 +313,10 @@ class TrainingCurriculumTab(ttk.Frame):
             if not isinstance(scales, dict):
                 raise ValueError('signal_scales must be a JSON object')
             active_signals = list(scales.keys())
+            actions_str = self.actions_text.get('1.0', tk.END).strip() or '[]'
+            allowed_actions = json.loads(actions_str)
+            if not isinstance(allowed_actions, list):
+                raise ValueError('allowed_actions must be a JSON list')
             mappo = int(self.v_mappo.get() or 0)
             es_gens = int(self.v_es_gens.get() or 0)
             es_vars = int(self.v_es_vars.get() or 20)
@@ -300,9 +337,10 @@ class TrainingCurriculumTab(ttk.Frame):
                    name=?, description=?,
                    active_signals=?, signal_scales=?,
                    hunger_drain=?, combat_enabled=?, gestation_enabled=?,
+                   fatigue_enabled=?,
                    mappo_steps=?, es_generations=?, es_variants=?, es_steps=?,
                    ppo_steps=?, learning_rate=?, ent_coef=?,
-                   resume_from_stage=?
+                   resume_from_stage=?, allowed_actions=?
                    WHERE stage_number=?''',
                 (self.v_name.get().strip(),
                  self.desc_text.get('1.0', tk.END).strip(),
@@ -310,7 +348,9 @@ class TrainingCurriculumTab(ttk.Frame):
                  1 if self.v_hunger.get() else 0,
                  1 if self.v_combat.get() else 0,
                  1 if self.v_gestation.get() else 0,
+                 1 if self.v_fatigue.get() else 0,
                  mappo, es_gens, es_vars, es_steps, ppo, lr, ent, resume,
+                 json.dumps(allowed_actions),
                  self._selected_stage)
             )
             con.commit()

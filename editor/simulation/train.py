@@ -330,7 +330,8 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
               arena_kwargs: dict = None, rollout_len: int = 4096,
               sink=None, goal_net=None, goal_ppo=None,
               signal_scales: dict = None,
-              sim_kwargs: dict = None) -> TorchCreatureNet:
+              sim_kwargs: dict = None,
+              action_mask: np.ndarray = None) -> TorchCreatureNet:
     """Phase 1: Multi-agent PPO — all creatures share weights.
 
     If goal_net is provided, runs hierarchical goal selection every
@@ -420,7 +421,8 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
                 apply_preset_mask(obs, c.observation_mask)
 
             obs_arr = np.array(obs, dtype=np.float32)
-            action, log_prob, value = net.get_action(obs_arr, temperature=hunger_temperature(c))
+            action, log_prob, value = net.get_action(obs_arr, temperature=hunger_temperature(c),
+                                                      action_mask=action_mask)
 
             # Store for later collection
             tick_data[c.uid] = (obs_arr, action, log_prob, value)
@@ -433,8 +435,7 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
                     break
 
             dispatch(c, action, {'cols': sim.cols, 'rows': sim.rows,
-                                 'target': target, 'now': sim.now,
-                                 'combat_enabled': sim.combat_enabled})
+                                 'target': target, 'now': sim.now})
             action_counts[action] = action_counts.get(action, 0) + 1
             trail_actions.append((step, action))
 
@@ -473,7 +474,7 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
                 c._history.append(make_history_snapshot(c))
 
             buffer.store(obs_arr, action, reward, value, log_prob,
-                         not c.is_alive)
+                         not c.is_alive, action_mask=action_mask)
             total_reward += reward
             step_rewards.append(reward)
             if len(step_rewards) > 500:
@@ -491,7 +492,9 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
 
         # PPO update every rollout_len steps
         if len(buffer) >= rollout_len:
-            info = ppo.update(*buffer.get())
+            obs_b, act_b, rew_b, val_b, lp_b, done_b, masks_b = buffer.get()
+            info = ppo.update(obs_b, act_b, rew_b, val_b, lp_b, done_b,
+                              action_masks_arr=masks_b)
             buffer.clear()
             _log('mappo/policy_loss', info['policy_loss'], step)
             _log('mappo/value_loss', info['value_loss'], step)
@@ -688,7 +691,8 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             arena_kwargs: dict = None, rollout_len: int = 2048,
             sink=None, goal_net=None, goal_ppo=None,
             signal_scales: dict = None,
-            sim_kwargs: dict = None) -> TorchCreatureNet:
+            sim_kwargs: dict = None,
+            action_mask: np.ndarray = None) -> TorchCreatureNet:
     """Phase 3: Single-agent PPO against diverse opponents."""
     print(f'\n=== PPO Phase ({steps} steps) ===')
     arena_kwargs = arena_kwargs or {
@@ -771,7 +775,8 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             if agent.observation_mask:
                 apply_preset_mask(obs, agent.observation_mask)
             obs_arr = np.array(obs, dtype=np.float32)
-            action, log_prob, value = net.get_action(obs_arr, temperature=hunger_temperature(agent))
+            action, log_prob, value = net.get_action(obs_arr, temperature=hunger_temperature(agent),
+                                                      action_mask=action_mask)
 
             target = None
             for obj in WorldObject.on_map(agent.current_map):
@@ -781,8 +786,7 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
                         break
 
             dispatch(agent, action, {'cols': sim.cols, 'rows': sim.rows,
-                                     'target': target, 'now': sim.now,
-                                     'combat_enabled': sim.combat_enabled})
+                                     'target': target, 'now': sim.now})
             ppo_action_counts[action] = ppo_action_counts.get(action, 0) + 1
             ppo_trail_actions.append((step, action))
 
@@ -825,7 +829,7 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
 
         if agent.is_alive:
             buffer.store(obs_arr, action, reward, value, log_prob,
-                         not agent.is_alive)
+                         not agent.is_alive, action_mask=action_mask)
 
         # Accumulate reward for goal model
         if _goal_state:
@@ -834,7 +838,9 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
 
         # PPO update
         if len(buffer) >= rollout_len:
-            info = ppo.update(*buffer.get())
+            obs_b, act_b, rew_b, val_b, lp_b, done_b, masks_b = buffer.get()
+            info = ppo.update(obs_b, act_b, rew_b, val_b, lp_b, done_b,
+                              action_masks_arr=masks_b)
             buffer.clear()
             _log('ppo/policy_loss', info['policy_loss'], step)
             _log('ppo/value_loss', info['value_loss'], step)
@@ -928,7 +934,7 @@ def _load_curriculum_stage(stage_number: int) -> dict:
     con.close()
     if row is None:
         raise ValueError(f'No curriculum stage {stage_number} found in DB')
-    return {
+    stage = {
         'stage_number':     row['stage_number'],
         'name':             row['name'],
         'description':      row['description'],
@@ -946,6 +952,17 @@ def _load_curriculum_stage(stage_number: int) -> dict:
         'ent_coef':         float(row['ent_coef']),
         'resume_from_stage': row['resume_from_stage'],
     }
+    # Progressive action masking — build a numpy mask from allowed_actions
+    allowed = _json.loads(row['allowed_actions'] or '[]')
+    if allowed:
+        mask = np.zeros(NUM_ACTIONS, dtype=np.float32)
+        for a in allowed:
+            mask[a] = 1.0
+    else:
+        mask = np.ones(NUM_ACTIONS, dtype=np.float32)  # empty = all allowed
+    stage['action_mask'] = mask
+    stage['fatigue_enabled'] = bool(row['fatigue_enabled'])
+    return stage
 
 
 def _list_curriculum_stages() -> list[dict]:
@@ -992,7 +1009,10 @@ def train_curriculum_stage(stage_number: int, model_name: str,
     print(f'  {stage["description"]}')
     print(f'  Active signals: {", ".join(stage["active_signals"])}')
     print(f'  Env: hunger_drain={stage["hunger_drain"]} '
-          f'combat={stage["combat_enabled"]} gestation={stage["gestation_enabled"]}')
+          f'combat={stage["combat_enabled"]} gestation={stage["gestation_enabled"]} '
+          f'fatigue={stage["fatigue_enabled"]}')
+    mask_count = int(stage['action_mask'].sum())
+    print(f'  Action mask: {mask_count}/{NUM_ACTIONS} actions allowed')
     print(f'  Pipeline: MAPPO {stage["mappo_steps"]} -> '
           f'ES {stage["es_generations"]}x{stage["es_variants"]}x{stage["es_steps"]} -> '
           f'PPO {stage["ppo_steps"]}')
@@ -1066,6 +1086,7 @@ def train_curriculum_stage(stage_number: int, model_name: str,
         'hunger_drain_enabled': stage['hunger_drain'],
         'combat_enabled':       stage['combat_enabled'],
         'gestation_enabled':    stage['gestation_enabled'],
+        'fatigue_enabled':      stage['fatigue_enabled'],
     }
 
     arena_kwargs = {
@@ -1084,7 +1105,8 @@ def train_curriculum_stage(stage_number: int, model_name: str,
                         arena_kwargs=arena_kwargs,
                         goal_net=goal_net, goal_ppo=goal_ppo,
                         signal_scales=signal_scales,
-                        sim_kwargs=sim_kwargs)
+                        sim_kwargs=sim_kwargs,
+                        action_mask=stage['action_mask'])
         net.export_to_numpy(SAVE_DIR / 'mappo.npz')
         print(f'  MAPPO complete in {time.time() - mappo_t0:.0f}s')
 
@@ -1107,7 +1129,8 @@ def train_curriculum_stage(stage_number: int, model_name: str,
                       arena_kwargs=arena_kwargs,
                       goal_net=goal_net, goal_ppo=goal_ppo,
                       signal_scales=signal_scales,
-                      sim_kwargs=sim_kwargs)
+                      sim_kwargs=sim_kwargs,
+                      action_mask=stage['action_mask'])
         print(f'  PPO complete in {time.time() - ppo_t0:.0f}s')
 
     total_seconds = time.time() - pipeline_t0
@@ -1129,6 +1152,7 @@ def train_curriculum_stage(stage_number: int, model_name: str,
         'hunger_drain': stage['hunger_drain'],
         'combat_enabled': stage['combat_enabled'],
         'gestation_enabled': stage['gestation_enabled'],
+        'fatigue_enabled': stage['fatigue_enabled'],
     }
     training_stats = {
         'total_seconds': round(total_seconds, 1),
