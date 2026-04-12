@@ -168,10 +168,37 @@ def build_observation(creature, cols: int, rows: int,
     stats = creature.stats
     s = stats.active  # shorthand
 
+    # ---- Cache stat callables (huge win: stat lookups dominate profile) ----
+    # Call each stat's getter ONCE and reuse the scalar. Base stats are
+    # each referenced many times across the function; derived stats are
+    # each referenced 1-5 times.
+    _base_vals = [s[st]() for st in _BASE_ORDER]
+    _STR, _VIT, _AGL, _PER, _INT, _CHR, _LCK = _base_vals
+    _derived_vals = {st: s[st]() for st in _DERIVED_ORDER}
+    hp_max_raw = _derived_vals[Stat.HP_MAX]
+    hp_max = max(1, hp_max_raw)
+    hp_cur = s[Stat.HP_CURR]()
+    stam_max_raw = _derived_vals[Stat.MAX_STAMINA]
+    stam_max = max(1, stam_max_raw)
+    stam_cur = s[Stat.CUR_STAMINA]()
+    mana_max_raw = _derived_vals[Stat.MAX_MANA]
+    mana_max = max(1, mana_max_raw)
+    mana_cur = s[Stat.CUR_MANA]()
+    sight = max(1, _derived_vals[Stat.SIGHT_RANGE])
+    hearing = max(1, _derived_vals[Stat.HEARING_RANGE])
+    melee_dmg_val = _derived_vals[Stat.MELEE_DMG]
+    dodge_val = _derived_vals[Stat.DODGE]
+    armor_val = _derived_vals[Stat.ARMOR]
+    carry_max = max(1, _derived_vals[Stat.CARRY_WEIGHT])
+    craft_quality_val = _derived_vals[Stat.CRAFT_QUALITY]
+
+    # ---- Cache relationships (hot path) ----
+    rels = creature.relationships
+    rels_list = list(rels.values())
+
     # ==== SECTION 1: SELF BASE STATS (14) ====
     _section_starts['self_base'] = len(obs)
-    for st in _BASE_ORDER:
-        val = s[st]()
+    for val in _base_vals:
         obs.append(val / 20.0)
         obs.append(_dmod(val) / 5.0)
 
@@ -192,15 +219,9 @@ def build_observation(creature, cols: int, rows: int,
         Stat.BARTER_MOD: 10, Stat.NPC_DISPOSITION: 10,
     }
     for st in _DERIVED_ORDER:
-        obs.append(s[st]() / _norms.get(st, 20))
+        obs.append(_derived_vals[st] / _norms.get(st, 20))
 
     # ==== SECTION 3: SELF CURRENT RESOURCES (10) ====
-    hp_max = max(1, s[Stat.HP_MAX]())
-    hp_cur = s[Stat.HP_CURR]()
-    stam_max = max(1, s[Stat.MAX_STAMINA]())
-    stam_cur = s[Stat.CUR_STAMINA]()
-    mana_max = max(1, s[Stat.MAX_MANA]())
-    mana_cur = s[Stat.CUR_MANA]()
     obs.append(_ratio(hp_cur, hp_max))
     obs.append(hp_cur / 50.0)
     obs.append(_ratio(stam_cur, stam_max))
@@ -216,14 +237,14 @@ def build_observation(creature, cols: int, rows: int,
     # ==== SECTION 4: SELF COMBAT READINESS (17) ====
     weapon = creature.equipment.get(Slot.HAND_R) or creature.equipment.get(Slot.HAND_L)
     if weapon and isinstance(weapon, Weapon):
-        w_dmg = weapon.damage + s[Stat.MELEE_DMG]()
-        w_cost = max(5, 10 - _dmod(s[Stat.STR]()))
+        w_dmg = weapon.damage + melee_dmg_val
+        w_cost = max(5, 10 - _dmod(_STR))
         w_time = weapon.attack_time_ms / 1000.0
         swings = max(1, stam_cur // max(1, w_cost))
         melee_dps = w_dmg * swings / max(0.1, w_time * swings) if swings > 0 else 0
         w_range = weapon.range
     else:
-        w_dmg = max(1, s[Stat.MELEE_DMG]())
+        w_dmg = max(1, melee_dmg_val)
         w_cost = 5
         swings = max(1, stam_cur // 5)
         melee_dps = w_dmg * swings / max(0.1, 0.5 * swings)
@@ -270,8 +291,6 @@ def build_observation(creature, cols: int, rows: int,
     obs.append(1.0 if stam_cur >= 1 else 0.0)  # can_sneak
     obs.append(1.0 if stam_cur >= 2 else 0.0)  # can_guard
     # Defensive estimates
-    dodge_val = s[Stat.DODGE]()
-    armor_val = s[Stat.ARMOR]()
     obs.append(max(0, min(1, 0.5 + dodge_val * 0.025)))  # dodge_rate
     obs.append(max(0, min(1, armor_val / 20.0)))  # armor_rate
     max_hit = getattr(creature, '_max_hit_taken', 0)
@@ -306,7 +325,6 @@ def build_observation(creature, cols: int, rows: int,
     obs.append(_ln(eq_value + 1) / 10.0)
     obs.append((14 - len(creature.equipment)) / 14.0)
     carried = creature.carried_weight
-    carry_max = max(1, s[Stat.CARRY_WEIGHT]())
     obs.append(carried / carry_max)
     obs.append(1.0 if carried + 1 < carry_max else 0.0)
     obs.append(max((getattr(i, 'value', 0) for i in creature.inventory.items), default=0) / 50.0)
@@ -380,18 +398,36 @@ def build_observation(creature, cols: int, rows: int,
     obs.append(1.0 if can_craft else 0.0)
     obs.append(1.0 if has_shovel else 0.0)
     obs.append(1.0 if can_disassemble else 0.0)
-    obs.append(s[Stat.CRAFT_QUALITY]() / 10.0)
+    obs.append(craft_quality_val / 10.0)
 
     # ==== SECTION 9: SELF SOCIAL CAPITAL (10) ====
-    pos_rels = [r for r in creature.relationships.values() if r[0] > 0]
-    neg_rels = [r for r in creature.relationships.values() if r[0] < 0]
-    all_rels = list(creature.relationships.values())
-    obs.append(sum(r[0] for r in pos_rels) / max(1, len(pos_rels)) / 10.0 if pos_rels else 0.0)
-    obs.append(sum(r[0] for r in neg_rels) / max(1, len(neg_rels)) / 10.0 if neg_rels else 0.0)
-    obs.append(sum(r[1] for r in all_rels) / max(1, len(all_rels)) / 20.0 if all_rels else 0.0)
-    if len(all_rels) > 1:
-        mean_s = sum(r[0] for r in all_rels) / len(all_rels)
-        var = sum((r[0] - mean_s)**2 for r in all_rels) / len(all_rels)
+    # Single-pass aggregation over relationships (was: 5+ separate scans).
+    _pos_sum = 0.0
+    _pos_ct = 0
+    _neg_sum = 0.0
+    _neg_ct = 0
+    _depth_sum = 0
+    _sent_sum = 0.0
+    _n_rels = len(rels_list)
+    for _r in rels_list:
+        _s0 = _r[0]
+        _depth_sum += _r[1]
+        _sent_sum += _s0
+        if _s0 > 0:
+            _pos_sum += _s0
+            _pos_ct += 1
+        elif _s0 < 0:
+            _neg_sum += _s0
+            _neg_ct += 1
+    pos_rels_count = _pos_ct
+    neg_rels_count = _neg_ct
+    all_rels = rels_list
+    obs.append(_pos_sum / max(1, _pos_ct) / 10.0 if _pos_ct else 0.0)
+    obs.append(_neg_sum / max(1, _neg_ct) / 10.0 if _neg_ct else 0.0)
+    obs.append(_depth_sum / max(1, _n_rels) / 20.0 if _n_rels else 0.0)
+    if _n_rels > 1:
+        mean_s = _sent_sum / _n_rels
+        var = sum((_r[0] - mean_s)**2 for _r in rels_list) / _n_rels
         obs.append(var**0.5 / 10.0)
     else:
         obs.append(0.0)
@@ -540,22 +576,30 @@ def build_observation(creature, cols: int, rows: int,
         obs.append(1.0 if creature.deity == g else 0.0)
 
     # ==== SECTION 15: SELF REPUTATION SUMMARY (6) ====
-    # sumproduct(sentiment, depth) / sum(depth)
-    depths = [r[1] / (r[1] + 5) for r in all_rels]
-    sents = [r[0] for r in all_rels]
-    sum_depth = sum(depths)
-    rep_utility = sum(s * d for s, d in zip(sents, depths)) / max(0.001, sum_depth)
+    # sumproduct(sentiment, depth) / sum(depth), single pass.
+    _sum_d = 0.0
+    _sum_sd = 0.0
+    _high_pos = 0
+    _high_neg = 0
+    for _r in rels_list:
+        _d = _r[1] / (_r[1] + 5)
+        _sum_d += _d
+        _sum_sd += _r[0] * _d
+        if _r[0] > 5:
+            _high_pos += 1
+        elif _r[0] < -5:
+            _high_neg += 1
+    rep_utility = _sum_sd / max(0.001, _sum_d)
     obs.append(rep_utility / 20.0)
-    obs.append(len(creature.relationships) / 20.0)
-    obs.append(len(pos_rels) / 10.0)
-    obs.append(len(neg_rels) / 10.0)
-    obs.append(sum(1 for r in all_rels if r[0] > 5) / 10.0)
-    obs.append(sum(1 for r in all_rels if r[0] < -5) / 10.0)
+    obs.append(_n_rels / 20.0)
+    obs.append(pos_rels_count / 10.0)
+    obs.append(neg_rels_count / 10.0)
+    obs.append(_high_pos / 10.0)
+    obs.append(_high_neg / 10.0)
 
     # ==== BUILD VISIBLE/AUDIBLE CREATURE LISTS ====
     game_map = creature.current_map
-    sight = max(1, s[Stat.SIGHT_RANGE]())
-    hearing = max(1, s[Stat.HEARING_RANGE]())
+    # sight/hearing already cached at top
 
     # Use the creature's per-tick cached perception when possible. The
     # cache is invalidated whenever the creature's location changes and
@@ -579,6 +623,192 @@ def build_observation(creature, cols: int, rows: int,
                 heard_only.append((dist, obj))
         visible.sort(key=lambda x: x[0])
 
+    # ==== SINGLE PASS OVER VISIBLE CREATURES ====
+    # Iterates the visible list ONCE and collects every downstream stat
+    # in one sweep. Sections 18 (spatial_features), 20 (census), and
+    # portions of 22 (per-slot) read from these pre-computed locals
+    # instead of re-scanning visible multiple times.
+    v_creatures = [c for _, c in visible]
+    n_vis = len(v_creatures)
+    _my_species = creature.species
+    _my_sex = creature.sex
+    _my_deity = creature.deity
+    _my_uid = creature.uid
+    _my_mother = getattr(creature, 'mother_uid', None)
+    _my_father = getattr(creature, 'father_uid', None)
+    _my_partner = creature.partner_uid
+    _loans = creature.loans
+    _loans_given = creature.loans_given
+
+    c_same_sp = 0
+    c_diff_sp = 0
+    c_male = 0
+    c_female = 0
+    c_male_same = 0
+    c_female_same = 0
+    c_child = 0
+    c_adult = 0
+    n_allies = 0
+    n_enemies = 0
+    c_same_deity = 0
+    c_equipped = 0
+    c_pregnant = 0
+    c_sleeping = 0
+    c_abom = 0
+    hp_ratio_sum = 0.0
+    dist_sum = 0.0
+    min_dist = None
+    min_ally_dist = None
+    min_enemy_dist = None
+    min_same_sp_dist = None
+    min_opp_sex_dist = None
+    c_enemy_equipped = 0
+    enemy_hp_sum = 0.0
+    ally_hp_sum = 0.0
+    all_ge_hp_max = True
+    all_le_hp_max = True
+    c_potential_mates = 0
+    c_relatives = 0
+    c_parents_visible = 0
+    partner_visible = False
+    c_debtors = 0
+    c_creditors = 0
+    c_deity_same_visible = 0
+    c_deity_diff_visible = 0
+
+    enemies = []  # [(d, c), ...]
+    allies = []
+    ally_dists = []
+    enemy_dists = []
+
+    # Per-creature data used by the per-slot loop and social topology,
+    # keyed by uid. Populated in the single-pass below so downstream
+    # sections can avoid re-looking-up the same fields.
+    # Each entry: (hp_cur, hp_max, has_equip)
+    v_data: dict = {}
+
+    # Crowding and flee vector (section 18) accumulators
+    crowd_radius = 3
+    nearby_count = 0
+    nearby_cx_sum = 0
+    nearby_cy_sum = 0
+    # Capacity used on current tile by visible creatures (section 16)
+    tile_capacity_used = 0
+    tile_creatures_same = 0
+
+    from classes.creature import SIZE_UNITS as _SIZE_UNITS_CENSUS
+    _my_tile_loc = creature.location
+
+    for d, c in visible:
+        c_loc = c.location
+        c_stats_active = c.stats.active
+        c_hp_max_val = c_stats_active[Stat.HP_MAX]()
+        c_hp_cur_val = c_stats_active[Stat.HP_CURR]()
+        c_species = c.species
+        c_sex = c.sex
+        c_deity = c.deity
+
+        dist_sum += d
+        if min_dist is None or d < min_dist:
+            min_dist = d
+
+        same_species = c_species == _my_species
+        if same_species:
+            c_same_sp += 1
+            if min_same_sp_dist is None or d < min_same_sp_dist:
+                min_same_sp_dist = d
+        else:
+            c_diff_sp += 1
+
+        if c_sex == 'male':
+            c_male += 1
+            if same_species:
+                c_male_same += 1
+        elif c_sex == 'female':
+            c_female += 1
+            if same_species:
+                c_female_same += 1
+
+        if c_sex != _my_sex:
+            if min_opp_sex_dist is None or d < min_opp_sex_dist:
+                min_opp_sex_dist = d
+            if c.is_adult and not c.is_pregnant and same_species:
+                c_potential_mates += 1
+
+        if c.is_child:
+            c_child += 1
+        if c.is_adult:
+            c_adult += 1
+
+        rel = rels.get(c.uid)
+        rel_val = rel[0] if rel else 0
+        has_equip = bool(c.equipment)
+        # Stash the per-creature facts that the per-slot loop needs
+        v_data[c.uid] = (c_hp_cur_val, c_hp_max_val, has_equip)
+        if rel_val > 5:
+            n_allies += 1
+            allies.append((d, c))
+            ally_dists.append(d)
+            ally_hp_sum += c_hp_cur_val
+            if min_ally_dist is None or d < min_ally_dist:
+                min_ally_dist = d
+        elif rel_val < -5:
+            n_enemies += 1
+            enemies.append((d, c))
+            enemy_dists.append(d)
+            enemy_hp_sum += c_hp_cur_val
+            if min_enemy_dist is None or d < min_enemy_dist:
+                min_enemy_dist = d
+            if has_equip:
+                c_enemy_equipped += 1
+
+        if _my_deity and c_deity == _my_deity:
+            c_same_deity += 1
+            c_deity_same_visible += 1
+        elif c_deity and c_deity != _my_deity and _my_deity:
+            c_deity_diff_visible += 1
+
+        if has_equip:
+            c_equipped += 1
+        if c.is_pregnant:
+            c_pregnant += 1
+        if getattr(c, 'is_sleeping', False):
+            c_sleeping += 1
+        if c.is_abomination:
+            c_abom += 1
+
+        hp_ratio_sum += c_hp_cur_val / max(1, c_hp_max_val)
+
+        if hp_max < c_hp_max_val:
+            all_ge_hp_max = False
+        if hp_max > c_hp_max_val:
+            all_le_hp_max = False
+
+        c_uid = c.uid
+        c_mother = getattr(c, 'mother_uid', None)
+        c_father = getattr(c, 'father_uid', None)
+        if (_my_mother == c_uid or _my_father == c_uid
+                or c_mother == _my_uid or c_father == _my_uid):
+            c_relatives += 1
+        if c_uid == _my_mother or c_uid == _my_father:
+            c_parents_visible += 1
+        if _my_partner and c_uid == _my_partner:
+            partner_visible = True
+        if c_uid in _loans_given:
+            c_debtors += 1
+        if c_uid in _loans:
+            c_creditors += 1
+
+        # Crowding (section 18)
+        if d <= crowd_radius:
+            nearby_count += 1
+            nearby_cx_sum += c_loc.x
+            nearby_cy_sum += c_loc.y
+        # Same-tile capacity (section 16)
+        if c_loc == _my_tile_loc:
+            tile_capacity_used += _SIZE_UNITS_CENSUS.get(getattr(c, 'size', 'medium'), 4)
+            tile_creatures_same += 1
+
     # ==== SECTION 16: CURRENT TILE DEEP (18) ====
     obs.append(1.0 if tile and getattr(tile, 'covered', False) else 0.0)
     obs.append(creature.location.z / 5.0)
@@ -592,12 +822,10 @@ def build_observation(creature, cols: int, rows: int,
     obs.append(1.0 if any(isinstance(i, Egg) for i in tile_items) else 0.0)
     obs.append(1.0 if any(isinstance(i, Weapon) for i in tile_items) else 0.0)
     obs.append(1.0 if any(isinstance(i, Consumable) for i in tile_items) else 0.0)
-    # Capacity
+    # Capacity (pre-computed in single-pass)
     from classes.creature import SIZE_UNITS, TILE_CAPACITY
-    used = sum(SIZE_UNITS.get(getattr(o, 'size', 'medium'), 4)
-               for _, o in visible if o.location == creature.location)
-    obs.append(used / TILE_CAPACITY)
-    obs.append(sum(1 for _, o in visible if o.location == creature.location) / 5.0)
+    obs.append(tile_capacity_used / TILE_CAPACITY)
+    obs.append(tile_creatures_same / 5.0)
     trap_dc = tile.stat_mods.get('trap_dc') if tile else None
     obs.append(1.0 if trap_dc else 0.0)
     obs.append((trap_dc or 0) / 20.0)
@@ -633,33 +861,46 @@ def build_observation(creature, cols: int, rows: int,
     obs.append(1.0 if getattr(creature, 'can_swim', False) else 0.0)
     buried_count = len(tile.buried_inventory.items) if tile and hasattr(tile, 'buried_inventory') else 0
     obs.append(1.0 if buried_count > 0 or getattr(tile, 'buried_gold', 0) > 0 else 0.0)
-    # Visible distance to nearest purpose source (tiles + objects)
-    # 0.0 = not visible, 1.0 = standing on it
+    # Combined tile scan: purpose tiles + water tiles in ONE pass over
+    # the O(sight²) diamond area. Used here for purpose distances and
+    # again later in section 22c (water awareness).
     from classes.actions import TILE_PURPOSES
     _purpose_dists = {}
-    _sight = max(1, s[Stat.SIGHT_RANGE]())
+    water_min_d = None
+    water_best = None
+    _z = creature.location.z
+    _tiles = game_map.tiles
     if tile:
-        for ddx in range(-_sight, _sight + 1):
-            for ddy in range(-_sight, _sight + 1):
-                if abs(ddx) + abs(ddy) > _sight:
+        for ddx in range(-sight, sight + 1):
+            _abs_ddx = abs(ddx)
+            for ddy in range(-sight, sight + 1):
+                manhat = _abs_ddx + abs(ddy)
+                if manhat > sight:
                     continue
-                pt = game_map.tiles.get(MapKey(cx + ddx, cy + ddy, creature.location.z))
-                if pt and getattr(pt, 'purpose', None):
-                    d = abs(ddx) + abs(ddy)
-                    if pt.purpose not in _purpose_dists or d < _purpose_dists[pt.purpose]:
-                        _purpose_dists[pt.purpose] = d
+                pt = _tiles.get(MapKey(cx + ddx, cy + ddy, _z))
+                if pt is None:
+                    continue
+                pt_purpose = getattr(pt, 'purpose', None)
+                if pt_purpose:
+                    if pt_purpose not in _purpose_dists or manhat < _purpose_dists[pt_purpose]:
+                        _purpose_dists[pt_purpose] = manhat
+                if getattr(pt, 'liquid', False):
+                    if water_min_d is None or manhat < water_min_d:
+                        water_min_d = manhat
+                        water_best = (ddx, ddy)
     # Also scan visible objects with purpose (scaled by purpose_distance)
-    for _, obj in visible:
-        if getattr(obj, 'purpose', None):
+    for _dobj, obj in visible:
+        obj_purpose = getattr(obj, 'purpose', None)
+        if obj_purpose:
             d = abs(cx - obj.location.x) + abs(cy - obj.location.y)
-            max_range = _sight * getattr(obj, 'purpose_distance', 0.5)
+            max_range = sight * getattr(obj, 'purpose_distance', 0.5)
             if d <= max_range:
-                if obj.purpose not in _purpose_dists or d < _purpose_dists[obj.purpose]:
-                    _purpose_dists[obj.purpose] = d
+                if obj_purpose not in _purpose_dists or d < _purpose_dists[obj_purpose]:
+                    _purpose_dists[obj_purpose] = d
     for p in TILE_PURPOSES:
         d = _purpose_dists.get(p)
         if d is not None:
-            obs.append(1.0 - min(d, _sight) / max(1, _sight))
+            obs.append(1.0 - min(d, sight) / sight)
         else:
             obs.append(0.0)
 
@@ -708,19 +949,22 @@ def build_observation(creature, cols: int, rows: int,
     obs.append(nearest_exit_dy)
 
     # ==== SECTION 18: SPATIAL FEATURE LOCATIONS (12) ====
-    # Directions to features (simplified averages)
+    # Directions reuse the enemies/allies lists pre-computed in the
+    # single-pass census. _avg_dir is a single-pass reduction.
     def _avg_dir(targets):
         if not targets:
             return 0.0, 0.0
-        dx = sum(t[1].location.x - cx for t in targets) / len(targets)
-        dy = sum(t[1].location.y - cy for t in targets) / len(targets)
+        n = len(targets)
+        sx = 0
+        sy = 0
+        for t in targets:
+            loc = t[1].location
+            sx += loc.x - cx
+            sy += loc.y - cy
+        dx = sx / n
+        dy = sy / n
         mag = max(1, abs(dx) + abs(dy))
-        return dx/mag, dy/mag
-
-    enemies = [(d, c) for d, c in visible
-               if creature.relationships.get(c.uid) and creature.relationships[c.uid][0] < -5]
-    allies = [(d, c) for d, c in visible
-              if creature.relationships.get(c.uid) and creature.relationships[c.uid][0] > 5]
+        return dx / mag, dy / mag
 
     # Items direction (skip — expensive tile scan)
     obs.extend([0.0, 0.0])
@@ -735,16 +979,12 @@ def build_observation(creature, cols: int, rows: int,
     obs.append(0.0)  # tiles_with_items
     obs.append(len(visible) / 10.0)  # tiles_with_creatures (approx)
 
-    # Crowding metrics — local density within 3-tile radius
-    crowd_radius = 3
-    nearby_count = sum(1 for d, c in visible if d <= crowd_radius)
-    obs.append(nearby_count / 8.0)  # normalized local density
-    obs.append(1.0 if nearby_count >= 5 else 0.0)  # overcrowded flag
-    # Direction AWAY from crowd center (flee vector)
+    # Crowding metrics — nearby_count/cx/cy accumulated in single-pass
+    obs.append(nearby_count / 8.0)
+    obs.append(1.0 if nearby_count >= 5 else 0.0)
     if nearby_count > 0:
-        nearby = [(c.location.x, c.location.y) for d, c in visible if d <= crowd_radius]
-        crowd_cx = sum(nx for nx, ny in nearby) / len(nearby)
-        crowd_cy = sum(ny for nx, ny in nearby) / len(nearby)
+        crowd_cx = nearby_cx_sum / nearby_count
+        crowd_cy = nearby_cy_sum / nearby_count
         flee_dx = cx - crowd_cx
         flee_dy = cy - crowd_cy
         flee_mag = max(1.0, abs(flee_dx) + abs(flee_dy))
@@ -772,70 +1012,55 @@ def build_observation(creature, cols: int, rows: int,
             obs.extend([0.0] * 9)
 
     # ==== SECTION 20: CENSUS VISIBLE (45) ====
-    v_creatures = [c for _, c in visible]
-    n_vis = len(v_creatures)
+    # All counts were accumulated in the single-pass earlier. This
+    # section just emits them in the canonical order.
     obs.append(n_vis / 20.0)
-    obs.append(sum(1 for c in v_creatures if c.species == creature.species) / 20.0)
-    obs.append(sum(1 for c in v_creatures if c.species != creature.species) / 20.0)
-    obs.append(sum(1 for c in v_creatures if c.sex == 'male') / 20.0)
-    obs.append(sum(1 for c in v_creatures if c.sex == 'female') / 20.0)
-    obs.append(sum(1 for c in v_creatures if c.sex == 'male' and c.species == creature.species) / 20.0)
-    obs.append(sum(1 for c in v_creatures if c.sex == 'female' and c.species == creature.species) / 20.0)
-    obs.append(sum(1 for c in v_creatures if c.is_child) / 20.0)
-    obs.append(sum(1 for c in v_creatures if c.is_adult) / 20.0)
-    n_allies = sum(1 for c in v_creatures if creature.relationships.get(c.uid) and creature.relationships[c.uid][0] > 5)
-    n_enemies = sum(1 for c in v_creatures if creature.relationships.get(c.uid) and creature.relationships[c.uid][0] < -5)
+    obs.append(c_same_sp / 20.0)
+    obs.append(c_diff_sp / 20.0)
+    obs.append(c_male / 20.0)
+    obs.append(c_female / 20.0)
+    obs.append(c_male_same / 20.0)
+    obs.append(c_female_same / 20.0)
+    obs.append(c_child / 20.0)
+    obs.append(c_adult / 20.0)
     obs.append(n_allies / 10.0)
     obs.append(n_enemies / 10.0)
     obs.append((n_vis - n_allies - n_enemies) / 10.0)
-    obs.append(sum(1 for c in v_creatures if c.deity == creature.deity and creature.deity) / 10.0)
+    obs.append(c_same_deity / 10.0)
     obs.append(0.0)  # opposed_deity (need god lookup)
-    obs.append(sum(1 for c in v_creatures if c.equipment) / 10.0)
-    obs.append(sum(1 for c in v_creatures if c.is_pregnant) / 10.0)
-    obs.append(sum(1 for c in v_creatures if getattr(c, 'is_sleeping', False)) / 10.0)
-    obs.append(sum(1 for c in v_creatures if c.is_abomination) / 10.0)
-    obs.append(sum(c.stats.active[Stat.HP_CURR]() / max(1, c.stats.active[Stat.HP_MAX]())
-                   for c in v_creatures) / max(1, n_vis))
-    dists = [d for d, _ in visible]
-    obs.append(sum(dists) / max(1, len(dists)) / max(1, sight))
-    obs.append(min(dists) / max(1, sight) if dists else 1.0)
-    ally_dists = [d for d, c in visible if creature.relationships.get(c.uid) and creature.relationships[c.uid][0] > 5]
-    enemy_dists = [d for d, c in visible if creature.relationships.get(c.uid) and creature.relationships[c.uid][0] < -5]
-    obs.append(min(ally_dists) / max(1, sight) if ally_dists else 1.0)
-    obs.append(min(enemy_dists) / max(1, sight) if enemy_dists else 1.0)
-    same_sp_dists = [d for d, c in visible if c.species == creature.species]
-    obs.append(min(same_sp_dists) / max(1, sight) if same_sp_dists else 1.0)
-    opp_sex_dists = [d for d, c in visible if c.sex != creature.sex]
-    obs.append(min(opp_sex_dists) / max(1, sight) if opp_sex_dists else 1.0)
-    obs.append(sum(1 for d, c in visible
-                   if c.equipment and creature.relationships.get(c.uid)
-                   and creature.relationships[c.uid][0] < -5) / 5.0)
-    obs.append(sum(c.stats.active[Stat.HP_CURR]() for d, c in enemies) / 100.0 if enemies else 0.0)
-    obs.append(sum(c.stats.active[Stat.HP_CURR]() for d, c in allies) / 100.0 if allies else 0.0)
+    obs.append(c_equipped / 10.0)
+    obs.append(c_pregnant / 10.0)
+    obs.append(c_sleeping / 10.0)
+    obs.append(c_abom / 10.0)
+    obs.append(hp_ratio_sum / max(1, n_vis))
+    obs.append((dist_sum / max(1, n_vis)) / sight)
+    obs.append(min_dist / sight if min_dist is not None else 1.0)
+    obs.append(min_ally_dist / sight if min_ally_dist is not None else 1.0)
+    obs.append(min_enemy_dist / sight if min_enemy_dist is not None else 1.0)
+    obs.append(min_same_sp_dist / sight if min_same_sp_dist is not None else 1.0)
+    obs.append(min_opp_sex_dist / sight if min_opp_sex_dist is not None else 1.0)
+    obs.append(c_enemy_equipped / 5.0)
+    obs.append(enemy_hp_sum / 100.0 if enemies else 0.0)
+    obs.append(ally_hp_sum / 100.0 if allies else 0.0)
     obs.append(1.0 if n_enemies > n_allies + 1 else 0.0)
     obs.append(1.0 if n_allies > n_enemies + 1 else 0.0)
-    my_hp_max = hp_max
-    obs.append(1.0 if all(my_hp_max >= c.stats.active[Stat.HP_MAX]() for c in v_creatures) and v_creatures else 0.0)
-    obs.append(1.0 if all(my_hp_max <= c.stats.active[Stat.HP_MAX]() for c in v_creatures) and v_creatures else 0.0)
-    obs.append(sum(1 for c in v_creatures
-                   if c.sex != creature.sex and c.is_adult and not c.is_pregnant
-                   and c.species == creature.species) / 5.0)
-    obs.append(sum(1 for i in tile_items if isinstance(i, Egg)) / 5.0)  # eggs_visible (approx)
-    obs.append(sum(1 for c in v_creatures
-                   if getattr(creature, 'mother_uid', None) == c.uid
-                   or getattr(creature, 'father_uid', None) == c.uid
-                   or getattr(c, 'mother_uid', None) == creature.uid
-                   or getattr(c, 'father_uid', None) == creature.uid) / 3.0)
-    obs.append(sum(1 for c in v_creatures
-                   if c.uid == getattr(creature, 'mother_uid', None)
-                   or c.uid == getattr(creature, 'father_uid', None)) / 2.0)
-    obs.append(1.0 if creature.partner_uid and any(c.uid == creature.partner_uid for c in v_creatures) else 0.0)
-    obs.append(sum(1 for c in v_creatures if c.uid in creature.loans_given) / 5.0)
-    obs.append(sum(1 for c in v_creatures if c.uid in creature.loans) / 5.0)
-    obs.append(creature.attractiveness_rank_nearby() if hasattr(creature, 'attractiveness_rank_nearby') else 0.5)
-    obs.append(creature.pairing_eagerness() if hasattr(creature, 'pairing_eagerness') else 0.0)
-    obs.append(1.0 if creature.deity and sum(1 for c in v_creatures if c.deity == creature.deity) >
-               sum(1 for c in v_creatures if c.deity and c.deity != creature.deity) else 0.0)
+    obs.append(1.0 if all_ge_hp_max and v_creatures else 0.0)
+    obs.append(1.0 if all_le_hp_max and v_creatures else 0.0)
+    obs.append(c_potential_mates / 5.0)
+    obs.append(sum(1 for i in tile_items if isinstance(i, Egg)) / 5.0)
+    obs.append(c_relatives / 3.0)
+    obs.append(c_parents_visible / 2.0)
+    obs.append(1.0 if partner_visible else 0.0)
+    obs.append(c_debtors / 5.0)
+    obs.append(c_creditors / 5.0)
+    if hasattr(creature, 'attractiveness_rank_nearby'):
+        _rank = creature.attractiveness_rank_nearby()
+        obs.append(_rank)
+        obs.append(0.5 - _rank if _my_sex == 'male' else _rank - 0.5)
+    else:
+        obs.append(0.5)
+        obs.append(0.0)
+    obs.append(1.0 if _my_deity and c_deity_same_visible > c_deity_diff_visible else 0.0)
     obs.append(0.0)  # avg_visible_wealth (expensive)
     obs.append(0.0)  # avg_piety_my_god
     obs.append(0.0)  # avg_piety_opposed
@@ -872,6 +1097,14 @@ def build_observation(creature, cols: int, rows: int,
     #   Total per slot: 51. Total section: 510.
     from classes.creature import SIZE_UNITS as _SIZE_UNITS
     slot_entries = creature.update_perception_slots(visible)
+    # Constants lifted out of the slot loop
+    my_size_u = _SIZE_UNITS.get(creature.size, 4)
+    _old_min_norm = max(1, creature.OLD_MIN)
+    _my_hp_cur = hp_cur
+    _has_debt = hasattr(creature, 'debt_owed_to')
+    _my_rumor = creature.rumor_opinion if hasattr(creature, 'rumor_opinion') else None
+    _my_desirability_fn = creature.desirability if hasattr(creature, 'desirability') else None
+    _last_seen = creature._last_seen_positions
     # Keep a quick lookup of current positions so we can update the
     # last-seen table AFTER we've computed approaching/fleeing.
     new_seen: dict = {}
@@ -880,65 +1113,85 @@ def build_observation(creature, cols: int, rows: int,
             obs.extend([0.0] * PER_ENGAGED_SIZE)
             continue
 
-        dx = other.location.x - cx
-        dy = other.location.y - cy
+        o_loc = other.location
+        dx = o_loc.x - cx
+        dy = o_loc.y - cy
         mag = max(1, abs(dx) + abs(dy))
-        rel = creature.relationships.get(other.uid)
-        other_rel = other.relationships.get(creature.uid)
+        o_uid = other.uid
+        rel = rels.get(o_uid)
+        o_rels = other.relationships
+        other_rel = o_rels.get(_my_uid)
+        o_equip = other.equipment
+        o_equip_len = len(o_equip)
+        o_sex = other.sex
+        o_species = other.species
+        o_deity = other.deity
+        o_is_child = other.is_child
+        o_is_pregnant = other.is_pregnant
+        o_is_abom = other.is_abomination
+        o_mother = getattr(other, 'mother_uid', None)
+        o_father = getattr(other, 'father_uid', None)
 
-        obs.append(dist / max(1, sight))
+        # Reuse census-cached HP (no extra stat getter calls)
+        cached = v_data.get(o_uid)
+        if cached is not None:
+            their_hp_cur, their_hp_max, _cached_has_equip = cached
+        else:
+            o_stats_active = other.stats.active
+            their_hp_cur = o_stats_active[Stat.HP_CURR]()
+            their_hp_max = o_stats_active[Stat.HP_MAX]()
+        other_hp = their_hp_cur / max(1, their_hp_max)
+
+        obs.append(dist / sight)
         obs.append(dx / mag)
         obs.append(dy / mag)
         obs.append(_clamp(rel[0] / 20.0) if rel else 0.0)
         obs.append(_clamp(other_rel[0] / 20.0) if other_rel else 0.0)
         obs.append(rel[1] / (rel[1] + 5) if rel else 0.0)
         obs.append(1.0 / (1 + rel[1]) if rel else 1.0)
-        obs.append(_clamp(creature.rumor_opinion(other.uid, 0) / 10.0))
-        other_hp = other.stats.active[Stat.HP_CURR]() / max(1, other.stats.active[Stat.HP_MAX]())
+        obs.append(_clamp(_my_rumor(o_uid, 0) / 10.0) if _my_rumor else 0.0)
         obs.append(other_hp)
-        obs.append(1.0 if other.equipment else 0.0)
-        obs.append(1.0 if other.species == creature.species else 0.0)
-        obs.append(1.0 if other.deity == creature.deity and creature.deity else 0.0)
-        obs.append(1.0 if creature.deity and other.deity and
-                   creature.deity != other.deity else 0.0)  # opposed (simplified)
-        obs.append(1.0 if other.sex == 'male' else 0.0)
-        obs.append(1.0 if other.sex == 'female' else 0.0)
-        obs.append(1.0 if other.is_child else 0.0)
-        obs.append(1.0 if other.uid == getattr(creature, 'mother_uid', None)
-                   or other.uid == getattr(creature, 'father_uid', None) else 0.0)
-        obs.append(1.0 if getattr(other, 'mother_uid', None) == creature.uid
-                   or getattr(other, 'father_uid', None) == creature.uid else 0.0)
-        obs.append(1.0 if other.uid == creature.partner_uid else 0.0)
-        obs.append(1.0 if other.is_pregnant else 0.0)
-        obs.append(1.0 if other.is_abomination else 0.0)
+        obs.append(1.0 if o_equip else 0.0)
+        obs.append(1.0 if o_species == _my_species else 0.0)
+        obs.append(1.0 if o_deity == _my_deity and _my_deity else 0.0)
+        obs.append(1.0 if _my_deity and o_deity and o_deity != _my_deity else 0.0)
+        obs.append(1.0 if o_sex == 'male' else 0.0)
+        obs.append(1.0 if o_sex == 'female' else 0.0)
+        obs.append(1.0 if o_is_child else 0.0)
+        obs.append(1.0 if (o_uid == _my_mother or o_uid == _my_father) else 0.0)
+        obs.append(1.0 if (o_mother == _my_uid or o_father == _my_uid) else 0.0)
+        obs.append(1.0 if o_uid == _my_partner else 0.0)
+        obs.append(1.0 if o_is_pregnant else 0.0)
+        obs.append(1.0 if o_is_abom else 0.0)
         obs.append(1.0 if getattr(other, 'is_sleeping', False) else 0.0)
         obs.append(1.0 if getattr(other, 'is_guarding', False) else 0.0)
         obs.append(1.0 if getattr(other, 'is_blocking', False) else 0.0)
-        obs.append(_ln(creature.debt_owed_to(other.uid, 0) + 1) / 5.0
-                   if hasattr(creature, 'debt_owed_to') else 0.0)
-        obs.append(_ln(other.debt_owed_to(creature.uid, 0) + 1) / 5.0
+        obs.append(_ln(creature.debt_owed_to(o_uid, 0) + 1) / 5.0
+                   if _has_debt else 0.0)
+        obs.append(_ln(other.debt_owed_to(_my_uid, 0) + 1) / 5.0
                    if hasattr(other, 'debt_owed_to') else 0.0)
+        # Size one-hot (unrolled — SIZE_CATEGORIES has 6 values but
+        # typical per-slot iteration was 6 len-comparisons per slot)
+        o_size = other.size
         for sz in SIZE_CATEGORIES:
-            obs.append(1.0 if other.size == sz else 0.0)
-        obs.append(other.age / max(1, creature.OLD_MIN))
+            obs.append(1.0 if o_size == sz else 0.0)
+        obs.append(other.age / _old_min_norm)
         obs.append(1.0 if other_hp < 0.5 else 0.0)
         obs.append(1.0 if other_hp < 0.2 else 0.0)
-        obs.append(1.0 if len(other.equipment) > 3 else 0.0)  # appears_wealthy
-        obs.append(1.0 if len(other.equipment) <= 1 else 0.0)  # appears_poor
+        obs.append(1.0 if o_equip_len > 3 else 0.0)
+        obs.append(1.0 if o_equip_len <= 1 else 0.0)
 
-        # --- Real computations replacing the old placeholder zeros ---
-        # Threat me<->them: use the creature helper that accounts for
-        # weapon, damage, armor, and expected hits.
-        my_hp = s[Stat.HP_CURR]()
-        their_hp = other.stats.active[Stat.HP_CURR]()
+        # Threat scores (these still call into methods that do their
+        # own stat lookups — a future optimization could cache them
+        # per visible creature in the single-pass, but it's not a
+        # top hotspot now)
         threat_to_me = creature._threat_score_against(other)
         threat_to_them = other._threat_score_against(creature)
-        # Could-kill: normalize against the target's current HP
-        obs.append(_clamp(threat_to_me / max(1, my_hp) / 2))       # could_kill_me
-        obs.append(_clamp(threat_to_them / max(1, their_hp) / 2))  # i_could_kill_them
+        obs.append(_clamp(threat_to_me / max(1, _my_hp_cur) / 2))
+        obs.append(_clamp(threat_to_them / max(1, their_hp_cur) / 2))
 
-        # Approaching/fleeing: compare current position to last-seen
-        last = creature._last_seen_positions.get(other.uid)
+        # Approaching/fleeing from last-seen cache
+        last = _last_seen.get(o_uid)
         if last is not None:
             last_dist = abs(cx - last[0]) + abs(cy - last[1])
             if dist < last_dist:
@@ -953,45 +1206,33 @@ def build_observation(creature, cols: int, rows: int,
         else:
             approaching = 0.0
             fleeing = 0.0
-        obs.append(fleeing)     # fleeing_from_me
-        obs.append(approaching)  # approaching_me
+        obs.append(fleeing)
+        obs.append(approaching)
 
-        other_allies = sum(1 for c in v_creatures
-                           if other.relationships.get(c.uid) and other.relationships[c.uid][0] > 5)
+        # other_allies: count how many visible creatures this `other`
+        # considers allies. Still O(N) per slot, but with a direct
+        # loop instead of a generator expression.
+        other_allies = 0
+        for vc in v_creatures:
+            or_rel = o_rels.get(vc.uid)
+            if or_rel and or_rel[0] > 5:
+                other_allies += 1
         obs.append(1.0 if other_allies > 0 else 0.0)
         obs.append(other_allies / 5.0)
-        obs.append(creature.desirability(other, creature)
-                   if hasattr(creature, 'desirability') else 0.0)
-        obs.append(1.0 if (other.sex != creature.sex and other.is_adult
-                           and not other.is_pregnant
-                           and other.species == creature.species) else 0.0)
+        obs.append(_my_desirability_fn(other, creature) if _my_desirability_fn else 0.0)
+        obs.append(1.0 if (o_sex != _my_sex and other.is_adult
+                           and not o_is_pregnant
+                           and o_species == _my_species) else 0.0)
 
-        # --- NEW fields ---
-        # Relative size: ratio of my size_units to theirs. >1 means I
-        # am bigger. Clamped for stability.
-        my_size_u = _SIZE_UNITS.get(creature.size, 4)
-        their_size_u = _SIZE_UNITS.get(other.size, 4)
+        their_size_u = _SIZE_UNITS.get(o_size, 4)
         obs.append(_clamp(my_size_u / max(1, their_size_u) / 2.0))
-        # Threat scores (raw, clamped, so the NN sees both the
-        # ratio-form "could_kill" floats and the raw "how dangerous"
-        # floats — different downstream neurons may care about
-        # different framings).
         obs.append(_clamp(threat_to_me / 20.0))
         obs.append(_clamp(threat_to_them / 20.0))
-        # Approaching/fleeing are already in the placeholder slots
-        # above — here we'd add "direction alignment" or similar
-        # but keeping to 6 new fields, so for now emit explicit
-        # "known-hostile" and "known-ally" flags that correspond to
-        # fast decision gating.
-        obs.append(1.0 if (rel and rel[0] < -5) else 0.0)  # known_hostile
-        obs.append(1.0 if (rel and rel[0] > 5) else 0.0)   # known_ally
-        # Slot occupied flag — lets the NN distinguish "empty slot"
-        # zeros from "slotted creature with all-zero signals" (which
-        # shouldn't happen but gives the NN a definitive marker).
-        obs.append(1.0)
+        obs.append(1.0 if (rel and rel[0] < -5) else 0.0)
+        obs.append(1.0 if (rel and rel[0] > 5) else 0.0)
+        obs.append(1.0)  # slot_occupied
 
-        # Update last-seen table for next tick's approaching/fleeing
-        new_seen[other.uid] = (other.location.x, other.location.y)
+        new_seen[o_uid] = (o_loc.x, o_loc.y)
 
     # Replace the last-seen cache with only currently-slotted creatures
     # (anyone not seen this tick shouldn't influence next tick's delta)
@@ -1025,27 +1266,17 @@ def build_observation(creature, cols: int, rows: int,
     #   can_swim             : creature's swim capability, so the
     #                          NN learns "distance to water matters
     #                          only if can_swim == 0"
-    nearest_water_dist = 1.0  # 1.0 = no water in sight (fallback)
+    # water_min_d and water_best were collected in the combined tile
+    # scan above (section 16b). Reuse — no second O(sight²) pass.
+    nearest_water_dist = 1.0
     water_dx = 0.0
     water_dy = 0.0
-    min_d = None
-    best = None
-    for ddx in range(-sight, sight + 1):
-        for ddy in range(-sight, sight + 1):
-            if abs(ddx) + abs(ddy) > sight:
-                continue
-            pt = game_map.tiles.get(MapKey(cx + ddx, cy + ddy, creature.location.z))
-            if pt and getattr(pt, 'liquid', False):
-                d = abs(ddx) + abs(ddy)
-                if min_d is None or d < min_d:
-                    min_d = d
-                    best = (ddx, ddy)
-    if min_d is not None:
-        nearest_water_dist = min_d / max(1, sight)
-        if best is not None and (best[0] != 0 or best[1] != 0):
-            mag = max(1, abs(best[0]) + abs(best[1]))
-            water_dx = best[0] / mag
-            water_dy = best[1] / mag
+    if water_min_d is not None:
+        nearest_water_dist = water_min_d / sight
+        if water_best is not None and (water_best[0] != 0 or water_best[1] != 0):
+            mag = max(1, abs(water_best[0]) + abs(water_best[1]))
+            water_dx = water_best[0] / mag
+            water_dy = water_best[1] / mag
     obs.append(nearest_water_dist)
     obs.append(water_dx)
     obs.append(water_dy)
