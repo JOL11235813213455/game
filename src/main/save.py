@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from platformdirs import user_data_dir
 from classes.trackable import Trackable
+from classes.relationship_graph import GRAPH
 
 _save_dir = Path(user_data_dir("game", appauthor=False))
 _save_dir.mkdir(parents=True, exist_ok=True)
@@ -49,6 +50,7 @@ def _serialise(player) -> bytes:
     return pickle.dumps({
         'player':  player,
         'objects': tuple(Trackable.all_instances()),
+        'relationship_graph': GRAPH.serialize(),
     })
 
 
@@ -57,6 +59,7 @@ def _deserialise(blob: bytes):
     from classes.world_object import WorldObject
     # Clear stale map index before loading
     WorldObject._by_map.clear()
+    GRAPH.clear()
     data = pickle.loads(blob)
     objects = data['objects']
     _held = objects
@@ -65,6 +68,8 @@ def _deserialise(blob: bytes):
         # Re-register in per-map index (pickle restores _current_map directly)
         if isinstance(obj, WorldObject) and obj._current_map is not None:
             WorldObject._by_map[id(obj._current_map)].add(obj)
+    # Restore relationship graph
+    GRAPH.deserialize(data.get('relationship_graph', {}))
     # Reset UID counter so new objects don't collide with loaded ones
     Trackable.reset_uid_counter()
     return data['player']

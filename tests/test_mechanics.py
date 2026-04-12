@@ -15,6 +15,7 @@ from classes.inventory import (
     Item, Weapon, Wearable, Consumable, Ammunition, Stackable, Slot, Inventory
 )
 from classes.stats import Stat
+from classes.relationship_graph import GRAPH
 
 PASS = 0
 FAIL = 0
@@ -872,7 +873,7 @@ for _ in range(50):
 check(f"Rumors shared: {shared}/50 (CHR 16 = high chance)", shared > 20)
 
 # Listener should now have rumors about subject
-rumors = listener.rumors.get(subject.uid, [])
+rumors = GRAPH.get_rumors(listener.uid, subject.uid) or []
 check(f"Listener has {len(rumors)} rumors about subject", len(rumors) > 0)
 
 opinion = listener.rumor_opinion(subject.uid, current_tick=100)
@@ -2177,8 +2178,7 @@ child_obj.is_abomination = False
 child_obj.inbred = False
 child_obj.age = 0
 child_obj.prudishness = 0.5
-child_obj.relationships = {}
-child_obj.rumors = {}
+# GRAPH auto-creates empty dicts on first access — no init needed
 child_obj.is_pregnant = False
 child_obj._pair_cooldown = 0
 child_obj.sleep_debt = 0
@@ -2216,7 +2216,7 @@ else:
 # Abandoned egg: no maternal buff
 abandoned_egg = Egg(creature=Creature.__new__(Creature))
 abandoned_egg.creature.name = 'Abandoned'
-abandoned_egg.creature.relationships = {}
+# GRAPH auto-creates empty dicts on first access — no init needed
 for day in range(30):
     abandoned_egg.tick_gestation(carried_by_mother=False)
 check(f"Abandoned egg: days with mother = {abandoned_egg.days_with_mother}",
@@ -2274,7 +2274,7 @@ for _ in range(50):
 
 check(f"Solicited rumors: {successes_sr}/50", successes_sr > 0)
 # Check that curious now has rumors about subject
-rumors_s = curious.rumors.get(subject_s.uid, [])
+rumors_s = GRAPH.get_rumors(curious.uid, subject_s.uid) or []
 check(f"Curious has {len(rumors_s)} rumors about subject", len(rumors_s) > 0)
 
 # ==========================================================================

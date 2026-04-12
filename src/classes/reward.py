@@ -10,6 +10,7 @@ that the model sees in its observation.
 from __future__ import annotations
 import math
 from classes.stats import Stat
+from classes.relationship_graph import GRAPH
 
 
 def _ln_ratio(after: float, before: float, epsilon: float = 0.001) -> float:
@@ -274,7 +275,7 @@ def make_reward_snapshot(creature) -> dict:
     eq_value = sum(getattr(i, 'value', 0) for i in set(creature.equipment.values()))
 
     # Reputation utility: sumproduct(sentiment, depth) / sum(depth)
-    all_rels = list(creature.relationships.values())
+    all_rels = list(GRAPH.edges_from(creature.uid).values())
     if all_rels:
         depths = [r[1] / (r[1] + 5) for r in all_rels]
         sents = [r[0] for r in all_rels]
@@ -284,7 +285,7 @@ def make_reward_snapshot(creature) -> dict:
         reputation = 0.0
 
     allies = sum(1 for r in all_rels if r[0] > 5)
-    creatures_met = len(creature.relationships)
+    creatures_met = GRAPH.count_from(creature.uid)
 
     # Debt
     debt = creature.total_debt(0) if hasattr(creature, 'total_debt') else 0

@@ -2,6 +2,7 @@ from __future__ import annotations
 import random
 from classes.stats import Stat
 from classes.inventory import Weapon, Consumable
+from classes.relationship_graph import GRAPH
 
 
 class SocialMixin:
@@ -420,7 +421,7 @@ class SocialMixin:
 
         confidence = self.relationship_confidence(
             type('_', (), {'uid': subject_uid})()  # dummy for lookup
-        ) if subject_uid in self.relationships else 0.1
+        ) if GRAPH.get_edge(self.uid, subject_uid) is not None else 0.1
 
         target.receive_rumor(self, subject_uid, sentiment, confidence, tick)
 
@@ -440,7 +441,7 @@ class SocialMixin:
 
         # Find a subject we have a weak opinion of
         candidates = []
-        for uid, rel in self.relationships.items():
+        for uid, rel in GRAPH.edges_from(self.uid).items():
             # Weak = low count (1-3) and small sentiment magnitude
             if 1 <= rel[1] <= 3 and abs(rel[0]) < 5:
                 candidates.append(uid)
@@ -451,7 +452,7 @@ class SocialMixin:
         subject_uid = random.choice(candidates)
 
         # Does the target know anything about this subject?
-        target_rel = target.relationships.get(subject_uid)
+        target_rel = GRAPH.get_edge(target.uid, subject_uid)
         if target_rel is None:
             return False
 

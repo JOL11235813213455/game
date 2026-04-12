@@ -4,6 +4,7 @@ from classes.stats import Stat
 from classes.inventory import Egg
 from classes.world_object import WorldObject
 from classes.maps import MapKey
+from classes.relationship_graph import GRAPH
 
 
 class ReproductionMixin:
@@ -66,9 +67,10 @@ class ReproductionMixin:
         wealth_score = min(1.0, wealth / 50.0)
 
         # Reputation (positive sentiment from others)
-        if creature.relationships:
-            pos = sum(r[0] for r in creature.relationships.values() if r[0] > 0)
-            total = len(creature.relationships)
+        if GRAPH.has_edges_from(creature.uid):
+            _rels = GRAPH.edges_from(creature.uid)
+            pos = sum(r[0] for r in _rels.values() if r[0] > 0)
+            total = len(_rels)
             rep_score = min(1.0, pos / (total * 5 + 1))
         else:
             rep_score = 0.0
@@ -251,8 +253,7 @@ class ReproductionMixin:
         child.inbred = inbreeding_closeness > 0
         child.age = 0
         child.prudishness = species_data.get('prudishness', 0.5)
-        child.relationships = {}
-        child.rumors = {}
+        # GRAPH auto-creates empty dicts on first access — no init needed
         child.is_pregnant = False
         child._pair_cooldown = 0
         child.sleep_debt = 0

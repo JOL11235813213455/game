@@ -21,6 +21,7 @@ from classes.creature import Creature
 from classes.world_object import WorldObject
 from classes.stats import Stat
 from editor.simulation.arena import generate_arena, generate_trade_scenario
+from classes.relationship_graph import GRAPH
 
 
 # Colors
@@ -308,8 +309,8 @@ def run_viewer(scenario: str = 'arena', cols: int = 25, rows: int = 25,
             text(f'Equip: {len(selected.equipment)}')
             if selected.deity:
                 text(f'Deity: {selected.deity} ({selected.piety:.1f})')
-            text(f'Allies: {sum(1 for r in selected.relationships.values() if r[0] > 5)}')
-            text(f'Enemies: {sum(1 for r in selected.relationships.values() if r[0] < -5)}')
+            text(f'Allies: {sum(1 for r in GRAPH.edges_from(selected.uid).values() if r[0] > 5)}')
+            text(f'Enemies: {sum(1 for r in GRAPH.edges_from(selected.uid).values() if r[0] < -5)}')
             if selected.observation_mask:
                 text(f'Mask: {selected.observation_mask}', C_ORANGE)
             if selected.is_pregnant:

@@ -14,6 +14,7 @@ Each tracked variable × each transform × each window = one float.
 from __future__ import annotations
 import math
 from collections import deque
+from classes.relationship_graph import GRAPH
 
 
 # Variables tracked in each snapshot
@@ -50,7 +51,7 @@ def make_history_snapshot(creature, visible_enemies=None,
     mana_max = max(1, stats.active[Stat.MAX_MANA]())
 
     # Reputation utility
-    all_rels = list(creature.relationships.values())
+    all_rels = list(GRAPH.edges_from(creature.uid).values())
     if all_rels:
         depths = [r[1] / (r[1] + 5) for r in all_rels]
         sents = [r[0] for r in all_rels]

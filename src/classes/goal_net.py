@@ -18,6 +18,7 @@ import math
 import random
 import numpy as np
 from classes.actions import TILE_PURPOSES, NUM_PURPOSES
+from classes.relationship_graph import GRAPH
 
 
 class GoalNet:
@@ -145,7 +146,7 @@ def build_goal_observation(creature, cols: int, rows: int) -> list[float]:
     obs.append((14 - len(creature.equipment)) / 14.0)
 
     # Self social (4)
-    all_rels = list(creature.relationships.values())
+    all_rels = list(GRAPH.edges_from(creature.uid).values())
     obs.append(sum(1 for r in all_rels if r[0] > 5) / 10.0)
     obs.append(sum(1 for r in all_rels if r[0] < -5) / 10.0)
     depths = [r[1] / (r[1] + 5) for r in all_rels]
@@ -153,7 +154,7 @@ def build_goal_observation(creature, cols: int, rows: int) -> list[float]:
     sum_depth = sum(depths)
     rep = sum(s * d for s, d in zip(sents, depths)) / max(0.001, sum_depth) if all_rels else 0
     obs.append(rep / 20.0)
-    obs.append(len(creature.relationships) / 20.0)
+    obs.append(GRAPH.count_from(creature.uid) / 20.0)
 
     # Self status (5)
     obs.append(getattr(creature, '_fatigue_level', 0) / 4.0)

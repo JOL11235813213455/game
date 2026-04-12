@@ -30,6 +30,7 @@ from classes.observation import OBSERVATION_SIZE, apply_preset_mask
 from classes.actions import NUM_ACTIONS
 from classes.creature import NeuralBehavior, StatWeightedBehavior
 from editor.simulation.net import CreatureNet
+from classes.relationship_graph import GRAPH
 
 SAVE_DIR = Path(__file__).parent.parent / 'models'
 SAVE_DIR.mkdir(exist_ok=True)
@@ -301,7 +302,7 @@ def _creature_final_state(c) -> dict:
     """Capture a creature's final state for analytics."""
     from classes.stats import Stat
     hp_max = max(1, c.stats.active[Stat.HP_MAX]())
-    all_rels = list(c.relationships.values())
+    all_rels = list(GRAPH.edges_from(c.uid).values())
     base_stats = {}
     for st in [Stat.STR, Stat.VIT, Stat.AGL, Stat.PER, Stat.INT, Stat.CHR, Stat.LCK]:
         base_stats[st.name] = c.stats.base.get(st, 10)
@@ -316,7 +317,7 @@ def _creature_final_state(c) -> dict:
         'enemies': sum(1 for r in all_rels if r[0] < -5),
         'kills': getattr(c, '_kills', 0),
         'tiles_explored': getattr(c, '_tiles_explored', 0),
-        'creatures_met': len(c.relationships),
+        'creatures_met': GRAPH.count_from(c.uid),
         'base_stats': base_stats,
     }
 

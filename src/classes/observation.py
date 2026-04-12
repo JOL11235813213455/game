@@ -10,6 +10,7 @@ from __future__ import annotations
 import math
 from classes.stats import Stat, BASE_STATS, DERIVED_STATS
 from classes.maps import MapKey
+from classes.relationship_graph import GRAPH
 
 MAX_ENGAGED = 10      # persistent perception slots for top visible creatures
 MAX_TILE_ITEMS = 3    # items on current tile to detail
@@ -193,7 +194,7 @@ def build_observation(creature, cols: int, rows: int,
     craft_quality_val = _derived_vals[Stat.CRAFT_QUALITY]
 
     # ---- Cache relationships (hot path) ----
-    rels = creature.relationships
+    rels = GRAPH.edges_from(creature.uid)
     rels_list = list(rels.values())
 
     # ==== SECTION 1: SELF BASE STATS (14) ====
@@ -434,7 +435,7 @@ def build_observation(creature, cols: int, rows: int,
     obs.append(0.0)  # most_recent_interaction ticks (need tracking)
     obs.append(0.0)  # betrayals_committed (need tracking)
     obs.append(0.0)  # betrayals_received (need tracking)
-    obs.append(sum(len(v) for v in creature.rumors.values()) / 20.0)
+    obs.append(GRAPH.count_rumors_held(creature.uid) / 20.0)
     obs.append(0.0)  # rumors_spread (need tracking)
     obs.append(0.0)  # pending_conversations (expensive)
 
@@ -1119,7 +1120,7 @@ def build_observation(creature, cols: int, rows: int,
         mag = max(1, abs(dx) + abs(dy))
         o_uid = other.uid
         rel = rels.get(o_uid)
-        o_rels = other.relationships
+        o_rels = GRAPH.edges_from(other.uid)
         other_rel = o_rels.get(_my_uid)
         o_equip = other.equipment
         o_equip_len = len(o_equip)
@@ -1362,7 +1363,7 @@ def build_observation(creature, cols: int, rows: int,
     obs.append(n_allies / 10.0)
     obs.append(getattr(creature, '_kills', 0) / 10.0)
     obs.append(getattr(creature, '_tiles_explored', 0) / 100.0)
-    obs.append(len(creature.relationships) / 20.0)
+    obs.append(GRAPH.count_from(creature.uid) / 20.0)
     obs.append(creature.piety)
     obs.append(getattr(creature, '_quest_steps_completed', 0) / 10.0)
     obs.append(creature.life_goal_attainment / 10.0)
@@ -1691,7 +1692,7 @@ def make_snapshot(creature, visible_enemies=None) -> dict:
     inv_value = sum(getattr(i, 'value', 0) for i in creature.inventory.items)
 
     # Reputation utility
-    all_rels = list(creature.relationships.values())
+    all_rels = list(GRAPH.edges_from(creature.uid).values())
     depths = [r[1] / (r[1] + 5) for r in all_rels]
     sents = [r[0] for r in all_rels]
     sum_depth = sum(depths)

@@ -46,6 +46,7 @@ All math is vectorized with numpy where possible for N=10..30.
 from __future__ import annotations
 import math
 import numpy as np
+from classes.relationship_graph import GRAPH
 
 SIMPLE_COHESION_SIZE = 6
 LAPLACIAN_SIZE = 4
@@ -65,7 +66,7 @@ def _build_sentiment_matrix(creatures: list) -> np.ndarray:
         for j, b in enumerate(creatures):
             if i == j:
                 continue
-            rel = a.relationships.get(b.uid)
+            rel = GRAPH.get_edge(a.uid, b.uid)
             if rel:
                 m[i, j] = rel[0]
     return m
@@ -129,7 +130,7 @@ def compute_social_topology(
             for b in in_slots:
                 if a is b:
                     continue
-                rel = a.relationships.get(b.uid)
+                rel = GRAPH.get_edge(a.uid, b.uid)
                 if rel:
                     sentiments.append(rel[0])
         if sentiments:
@@ -148,8 +149,8 @@ def compute_social_topology(
         my_to_group = []
         group_to_me = []
         for other in in_slots:
-            my_rel = self_creature.relationships.get(other.uid)
-            their_rel = other.relationships.get(self_creature.uid)
+            my_rel = GRAPH.get_edge(self_creature.uid, other.uid)
+            their_rel = GRAPH.get_edge(other.uid, self_creature.uid)
             if my_rel:
                 my_to_group.append(my_rel[0])
             if their_rel:
@@ -206,15 +207,15 @@ def compute_social_topology(
             if hasattr(self_creature, '_threat_score_against'):
                 threat = self_creature._threat_score_against(other)
                 # Weight by their hostility toward me if known
-                other_rel = other.relationships.get(self_creature.uid)
+                other_rel = GRAPH.get_edge(other.uid, self_creature.uid)
                 hostility = 1.0
                 if other_rel and other_rel[0] < 0:
                     hostility = 1.0 + abs(other_rel[0]) / 20.0
                 weighted = threat * hostility
                 if weighted > threat_max:
                     threat_max = weighted
-            my_rel = self_creature.relationships.get(other.uid)
-            their_rel = other.relationships.get(self_creature.uid)
+            my_rel = GRAPH.get_edge(self_creature.uid, other.uid)
+            their_rel = GRAPH.get_edge(other.uid, self_creature.uid)
             if my_rel:
                 rest_sent_from_me.append(my_rel[0])
             if their_rel:
