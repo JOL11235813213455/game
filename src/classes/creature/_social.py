@@ -243,6 +243,46 @@ class SocialMixin:
             result['surplus'] = deal['seller_surplus']
             return result
 
+        # ---- 3. LOAN fallback: buyer wants item but can't afford it ----
+        # If a trade failed because the buyer was broke, the seller can
+        # offer a micro-loan so the transaction still happens. This
+        # exercises the debt signal and teaches credit dynamics.
+        # Only fires when both sides have a non-negative relationship.
+        if not result.get('success'):
+            for item in sellable[:3]:
+                deal = compute_trade_price(item, self, target)
+                if not deal['feasible']:
+                    continue
+                price = max(1, int(round(deal['price'])))
+                buyer_gold = getattr(target, 'gold', 0)
+                if buyer_gold >= price:
+                    continue  # can afford — not a loan case
+                shortfall = price - buyer_gold
+                # Seller must like the buyer enough to extend credit
+                rel = self.get_relationship(target)
+                if rel is None or rel[0] < 0:
+                    continue
+                # Loan the shortfall to the buyer, then execute the trade
+                if hasattr(self, 'give_loan') and self.gold >= shortfall:
+                    self.give_loan(target, shortfall, daily_rate=0.05, now=0)
+                    tx = _execute(seller=self, buyer=target, item=item, deal=deal)
+                    if tx['success']:
+                        self._trade_surplus_accumulated = (
+                            getattr(self, '_trade_surplus_accumulated', 0.0)
+                            + deal['seller_surplus']
+                        )
+                        target._trade_surplus_accumulated = (
+                            getattr(target, '_trade_surplus_accumulated', 0.0)
+                            + deal['buyer_surplus']
+                        )
+                        self._social_wins = getattr(self, '_social_wins', 0) + 1
+                        self.gain_exp(1)
+                        result.update(tx)
+                        result['direction'] = 'sold_on_credit'
+                        result['surplus'] = deal['seller_surplus']
+                        result['loan_amount'] = shortfall
+                        return result
+
         result['reason'] = 'no_acceptable_trade'
         return result
 
