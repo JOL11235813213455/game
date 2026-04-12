@@ -517,6 +517,8 @@ def migrate_db():
     hunger_drain       INTEGER NOT NULL DEFAULT 1,
     combat_enabled     INTEGER NOT NULL DEFAULT 1,
     gestation_enabled  INTEGER NOT NULL DEFAULT 1,
+    fatigue_enabled    INTEGER NOT NULL DEFAULT 1,
+    allowed_actions    TEXT NOT NULL DEFAULT '[]',
     mappo_steps        INTEGER NOT NULL DEFAULT 50000,
     es_generations     INTEGER NOT NULL DEFAULT 0,
     es_variants        INTEGER NOT NULL DEFAULT 20,
@@ -525,6 +527,8 @@ def migrate_db():
     learning_rate      REAL NOT NULL DEFAULT 0.0003,
     ent_coef           REAL NOT NULL DEFAULT 0.05,
     resume_from_stage  INTEGER)""",
+            "ALTER TABLE curriculum_stages ADD COLUMN fatigue_enabled INTEGER NOT NULL DEFAULT 1",
+            "ALTER TABLE curriculum_stages ADD COLUMN allowed_actions TEXT NOT NULL DEFAULT '[]'",
             """CREATE TABLE IF NOT EXISTS item_frames (
     key TEXT PRIMARY KEY,
     name TEXT NOT NULL DEFAULT '',

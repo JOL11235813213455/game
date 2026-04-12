@@ -171,6 +171,8 @@ CREATE TABLE IF NOT EXISTS curriculum_stages (
     hunger_drain       INTEGER NOT NULL DEFAULT 1,
     combat_enabled     INTEGER NOT NULL DEFAULT 1,
     gestation_enabled  INTEGER NOT NULL DEFAULT 1,
+    fatigue_enabled    INTEGER NOT NULL DEFAULT 1,
+    allowed_actions    TEXT NOT NULL DEFAULT '[]',
     mappo_steps        INTEGER NOT NULL DEFAULT 50000,
     es_generations     INTEGER NOT NULL DEFAULT 0,
     es_variants        INTEGER NOT NULL DEFAULT 20,

@@ -57,8 +57,25 @@ class TorchCreatureNet(nn.Module):
         value = self.value_head(x)
         return logits, value
 
-    def get_action(self, obs: np.ndarray, temperature: float = 1.0) -> tuple[int, float, float]:
+    @staticmethod
+    def _apply_action_mask(logits: torch.Tensor,
+                           action_mask: np.ndarray | None) -> torch.Tensor:
+        """Set logits for disallowed actions to -1e10 (pre-softmax)."""
+        if action_mask is not None:
+            mask_t = torch.FloatTensor(action_mask)
+            if logits.dim() == 2:
+                mask_t = mask_t.unsqueeze(0)
+            logits = logits.masked_fill(mask_t == 0, -1e10)
+        return logits
+
+    def get_action(self, obs: np.ndarray, temperature: float = 1.0,
+                   action_mask: np.ndarray | None = None,
+                   ) -> tuple[int, float, float]:
         """Sample an action from observation.
+
+        Args:
+            action_mask: binary array of length NUM_ACTIONS where 1 =
+                allowed, 0 = forbidden. None = all actions allowed.
 
         Returns (action, log_prob, value).
         """
@@ -67,18 +84,25 @@ class TorchCreatureNet(nn.Module):
             logits, value = self.forward(x)
             if temperature != 1.0:
                 logits = logits / max(0.01, temperature)
+            logits = self._apply_action_mask(logits, action_mask)
             probs = F.softmax(logits, dim=-1)
             dist = torch.distributions.Categorical(probs)
             action = dist.sample()
             return action.item(), dist.log_prob(action).item(), value.item()
 
-    def evaluate_actions(self, obs: torch.Tensor, actions: torch.Tensor
+    def evaluate_actions(self, obs: torch.Tensor, actions: torch.Tensor,
+                         action_masks: torch.Tensor | None = None,
                          ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Evaluate a batch of (obs, action) pairs.
+
+        Args:
+            action_masks: (batch, NUM_ACTIONS) binary tensor. None = all allowed.
 
         Returns (log_probs, values, entropy).
         """
         logits, values = self.forward(obs)
+        if action_masks is not None:
+            logits = logits.masked_fill(action_masks == 0, -1e10)
         probs = F.softmax(logits, dim=-1)
         dist = torch.distributions.Categorical(probs)
         log_probs = dist.log_prob(actions)
@@ -276,10 +300,12 @@ class PPO:
         return advantages, returns
 
     def update(self, obs_arr, actions_arr, rewards_arr, values_arr,
-               log_probs_arr, dones_arr) -> dict:
+               log_probs_arr, dones_arr,
+               action_masks_arr=None) -> dict:
         """Run PPO update on collected experience.
 
-        All inputs are numpy arrays.
+        All inputs are numpy arrays. action_masks_arr is optional
+        (N, NUM_ACTIONS) binary array for per-step masking.
         Returns dict with loss metrics.
         """
         advantages, returns = self.compute_gae(rewards_arr, values_arr, dones_arr)
@@ -293,6 +319,7 @@ class PPO:
         old_log_probs_t = torch.FloatTensor(log_probs_arr)
         advantages_t = torch.FloatTensor(advantages)
         returns_t = torch.FloatTensor(returns)
+        masks_t = torch.FloatTensor(action_masks_arr) if action_masks_arr is not None else None
 
         n = len(obs_arr)
         total_policy_loss = 0.0
@@ -310,26 +337,21 @@ class PPO:
                 b_old_lp = old_log_probs_t[batch]
                 b_adv = advantages_t[batch]
                 b_ret = returns_t[batch]
+                b_masks = masks_t[batch] if masks_t is not None else None
 
-                # Evaluate current policy on batch
-                new_log_probs, values, entropy = self.net.evaluate_actions(b_obs, b_actions)
+                new_log_probs, values, entropy = self.net.evaluate_actions(
+                    b_obs, b_actions, action_masks=b_masks)
 
-                # Policy loss (clipped)
                 ratio = torch.exp(new_log_probs - b_old_lp)
                 surr1 = ratio * b_adv
                 surr2 = torch.clamp(ratio, 1 - self.clip_eps, 1 + self.clip_eps) * b_adv
                 policy_loss = -torch.min(surr1, surr2).mean()
 
-                # Value loss
                 value_loss = F.mse_loss(values, b_ret)
-
-                # Entropy bonus (encourages exploration)
                 entropy_loss = -entropy.mean()
 
-                # Total loss
                 loss = policy_loss + self.vf_coef * value_loss + self.ent_coef * entropy_loss
 
-                # Backprop
                 self.optimizer.zero_grad()
                 loss.backward()
                 nn.utils.clip_grad_norm_(self.net.parameters(), self.max_grad_norm)
@@ -357,17 +379,21 @@ class RolloutBuffer:
         self.values = []
         self.log_probs = []
         self.dones = []
+        self.action_masks = []
 
-    def store(self, obs, action, reward, value, log_prob, done):
+    def store(self, obs, action, reward, value, log_prob, done,
+              action_mask=None):
         self.obs.append(obs)
         self.actions.append(action)
         self.rewards.append(reward)
         self.values.append(value)
         self.log_probs.append(log_prob)
         self.dones.append(1.0 if done else 0.0)
+        if action_mask is not None:
+            self.action_masks.append(action_mask)
 
     def get(self):
-        return (
+        base = (
             np.array(self.obs, dtype=np.float32),
             np.array(self.actions, dtype=np.int64),
             np.array(self.rewards, dtype=np.float32),
@@ -375,6 +401,9 @@ class RolloutBuffer:
             np.array(self.log_probs, dtype=np.float32),
             np.array(self.dones, dtype=np.float32),
         )
+        if self.action_masks:
+            return base + (np.array(self.action_masks, dtype=np.float32),)
+        return base + (None,)
 
     def clear(self):
         self.obs.clear()
@@ -383,6 +412,7 @@ class RolloutBuffer:
         self.values.clear()
         self.log_probs.clear()
         self.dones.clear()
+        self.action_masks.clear()
 
     def __len__(self):
         return len(self.obs)
