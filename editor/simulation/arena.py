@@ -11,7 +11,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 import random
 from classes.maps import Map, MapKey, Tile
 from classes.creature import Creature, RandomWanderBehavior
-from classes.inventory import Weapon, Wearable, Consumable, Stackable, Slot
+from classes.inventory import (Weapon, Wearable, Consumable, Stackable, Slot,
+                               Ammunition, ItemFrame)
 from classes.stats import Stat
 from classes.genetics import generate_chromosomes, express, apply_genetics
 from classes.gods import DEFAULT_GODS
@@ -192,6 +193,12 @@ def spawn_creature(game_map: Map, location: MapKey,
         c.inventory.items.append(w)
         c.equip(w)
         c._item_prices[id(w)] = w.value
+        # Ammo for ranged weapons
+        if w.range > 1:
+            ammo = Ammunition(name='Arrow', weight=0.05, value=0.5,
+                              quantity=random.randint(10, 25),
+                              damage=2, max_stack_size=99)
+            c.inventory.items.append(ammo)
 
     if random.random() < 0.5:
         a = random_armor()
@@ -411,6 +418,17 @@ def generate_arena(cols: int = 20, rows: int = 20,
                               quantity=random.randint(2, 5))
             tiles[k].inventory.items.append(stack)
 
+    # ItemFrames for CRAFT action training
+    for k in _tiles_for('crafting')[:3]:
+        if random.random() < 0.5:
+            frame = ItemFrame(
+                frame_key='weapon_sword_short',
+                recipe={'material_ore_iron': 2, 'coal': 1},
+            )
+            # Pre-fill some ingredients so it's close to craftable
+            frame.added = {'material_ore_iron': random.randint(0, 2)}
+            tiles[k].inventory.items.append(frame)
+
     # Practice weapons at training tiles so combat actions have
     # accessible equipment (the NN can PICKUP and EQUIP).
     for k in _tiles_for('training')[:4]:
@@ -418,6 +436,14 @@ def generate_arena(cols: int = 20, rows: int = 20,
             tiles[k].inventory.items.append(random_weapon())
         if random.random() < 0.5:
             tiles[k].inventory.items.append(random_armor())
+
+    # Arrows on training tiles for ranged creatures
+    for k in _tiles_for('training')[:4]:
+        if random.random() < 0.5:
+            tiles[k].inventory.items.append(
+                Ammunition(name='Arrow', weight=0.05, value=0.5,
+                           quantity=random.randint(5, 15),
+                           damage=2, max_stack_size=99))
 
     # Healing tiles get a few potions
     for k in _tiles_for('healing')[:4]:
@@ -429,6 +455,16 @@ def generate_arena(cols: int = 20, rows: int = 20,
                 Consumable(name=potion_name, weight=0.3, value=8,
                            quantity=random.randint(1, 2),
                            heal_amount=heal, mana_restore=mana, duration=0))
+
+    # Trap items on hunting tiles
+    for k in _tiles_for('hunting')[:4]:
+        if random.random() < 0.6:
+            trap = Consumable(name='Snare Trap', weight=1.0, value=3.0,
+                              quantity=random.randint(1, 2),
+                              duration=0)
+            trap.is_trap = True
+            trap.trap_dc = random.randint(8, 14)
+            tiles[k].inventory.items.append(trap)
 
     # --- Gold: surface scatter + buried everywhere ---
     walkable_keys = [k for k, t in tiles.items()
@@ -524,6 +560,16 @@ def generate_arena(cols: int = 20, rows: int = 20,
                 continue
             if random.random() < 0.3:
                 c.record_interaction(other, random.uniform(-5, 10))
+
+    # Training quests: assign from DB quest catalog for quest signal
+    from data.db import QUESTS
+    if QUESTS:
+        quest_keys = list(QUESTS.keys())
+        for c in creatures:
+            if random.random() < 0.5:  # 50% start with a quest
+                qk = random.choice(quest_keys)
+                qdef = QUESTS[qk]
+                c.quest_log.accept_quest(qk, qdef, 0)
 
     return {
         'map': game_map,
