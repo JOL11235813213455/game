@@ -452,8 +452,13 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
 
     if action == Action.SET_TRAP:
         if item is None:
-            return {'success': False, 'reason': 'no_trap_item'}
-        dc = context.get('trap_dc', 10)
+            for inv_item in creature.inventory.items:
+                if getattr(inv_item, 'is_trap', False):
+                    item = inv_item
+                    break
+            if item is None:
+                return {'success': False, 'reason': 'no_trap_item'}
+        dc = getattr(item, 'trap_dc', None) or context.get('trap_dc', 10)
         return {'success': creature.set_trap(item, dc)}
 
     # -- Stances --
