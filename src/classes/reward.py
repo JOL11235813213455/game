@@ -231,8 +231,17 @@ def compute_reward(creature, prev: dict, curr: dict,
     if curr_fatigue < prev_fatigue:
         signals['sleep_quality'] = (prev_fatigue - curr_fatigue) * 1.0
 
-    nearby = curr.get('nearby_count', 0)
-    signals['crowding'] = -(nearby - 4) * 0.3 if nearby >= 5 else 0.0
+    # Crowding: hostiles and strangers are stressful, friends are fine.
+    # Hostile/stranger crowding penalizes at 2+; friendly crowding
+    # gives a small comfort bonus. Net effect: creature seeks allies
+    # and avoids enemies.
+    hostile_nearby = curr.get('nearby_hostile', 0)
+    friendly_nearby = curr.get('nearby_friendly', 0)
+    crowd_penalty = 0.0
+    if hostile_nearby >= 2:
+        crowd_penalty = -(hostile_nearby - 1) * 0.5
+    crowd_bonus = min(0.3, friendly_nearby * 0.1)
+    signals['crowding'] = crowd_penalty + crowd_bonus
 
     # Idleness: small penalty for WAITing at full stamina
     if (last_action is not None and last_action == 23  # WAIT
@@ -375,8 +384,11 @@ def make_reward_snapshot(creature) -> dict:
                 world_balance = obj.get_balance(deity)
                 break
 
-    # Nearby creature count (within 3 tiles) for crowding penalty
-    nearby_count = 0
+    # Nearby creature counts (within 3 tiles), split by sentiment
+    nearby_hostile = 0   # sentiment < -2 or unknown (stranger)
+    nearby_friendly = 0  # sentiment >= 2
+    nearby_neutral = 0   # -2 <= sentiment < 2
+    my_rels = GRAPH.edges_from(creature.uid)
     try:
         from classes.world_object import WorldObject
         from classes.creature import Creature as _Creature
@@ -385,9 +397,16 @@ def make_reward_snapshot(creature) -> dict:
                 dx = abs(obj.location.x - creature.location.x)
                 dy = abs(obj.location.y - creature.location.y)
                 if dx + dy <= 3:
-                    nearby_count += 1
+                    rel = my_rels.get(obj.uid)
+                    if rel and rel[0] >= 2:
+                        nearby_friendly += 1
+                    elif rel and rel[0] > -2:
+                        nearby_neutral += 1
+                    else:
+                        nearby_hostile += 1
     except Exception:
         pass
+    nearby_count = nearby_hostile + nearby_friendly + nearby_neutral
 
     # Distance to nearest visible purpose source (tiles + objects)
     dist_to_purpose = {}
@@ -451,6 +470,8 @@ def make_reward_snapshot(creature) -> dict:
         'nearest_water_dist': 1.0,
         'nearest_deep_water_dist': _nearest_deep_water(creature),
         'nearby_count': nearby_count,
+        'nearby_hostile': nearby_hostile,
+        'nearby_friendly': nearby_friendly,
         'wage_accumulated': getattr(creature, '_wage_accumulated', 0.0),
         'trade_surplus': getattr(creature, '_trade_surplus_accumulated', 0.0),
         'gold': getattr(creature, 'gold', 0),
