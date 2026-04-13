@@ -317,37 +317,26 @@ def generate_arena(cols: int = 20, rows: int = 20,
                 if pk in tiles and tiles[pk].walkable:
                     tiles[pk].purpose = purpose
 
-    # --- Add a river along the eastern edge ---
-    # The river runs north-south along x=1 with a single fishing bank at
-    # x=2 (and the unreachable far edge at x=0 quietly absorbs the deep
-    # half). This keeps the river visible and useful for fishing/flow
-    # but does NOT bisect the population — every creature can reach every
-    # purpose without needing to cross water.
-    #
-    # Deep tile = NOT walkable. Medium creatures (clearance 0) would drown
-    # on depth=1 tiles and non-swimmers are flow-locked, so an accessible
-    # deep river is a death trap. Banks are walkable (depth 0, safe for
-    # all sizes) and tagged 'fishing' so HARVEST on them pays the fishing
-    # purpose reward via polymorphic alignment.
-    river_x = 1
-    bank_x = 2
-    for y in range(rows):
-        rk = MapKey(river_x, y, 0)
-        if rk in tiles:
-            tiles[rk] = Tile(walkable=False, liquid=True,
-                             flow_direction='S', flow_speed=2.0, depth=1)
-        bk = MapKey(bank_x, y, 0)
-        if bk in tiles:
-            bank = Tile(walkable=True, liquid=True, depth=0)
-            bank.purpose = 'fishing'
-            tiles[bk] = bank
-        # Far western edge tile becomes a shallow bank too — just for
-        # visual continuity (it's outside the playable area in practice).
-        far = MapKey(0, y, 0)
-        if far in tiles:
-            far_bank = Tile(walkable=True, liquid=True, depth=0)
-            far_bank.purpose = 'fishing'
-            tiles[far] = far_bank
+    # --- Add a small pond instead of a full-length river ---
+    # A 3x3 deep center with a ring of shallow banks gives the NN
+    # something to learn about water without dominating the map.
+    # Placed in the western third to keep it out of district centers.
+    pond_cx = 2
+    pond_cy = rows // 2
+    for dx in range(-2, 3):
+        for dy in range(-2, 3):
+            px, py = pond_cx + dx, pond_cy + dy
+            if px < 0 or px >= cols or py < 0 or py >= rows:
+                continue
+            pk = MapKey(px, py, 0)
+            dist = abs(dx) + abs(dy)
+            if dist <= 1:
+                tiles[pk] = Tile(walkable=False, liquid=True,
+                                 flow_direction='S', flow_speed=1.0, depth=1)
+            elif dist <= 2:
+                bank = Tile(walkable=True, liquid=True, depth=0)
+                bank.purpose = 'fishing'
+                tiles[pk] = bank
 
     # --- Seed resources on purpose tiles ---
     # Maps purpose → (resource_type, resource_max, growth_rate)
