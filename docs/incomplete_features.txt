@@ -1,233 +1,139 @@
 INCOMPLETE FEATURES
 ===================
-Last updated: 2026-04-08
+Last updated: 2026-04-13
 
-TILE (classes/maps.py)
-- covered: declared and stored but never read — no gameplay or rendering effect
+See also: docs/behavior_mechanics_audit.md for the full RL integration audit.
 
-CREATURE STATS (classes/stats.py)
-- Stats class with base/derived/mods/active layers implemented
-- Derived stat formulas defined but most not yet consumed by gameplay mechanics
-- Opposing stat contest system defined but no combat/social system calls it yet
-- Stat point allocation on level-up implemented but no UI to spend points
+KNOWN GAPS (sorted by training impact)
+=======================================
 
-ITEMS / INVENTORY (classes/inventory.py)
-- damage, defense: defined on Weapon/Ammunition but no combat system to consume them
-- health: defined but no consume/use mechanic
-- poison: defined but no poison mechanic
-- durability / durability_current: defined but never decremented or checked
-- value: defined but no economy system
-- weight: used by encumbrance (carried_weight vs CARRY_WEIGHT) — checked on pickup
-- equippable, slots, slot_count: equip/unequip logic now on Creature
-- consumable, stackable, quantity: Stackable.add() and coalesce() implemented but never called
-- ITEMS dict (data/db.py): populated from DB at load but never accessed during gameplay
-- STRUCTURES dict (data/db.py): populated from DB but never accessed (instances render via WorldObject)
-- inventoriable: checked by pickup() but no UI or AI triggers pickup yet
-- pickup/drop implemented on Creature but no runtime caller (no input binding, no AI action)
-- No items or structures are spawned at runtime — no loot system
+HIGH IMPACT — Blocks curriculum stages
+---------------------------------------
+- Egg hatch not called in RL loop: _tick_lifecycle_day() never fires during
+  headless training. S12 (Lifecycle) trains PAIR but eggs never hatch.
+  life_goals reward for hatching is unreachable.
 
-CREATURE METHODS (classes/creature.py)
-- transfer_item(): fully implemented but never called anywhere
-- pickup/drop: implemented with encumbrance + inventoriable checks, not called yet
+- Fatigue daily tick not called: add_sleep_debt() never fires in headless
+  training. S9 (Schedule) enables fatigue_enabled but SLEEP has no pressure
+  to learn against. Creatures never accumulate sleep debt.
 
-CREATURE TRAITS (classes/creature.py)
-- sex: male/female per-creature (randomly assigned if not set), no gameplay effect yet
-- prudishness: 0.0–1.0 species default with per-creature override, no gameplay effect yet
-- age: days on the map (0 = newborn/hatched), age_class property (young/adult/old)
-- age thresholds currently hardcoded — will move to species config
+- Age never ticks: creatures spawn adult (18-200) and age never increments.
+  OLD_MIN transitions, menopause, age_sentiment_modifier all inert.
 
-CREATURE TEMPLATES (data/db.py, editor/creatures_tab.py)
-- creatures + creature_stats tables for named NPC definitions
-- Species template + stat/trait overrides (level, sex, age, prudishness, behavior, items)
-- Loaded into CREATURES dict but no spawning system consumes them yet
+MEDIUM IMPACT — Weakens learning
+---------------------------------
+- Successful steal/deceive have no reward signal: only failure penalizes
+  (-8.0 caught stealing, -5.0 caught deceiving). Silent success teaches
+  "don't do these" instead of "stealth is valuable."
 
-MATING / PAIRING (partially implemented)
-- Genetics system: 14-gene chromosomes, Mendelian inheritance, sex-linked biases,
-  2% mutation (graduated inbreeding: siblings 20%, grandparent 12%, great-gp 7%)
-- Egg class: Item containing unhatched Creature, live/dead status, maternal buff
-- propose_pairing(): trade-based evaluation, species knockout gate (99% cross-species
-  rejection), desirability function, fecundity curve, prudishness gating
-- force_pairing(): grapple-based, records negative interactions
-- Pregnancy debuffs: -2 AGL, -1 MOVE_SPEED, -2 STAM_REGEN, -1 MANA_REGEN, +HP_REGEN_DELAY
-- Pregnancy buffs: LOOT_GINI bonus
-- Hatching: creates proper Creature from egg data, maternal stat buff from time with mother
-- solicit_rumor(): ask for gossip about weak acquaintances
-- witness_forced_encounter(): sentiment based on perception of male vs female
-- eat_egg(): cannibalism detection (same species), massive negative from witnesses
-- bond_with_child(): parent-child deep bonding (+15 both ways) at hatching
-- Age properties: is_adult, is_child, is_fertile, is_mother
-- age_sentiment_modifier(): older exploit young, mothers kind to children,
-  older women hostile to younger attractive fertile women, older men favor young women
-- Gender competition: attractiveness_rank_nearby(), pairing_eagerness()
-  Males increase effort with attractive rivals, females lower standards
-- Egg world limits: count_eggs_in_world(), egg_limit_reached()
-- Tent sprite placeholder (tent_pairing, 32x32 red circus tent)
-- PairedBehavior: follows partner, stays within 3 tiles, shares consumables
-  when partner is low HP, breaks bond on partner death
-- Pair bond tracking: partner_uid, get_partner(), break_pair_bond()
-- Child-parent no-collide: _is_family_passthrough() in _tile_blocked()
-- Tent spawn/despawn: spawn_tent() places tent_pairing WorldObject at z=4,
-  despawn_tent() removes it. Caller manages timing.
+- No swimming mechanic: can_swim flag exists but is never set to True.
+  Water is always a one-way death trap. No way to learn water as a resource
+  rather than a hazard.
 
-QUEST SYSTEM (classes/quest.py, data/db.py, editor/quests_tab.py)
-- QuestLog per creature: accept, complete steps, fail, time limits, cooldowns
-- Quest states: available → active → completed/failed
-- Safe eval/exec for conditions and actions (blocked: __import__, exec, etc.)
-- Repeatable jobs with cooldown timers
-- Per-step time limits (only checked when step is reachable)
-- Quest + quest_steps DB tables, data loader, editor tab with step dialog
-- Quest conditions wired into dialogue system (_dialogue_matches)
-- NOT YET: quest behavior module (NPCs pursuing objectives), minimap/beacon
+- Dialogue trees not loaded in training arena: TALK action succeeds but
+  the conversation system (dialogue table, trees, effects) doesn't fire.
 
-GODS / PIETY SYSTEM (classes/gods.py, editor/gods_tab.py)
-- WorldData singleton: 8 gods in 4 opposed pairs, global action counters
-- World balance per dichotomy (action counts)
-- Piety drift from witnessed opposing acts, scaled by nearby opposing piety
-- Lose god when piety hits 0; aligned actions reinforce (+0.005)
-- Action dispatch records all successful actions in god counters
-- Piety influences StatWeightedBehavior (aligned actions boosted, opposed penalized)
-- Piety feeds reward function (gaining piety = positive, losing = negative)
-- proselytize() action: CHR contest to convert creatures with no/low deity
-- World state flags for quest/dialogue conditions
-- Gods editor tab with aligned/opposed action lists
-- NOT YET: cutscene/proselytize animations
+- No REPAY_LOAN action: loans created by auto_trade fallback accumulate
+  indefinitely. Debt signal fires but creature can't act on it.
 
-FUTURE: PRESENTATION LAYER
-- Stylized text display system (for dialogue, cutscenes, quests)
-- Sound system (SFX + music)
-- Cutscene engine (text + sound + scripted camera/events)
-- 3D rendering mode: translate tile maps to Doom-style BSP (linedefs from
-  tile bounds, sectors from z-levels, sprites as things)
+- Durability never decrements: durability_max/durability_current on
+  Weapon/Wearable exist but are never reduced by use. Equipment lasts
+  forever.
 
-DIALOGUE SYSTEM (classes/creature.py, data/db.py, editor/dialogue_tab.py)
-- dialogue table: conversation trees with parent-child nodes (parent_id=NULL for roots)
-- Filters: species, creature_key, char_conditions, world_conditions, quest_conditions
-- start_conversation(): finds matching roots, enters conversation state
-- advance_dialogue(): selects node, applies effects, returns filtered children
-- Effects: give_item, take_item, sentiment shift, behavior trigger
-- Editor tab: tree view + node edit form with all fields
-- World/quest condition checking not yet wired (needs quest/world state system)
-- NPC-to-NPC conversations supported (no limits yet)
+LOW IMPACT — Polish
+--------------------
+- Trap creator not immune to own trap
+- No explicit stealth reward for undetected movement past hostiles
+- Movement silent-fails on over-encumbrance (animation plays, position unchanged)
+- Sound emission has no RL learning signal (no reward for silence)
+- Observation masks spawned in arena but not verified to filter NN input
+- render_on_creature field on items has no rendering path
+- action_word on items has no description-building consumer
+- Stackable.add() and coalesce() implemented but never called
+- transfer_item() fully implemented but never called
+- covered tile property declared but never read
 
-SPATIAL MEMORY & GOALS (classes/creature/_goals.py)
-- GoalMixin: spatial memory dict (known_locations) + goal state per creature
-- remember_location(): stores purpose -> [(map, x, y, tick)] with dedup and cap (10/purpose)
-- update_spatial_memory(): auto-learns tile purpose on 500ms tick
-- set_goal/clear_goal: hierarchical RL goal tracking (purpose, target, zone_id, tick)
-- goal_distance/goal_progress/at_goal: Manhattan distance tracking and progress delta
-- pick_goal_target: selects best known location for a purpose (current map > other map)
-- direction_to_goal: unit vector toward goal target, cross-map aware via map_graph
-- plan_cross_map_route(): returns (exit_x, exit_y) of linking tile toward target map
-- Cross-map distance: exit_tile_dist + transitions * 50 (when map_graph provided)
-- PurposeZoneRegistry (classes/purpose_zones.py): fast zone lookup, nearest zone, auto-load from DB
-- GoalNet (classes/goal_net.py): 75→256→128→17 purposes, selects goals via RL policy
-- TorchGoalNet: training version with PPO, wired into MAPPO + PPO training loops
-- Goal observation in action model (self_goal section: 21 floats)
-- Goal-conditioned reward: progress (+0.3/tile closer), completion (+3.0)
-- Purpose proximity reward: reward^(1+1/d) near purpose tiles, -0.25 away
-- update_spatial_memory scans all visible tiles (sight range), not just current tile
-- Goal + action weights saved together in nn_models (goal_weights BLOB column)
-- NOT YET: goal model resume with dimension remapping (currently loads strict)
+COMPLETED SYSTEMS
+=================
 
-MAP GRAPH (classes/map_graph.py)
-- MapGraph: graph of map connections for cross-map pathfinding
-- build_from_maps(): scans loaded MAPS dict for linked tiles
-- build_from_db(): reads tile_sets/maps tables directly from game.db
-- get_connections(): returns all exit links from a map
-- find_path(): BFS shortest path (list of map names)
-- find_path_detailed(): BFS with full coordinate info per transition
-- distance(): number of map hops between two maps (-1 if unreachable)
-- MAP_GRAPH auto-built on game load (data/db.py) from MAPS dict
-- NOT YET: behavior module that uses map_graph for NPC cross-map travel
+Core Architecture
+- Trackable base class: all game state objects extend it for automatic save/load
+- RelationshipGraph: centralized sentiment + rumor graph (Trackable singleton)
+- Pickle save/load via Trackable.all_instances() — no special cases
+- WorldObject._by_map spatial index with WeakSet
+- Map spatial grid for O(cell) creature queries
+- Dynamic zoom (0.25x-4.0x), 3/4 perspective rendering
 
-NPC BEHAVIOR (classes/creature.py)
-- NPC subclass removed; all creatures use Creature with behavior modules
-- Only RandomWanderBehavior exists — no pathfinding, aggro, patrol, or scheduling
-- dialogue attribute exists as placeholder (None) — no dialogue system yet
+Creature System
+- Single Creature class (no subclasses): players, NPCs, monsters all Creature
+- Stats: base/derived/mods/active layers, D&D-style modifiers, opposing contests
+- 43-action space: 8 directional movement + SET_SNEAK toggle + 34 utility/combat/social/economy actions
+- Auto walk/run/sneak: walk default, run when hostile in sight, sneak as persistent toggle
+- Movement: 8-dir walk/run/sneak, flee, follow, map transitions (enter/exit)
+- Combat: melee, ranged (with ammo), grapple, cast_spell (8 spells in DB), block stance
+- Social: intimidate, deceive, trade (auto + proposed), bribe, steal, share_rumor, talk, call_backup, proselytize
+- Economy: harvest (5 resource types), farm, dig, process (9 recipes), craft (ItemFrames), job (7 job types), trade with loan fallback
+- Inventory: pickup (auto + gold), smart drop (lowest value/weight), auto-equip (NN only), use_item (consumables + food)
+- Reproduction: propose_pairing, force_pairing, egg system, genetics (14-gene chromosomes, Mendelian inheritance), fecundity curves
+- Encumbrance: S-curve penalty above 100% carry weight (regen slowed), movement blocked at 200%
 
-COMBAT
-- melee_attack() implemented: stamina cost, sight/ambush, dodge contest, armor resist,
-  damage (STR + weapon + lucky STR), crit, stagger, HP regen reset, betrayal detection
-- ranged_attack() implemented: distance accuracy, ammo consumption, recoverable ammo
-  (arrows/rocks land on target tile on miss), non-recoverable (bullets consumed)
-- grapple() implemented: max(STR,AGL) vs max(STR,AGL-1), stamina cost, dominance
-- enter_block_stance/exit_block_stance: requires item in hand, +2 BLOCK while active
-- cast_spell() implemented: mana/stamina cost, requirements, dodge contest (if dodgeable),
-  magic resist (hostile only), 4 effect types (damage/heal/buff/debuff), timed buff expiry,
-  secondary resist (e.g. poison from spell), self-targeted spells
-- Spell definitions in spells table, creature_spells + species_spells for known spells
-- Attack behaviors (animation bindings) not wired to attack methods yet
-- die() implemented: drops inventory + equipment on tile, clears mods, plays death anim
-- is_alive property checks HP > 0
-- Trap trigger on tile entry: detection vs trap_dc, damage on fail, trap consumed
+RL Training Pipeline
+- 14-stage curriculum with progressive action masking (10 -> 43 actions)
+- Per-stage signal_scales for reward masking with soft fade
+- Environment toggles: hunger_drain, combat_enabled, gestation_enabled, fatigue_enabled
+- 5-layer TorchCreatureNet (1811 -> 1536 -> 1024 -> 768 -> 384 -> 192 -> 43)
+- TorchGoalNet for hierarchical purpose selection
+- PPO with GAE, entropy bonus, gradient clipping
+- MAPPO multi-agent + ES evolutionary + PPO single-agent pipeline
+- Action mask at logit level (pre-softmax -1e10)
+- RolloutBuffer with per-step action masks
+- TensorBoard logging: episode reward, entropy, alive_count, per-action distribution, per-signal breakdown
 
-SOCIAL
-- intimidate() implemented: d20 INTIMIDATION vs FEAR_RESIST, relationship recording
-- deceive() implemented: d20 DECEPTION vs DETECTION, trust damage on failure
-- steal() implemented: stealth/deception contest, item transfer, caught = trust damage
-- share_rumor() implemented: CHR-scaled probability, confidence from relationship
-- propose_trade() implemented: utility scoring, sentiment modifier, persuasion bonus,
-  fair/unfair detection, item swap on accept, walk-away penalty on reject
-- bribe() implemented: value threshold scales with negative sentiment (hostile = bigger bribe needed)
-- No seduce yet (needs species compatibility + pairing system)
+Observation (1811 floats)
+- 28+ sections: self stats/resources/combat/economy/slots/weapon/inventory/crafting/social/status/hunger/quest/goal/schedule/movement/genetics/identity/reputation
+- Tile: deep properties, liquid/water, spatial walls/openness, feature directions (item/food/enemy/ally), tile items top 3
+- Census: 45-float visible creature summary, 3-float audible
+- Per-engaged: 10 persistent perception slots x 51 floats (threat, sentiment, approaching/fleeing, size, status)
+- Social topology: 17 floats (cohesion, Laplacian eigenvalues, rest-of-crowd)
+- Water/hearing awareness, world time, temporal deltas, trends, time-since, reward signals, 264 math transforms
 
-EQUIPMENT
-- equip/unequip implemented with stat mod passthrough and stat requirement checks
-- render_on_creature field on Weapon/Wearable has no rendering path
-- action_word defined on items but no description-building system consumes it yet
-- requirements defined on items (JSON stat→min) — checked during equip()
+Reward Signals (25+)
+- hp, gold, debt, inventory, equipment, equipment_upgrade, encumbrance_relief
+- reputation, allies, social_success, kills, damage_dealt
+- exploration, pickup_success, piety, quests, life_goals, xp, wage, trade
+- hunger, goal_progress, goal_completed, purpose_proximity
+- Penalties: failed_actions, fatigue, crowding, water_danger, idleness, death
 
-ECONOMY
-- No shop, trade, or currency system
-- Item value field unused
+Arena
+- Purpose districts (14 types), resource tiles (5 types with regrowth)
+- Center pond (1 deep + 8 shallow banks)
+- Weapons, armor, ammo (arrows), consumables, food, potions, shovels, traps, ItemFrames
+- All creatures start with 2-3 food items
+- 50% start with quests from DB
+- Pre-seeded relationships, jobs (60% jobbed), deity assignments (70%)
 
-SIGHT / STEALTH
-- can_see() implemented: SIGHT_RANGE - target's STEALTH vs Manhattan distance
-- Used by melee/ranged attack (ambush detection) and social actions (range check)
-- Not yet used by rendering or AI observation space
+Editor
+- Sprites (simple + composite + animations with connections)
+- Tiles, tile sets, maps (with bounds/warps)
+- Species, creatures (with NPC sub-tab)
+- Items, spells, recipes, jobs, quests, dialogue, gods
+- Training: standard, curriculum (with run/stop/viewer), models
+- SQL editor with ERD and data dictionary
 
-CONSUMABLES
-- use_item() implemented: applies buffs as timed stat mods, decrements quantity, removes at 0
-- Duration expiry implemented: timed tick auto-removes mods after duration seconds
-- Duration=0 means permanent (no expiry)
-
-MOVEMENT VARIANTS
-- run() implemented: stamina cost 3, same movement but flagged as running
-- sneak() implemented: stamina cost 1, stealth movement
-- flee() implemented: move away from threat, stamina cost
-- Run/sneak speed differences not yet applied to tick intervals
-
-UTILITY
-- search_tile() implemented: reveals tile inventory, hidden_dc check vs DETECTION
-- guard()/stop_guard() implemented: +3 DETECTION while guarding, stamina drain
-- wait() implemented: skip turn, recover stamina (STAM_REGEN amount)
-- follow() implemented: move one tile toward target (simple, no pathfinding)
-- call_backup() implemented: broadcast within HEARING_RANGE, filters by positive sentiment
-- sleep()/wake() implemented: full stamina+mana restore, -5 DETECTION while asleep
-- set_trap() implemented: place trap item on tile, DC = base + CRAFT_QUALITY
-- Sleep deprivation implemented: 4-tier stacking debuffs (mild/exhaustion/severe/collapse)
-  sleep_debt tracks days, add_sleep_debt() applies/updates fatigue mods, sleep clears all
-- Trap trigger implemented in move(): detection vs trap_dc on tile entry
-- No use/consume action or effect system
-
-DURABILITY
-- durability_max and durability_current defined on Weapon/Wearable
-- Never checked or decremented
-
-COMPLETED SYSTEMS (no known gaps)
-==================================
-- Composite sprite system: layers, connections, variants, keyframe animations
-- Composite animation bindings: species → behavior → animation with flip support
-- Simple frame animations: sprites → frames → bindings
+Presentation
+- Composite sprite rendering with layer connections and keyframe animations
 - Day/night cycle with moon phases, shadows, top-lighting
 - Collision system with per-tile and structure collision masks
-- Bounds/entry system: tile traversal bounds + structure entry points
-- Save/load system: SQLite-backed, multiple save files, pickle serialization
-- Sprite cache: native, scaled, tiled, composite, pre-rendered animation frames
-- Per-map object registry (WorldObject._by_map)
-- Dynamic zoom (0.25x–4.0x)
-- Tile warp system: auto-warp (teleport on step) and enter-warp (Enter key)
-- Editor: Graphics group (sprites, simple animations, composites with 3 sub-tabs),
-  tiles (with bounds), tile sets (with bounds/animation/warp overrides),
-  maps, species with bindings, items, SQL editor with cheat sheet
-- Full tooltip coverage across all editor widgets
+- Bounds/entry system for tile traversal
+- Player UI: inventory menu, quest log, HUD, dialogue menu, contextual keybind strip
+- Test Town demo world with houses, NPCs, cave
+
+FUTURE / NOT STARTED
+=====================
+- Monster class (NOT Creature subclass): own NN, restricted actions, predator lifecycle
+- Presentation layer: stylized text, SFX/music, cutscene engine
+- 3D rendering mode (Doom-style BSP from tile data)
+- Per-creature learnable reward weights (personality via 0.5-2.0 bounded scales)
+- Equipment durability system (decrement on use, break at 0)
+- Shop/vendor NPCs (distinct from peer-to-peer trade)
+- Pathfinding for NPC cross-map travel (map_graph exists, behavior module doesn't)
