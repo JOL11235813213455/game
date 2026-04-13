@@ -9,22 +9,10 @@ KNOWN GAPS (sorted by training impact)
 
 HIGH IMPACT — Blocks curriculum stages
 ---------------------------------------
-- Egg hatch not called in RL loop: _tick_lifecycle_day() never fires during
-  headless training. S12 (Lifecycle) trains PAIR but eggs never hatch.
-  life_goals reward for hatching is unreachable.
-
-- Fatigue daily tick not called: add_sleep_debt() never fires in headless
-  training. S9 (Schedule) enables fatigue_enabled but SLEEP has no pressure
-  to learn against. Creatures never accumulate sleep debt.
-
-- Age never ticks: creatures spawn adult (18-200) and age never increments.
-  OLD_MIN transitions, menopause, age_sentiment_modifier all inert.
+(none remaining)
 
 MEDIUM IMPACT — Weakens learning
 ---------------------------------
-- Successful steal/deceive have no reward signal: only failure penalizes
-  (-8.0 caught stealing, -5.0 caught deceiving). Silent success teaches
-  "don't do these" instead of "stealth is valuable."
 
 - No swimming mechanic: can_swim flag exists but is never set to True.
   Water is always a one-way death trap. No way to learn water as a resource
@@ -44,7 +32,7 @@ LOW IMPACT — Polish
 --------------------
 - Trap creator not immune to own trap
 - No explicit stealth reward for undetected movement past hostiles
-- Movement silent-fails on over-encumbrance (animation plays, position unchanged)
+- Movement at 200%+ carry blocks correctly, but no feedback to player (no message/sound)
 - Sound emission has no RL learning signal (no reward for silence)
 - Observation masks spawned in arena but not verified to filter NN input
 - render_on_creature field on items has no rendering path
@@ -71,13 +59,15 @@ Creature System
 - Auto walk/run/sneak: walk default, run when hostile in sight, sneak as persistent toggle
 - Movement: 8-dir walk/run/sneak, flee, follow, map transitions (enter/exit)
 - Combat: melee, ranged (with ammo), grapple, cast_spell (8 spells in DB), block stance
-- Social: intimidate, deceive, trade (auto + proposed), bribe, steal, share_rumor, talk, call_backup, proselytize
+- Social: intimidate, deceive (context-gated + rumor poisoning + deceit tracking), trade (auto + proposed), bribe, steal (auto-resolve + familiarity modifier), share_rumor, talk, call_backup, proselytize
+- Deceit system: outstanding lies tracked in RelationshipGraph, revelation via social interactions, deception_stress penalty signal, long-term honesty incentive
 - Economy: harvest (5 resource types), farm, dig, process (9 recipes), craft (ItemFrames), job (7 job types), trade with loan fallback
 - Inventory: pickup (auto + gold), smart drop (lowest value/weight), auto-equip (NN only), use_item (consumables + food)
 - Reproduction: propose_pairing, force_pairing, egg system, genetics (14-gene chromosomes, Mendelian inheritance), fecundity curves
 - Encumbrance: S-curve penalty above 100% carry weight (regen slowed), movement blocked at 200%
 
 RL Training Pipeline
+- Lifecycle ticks in headless training: _tick_lifecycle_day() fires on day boundaries (egg gestation/hatching, fatigue accumulation, age increment)
 - 14-stage curriculum with progressive action masking (10 -> 43 actions)
 - Per-stage signal_scales for reward masking with soft fade
 - Environment toggles: hunger_drain, combat_enabled, gestation_enabled, fatigue_enabled
@@ -102,7 +92,8 @@ Reward Signals (25+)
 - reputation, allies, social_success, kills, damage_dealt
 - exploration, pickup_success, piety, quests, life_goals, xp, wage, trade
 - hunger, goal_progress, goal_completed, purpose_proximity
-- Penalties: failed_actions, fatigue, crowding, water_danger, idleness, death
+- theft (ln-scaled by stolen value)
+- Penalties: failed_actions, fatigue, crowding, water_danger, idleness, deception_stress, death
 
 Arena
 - Purpose districts (14 types), resource tiles (5 types with regrowth)

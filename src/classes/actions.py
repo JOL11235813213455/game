@@ -258,6 +258,14 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
     item = context.get('item')
     now = context.get('now', 0)
 
+    # Decay social context TTL — TALK/TRADE set a 2-tick window
+    # during which DECEIVE can fire as a follow-up action.
+    ttl = getattr(creature, '_social_context_ttl', 0)
+    if ttl > 0 and action != Action.DECEIVE:
+        creature._social_context_ttl = ttl - 1
+        if creature._social_context_ttl <= 0:
+            creature._active_social_target = None
+
     combat_enabled = context.get('combat_enabled', True)
     if not combat_enabled and action in (Action.MELEE_ATTACK, Action.RANGED_ATTACK,
                                           Action.GRAPPLE, Action.CAST_SPELL):
@@ -325,7 +333,13 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
             )
             if target is None:
                 return {'success': False, 'reason': 'no_partner'}
-        return creature.auto_trade(target)
+        result = creature.auto_trade(target)
+        if result.get('success'):
+            creature._active_social_target = target
+            creature._social_context_ttl = 2
+            creature._check_deceit_revelation(target)
+            target._check_deceit_revelation(creature)
+        return result
 
     # -- Social (requires sentient target) --
     if Action.INTIMIDATE <= action <= Action.TALK:
@@ -338,9 +352,13 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
         return creature.intimidate(target)
 
     if action == Action.DECEIVE:
-        if target is None:
-            return {'success': False, 'reason': 'no_target'}
-        return creature.deceive(target)
+        active = getattr(creature, '_active_social_target', None)
+        if active is None:
+            return {'success': False, 'reason': 'no_social_context'}
+        result = creature.deceive(active)
+        creature._active_social_target = None
+        creature._social_context_ttl = 0
+        return result
 
     if action == Action.BRIBE:
         if target is None:
@@ -349,8 +367,19 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
         return creature.bribe(target, items)
 
     if action == Action.STEAL:
-        if target is None or item is None:
-            return {'success': False, 'reason': 'no_target'}
+        if target is None:
+            from classes.world_object import WorldObject
+            from classes.creature import Creature as _Creature
+            target = next(
+                (o for o in WorldObject.on_map(creature.current_map)
+                 if isinstance(o, _Creature) and o is not creature
+                 and o.is_alive
+                 and abs(o.location.x - creature.location.x) +
+                     abs(o.location.y - creature.location.y) <= 1),
+                None
+            )
+            if target is None:
+                return {'success': False, 'reason': 'no_target'}
         return creature.steal(target, item)
 
     if action == Action.SHARE_RUMOR:
@@ -359,14 +388,24 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
         subject_uid = context.get('subject_uid', 0)
         sentiment = context.get('sentiment', 0.0)
         tick = context.get('tick', now)
-        return {'success': creature.share_rumor(target, subject_uid, sentiment, tick)}
+        success = creature.share_rumor(target, subject_uid, sentiment, tick)
+        if success:
+            creature._check_deceit_revelation(target)
+            target._check_deceit_revelation(creature)
+        return {'success': success}
 
     if action == Action.TALK:
         if target is None:
             return {'success': False, 'reason': 'no_target'}
         conv = context.get('conversation')
         roots = creature.start_conversation(target, conv)
-        return {'success': len(roots) > 0, 'roots': roots}
+        success = len(roots) > 0
+        if success:
+            creature._active_social_target = target
+            creature._social_context_ttl = 2
+            creature._check_deceit_revelation(target)
+            target._check_deceit_revelation(creature)
+        return {'success': success, 'roots': roots}
 
     # -- Utility --
     if action == Action.PICKUP:

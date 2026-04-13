@@ -34,6 +34,7 @@ class RelationshipGraph(Trackable):
     Storage shape:
         _edges[from_uid][to_uid] = [sentiment, count, min_score, max_score]
         _rumors[holder_uid][subject_uid] = [(source, sent, conf, tick), ...]
+        _deceits[victim_uid][deceiver_uid] = [tick1, tick2, ...]
 
     Both outer dicts are auto-created on first access via
     ``edges_from`` / ``rumors_of`` so call sites never need to check
@@ -44,6 +45,7 @@ class RelationshipGraph(Trackable):
         super().__init__()
         self._edges: dict[int, dict[int, list]] = {}
         self._rumors: dict[int, dict[int, list]] = {}
+        self._deceits: dict[int, dict[int, list]] = {}
 
     # ======================================================================
     # Forward-edge access (hot path)
@@ -196,6 +198,48 @@ class RelationshipGraph(Trackable):
         return sum(len(v) for v in d.values())
 
     # ======================================================================
+    # Deceit tracking
+    # ======================================================================
+
+    def record_deceit(self, deceiver_uid: int, victim_uid: int, tick: int):
+        """Record that deceiver successfully deceived victim at tick."""
+        d = self._deceits.get(victim_uid)
+        if d is None:
+            d = {}
+            self._deceits[victim_uid] = d
+        existing = d.get(deceiver_uid)
+        if existing is not None:
+            existing.append(tick)
+        else:
+            d[deceiver_uid] = [tick]
+
+    def deceits_against(self, victim_uid: int) -> dict[int, list]:
+        """Return {deceiver_uid: [ticks]} for all deceptions against victim."""
+        return self._deceits.get(victim_uid, {})
+
+    def outstanding_lies(self, deceiver_uid: int) -> int:
+        """Count total unresolved deceptions by this creature."""
+        count = 0
+        for victim_deceits in self._deceits.values():
+            ticks = victim_deceits.get(deceiver_uid)
+            if ticks:
+                count += len(ticks)
+        return count
+
+    def reveal_deceit(self, deceiver_uid: int, victim_uid: int) -> bool:
+        """Clear one deceit entry. Returns True if one was found."""
+        d = self._deceits.get(victim_uid)
+        if not d:
+            return False
+        ticks = d.get(deceiver_uid)
+        if not ticks:
+            return False
+        ticks.pop(0)
+        if not ticks:
+            del d[deceiver_uid]
+        return True
+
+    # ======================================================================
     # Bulk / graph ops
     # ======================================================================
 
@@ -220,15 +264,19 @@ class RelationshipGraph(Trackable):
         """
         self._edges.pop(uid, None)
         self._rumors.pop(uid, None)
+        self._deceits.pop(uid, None)
         for outgoing in self._edges.values():
             outgoing.pop(uid, None)
         for rumor_dict in self._rumors.values():
             rumor_dict.pop(uid, None)
+        for deceit_dict in self._deceits.values():
+            deceit_dict.pop(uid, None)
 
     def clear(self):
         """Empty the entire graph. Used by load and test teardown."""
         self._edges.clear()
         self._rumors.clear()
+        self._deceits.clear()
 
     # ======================================================================
     # Load support

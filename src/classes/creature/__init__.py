@@ -144,6 +144,8 @@ class Creature(
         self._max_hit_taken: int = 0        # worst single hit for survival anchor
         self._item_prices: dict = {}        # item id -> gold paid
         self._pickups: int = 0              # successful PICKUP actions (RL counter)
+        self._stolen_value: float = 0.0     # cumulative value of stolen items/gold (RL counter)
+        self._active_social_target = None   # creature currently in TALK/TRADE with (for DECEIVE gate)
 
         # Hunger: 1.0 = full, 0.0 = neutral, -1.0 = starving
         # Full bar (1.0 to -1.0) depletes in 1 game day (24 min real time)

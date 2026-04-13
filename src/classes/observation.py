@@ -433,8 +433,8 @@ def build_observation(creature, cols: int, rows: int,
     else:
         obs.append(0.0)
     obs.append(0.0)  # most_recent_interaction ticks (need tracking)
-    obs.append(0.0)  # betrayals_committed (need tracking)
-    obs.append(0.0)  # betrayals_received (need tracking)
+    obs.append(GRAPH.outstanding_lies(creature.uid) / 10.0)
+    obs.append(len(GRAPH.deceits_against(creature.uid)) / 10.0)
     obs.append(GRAPH.count_rumors_held(creature.uid) / 20.0)
     obs.append(0.0)  # rumors_spread (need tracking)
     obs.append(0.0)  # pending_conversations (expensive)

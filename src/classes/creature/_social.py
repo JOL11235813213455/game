@@ -8,6 +8,58 @@ from classes.relationship_graph import GRAPH
 class SocialMixin:
     """Social interaction methods for Creature."""
 
+    def _check_deceit_revelation(self, partner):
+        """Check if this social interaction reveals any deceptions.
+
+        When creature B (self) interacts with creature C (partner),
+        C may reveal deceptions perpetrated against B by a third
+        party A. Requirements:
+          - C has interacted at least once with deceiver A
+          - C likes B more than A
+          - C's detection beats A's deception (d20 contest, A absent)
+
+        On revelation: deceiver A takes -10 sentiment hit from B
+        (2x the normal caught-deceiving penalty), and the lie is cleared.
+        """
+        deceits = GRAPH.deceits_against(self.uid)
+        if not deceits:
+            return
+        partner_rels = GRAPH.edges_from(partner.uid)
+        partner_opinion_of_self = partner_rels.get(self.uid)
+        if partner_opinion_of_self is None:
+            return
+        partner_likes_me = partner_opinion_of_self[0]
+
+        for deceiver_uid in list(deceits.keys()):
+            partner_opinion_of_deceiver = partner_rels.get(deceiver_uid)
+            if partner_opinion_of_deceiver is None:
+                continue
+            if partner_opinion_of_deceiver[1] < 1:
+                continue
+            if partner_likes_me <= partner_opinion_of_deceiver[0]:
+                continue
+            # C likes B more than A and has interacted with A —
+            # roll C's detection vs A's (absent) deception
+            from classes.stats import Stat as _S
+            import random as _rand
+            c_roll = partner.stats.active[_S.DETECTION]() + _rand.randint(1, 20)
+            # Use the deceiver's deception stat if available, else use 10
+            from classes.trackable import Trackable
+            from classes.creature import Creature as _Creature
+            deceiver = None
+            for obj in Trackable.all_instances():
+                if isinstance(obj, _Creature) and obj.uid == deceiver_uid:
+                    deceiver = obj
+                    break
+            if deceiver is None or not deceiver.is_alive:
+                GRAPH.reveal_deceit(deceiver_uid, self.uid)
+                continue
+            a_deception = deceiver.stats.active[_S.DECEPTION]() + _rand.randint(1, 20)
+            if c_roll > a_deception:
+                GRAPH.reveal_deceit(deceiver_uid, self.uid)
+                self.record_interaction(deceiver, -10.0)
+                deceiver.record_interaction(self, -3.0)
+
     def intimidate(self, target) -> dict:
         """Attempt to intimidate another creature.
 
@@ -38,9 +90,19 @@ class SocialMixin:
         return result
 
     def deceive(self, target) -> dict:
-        """Attempt to deceive another creature.
+        """Attempt to deceive another creature during social interaction.
 
+        Requires active social context (TALK or TRADE in progress).
         Uses d20 + DECEPTION vs d20 + DETECTION.
+
+        Familiarity modifier: abs(sentiment) * 0.15 added to target's
+        detection — people who know you well are harder to fool.
+
+        On success:
+          1. Relationship manipulation: negative→neutral, positive→boost
+          2. Poison target's most-favored relationship with a nasty rumor
+          3. Record deception for potential future revelation
+
         Returns dict: success, margin, reason.
         """
         result = {'success': False, 'margin': 0, 'reason': ''}
@@ -49,15 +111,56 @@ class SocialMixin:
             result['reason'] = 'out_of_range'
             return result
 
+        # Gate: must be in active social interaction with target
+        active = getattr(self, '_active_social_target', None)
+        if active is None or (hasattr(active, 'uid') and active.uid != target.uid):
+            result['reason'] = 'no_social_context'
+            return result
+
+        # Familiarity modifier
+        rel = GRAPH.get_edge(target.uid, self.uid)
+        familiarity_bonus = abs(rel[0]) * 0.15 if rel else 0.0
+
         won, margin = self.stats.contest(target.stats, 'deception_vs_detection')
+        adjusted_margin = margin - familiarity_bonus
+        won = adjusted_margin > 0
         result['margin'] = margin
+
         if won:
             result['success'] = True
             self._social_wins = getattr(self, '_social_wins', 0) + 1
-            # Victim doesn't know they've been deceived
+
+            # 1. Relationship manipulation
+            my_rel = GRAPH.get_edge(target.uid, self.uid)
+            if my_rel is not None:
+                if my_rel[0] < 0:
+                    # Reset negative relationship to neutral
+                    adjustment = -my_rel[0]
+                    target.record_interaction(self, adjustment)
+                else:
+                    # Boost positive relationship
+                    target.record_interaction(self, 3.0)
+            else:
+                target.record_interaction(self, 3.0)
+
+            # 2. Poison target's most-favored relationship
+            target_rels = GRAPH.edges_from(target.uid)
+            best_friend_uid = None
+            best_sentiment = -999.0
+            for uid, r in target_rels.items():
+                if uid != self.uid and r[0] > best_sentiment:
+                    best_sentiment = r[0]
+                    best_friend_uid = uid
+            if best_friend_uid is not None and best_sentiment > 0:
+                rumor_sentiment = -best_sentiment * 2.0
+                GRAPH.add_rumor(target.uid, best_friend_uid,
+                                self.uid, rumor_sentiment,
+                                0.8, 0)
+
+            # 3. Record deception for future revelation
+            GRAPH.record_deceit(self.uid, target.uid, 0)
         else:
             result['reason'] = 'detected'
-            # Trust severely damaged
             target.record_interaction(self, -5.0)
             self.record_interaction(target, -1.0)
 
@@ -411,41 +514,98 @@ class SocialMixin:
 
         return result
 
-    def steal(self, target, item) -> dict:
-        """Attempt to steal an item from another creature's inventory.
+    def steal(self, target, item=None) -> dict:
+        """Attempt to steal from another creature.
 
-        Uses stealth vs detection if unseen, deception vs detection if seen.
-        Returns dict: success, reason.
+        Auto-resolves the best item to steal:
+          1. Gold (steal up to 50% of target's gold)
+          2. Unequipped items, highest value first
+          3. Equipped items (much harder: -8 contest penalty)
+
+        Familiarity modifier: abs(sentiment) * 0.15 added to target's
+        detection roll — people who know you well notice theft more.
+
+        Uses stealth vs detection if unseen, deception vs detection if
+        seen. Returns dict: success, reason, stolen_value.
         """
-        result = {'success': False, 'reason': ''}
+        result = {'success': False, 'reason': '', 'stolen_value': 0.0}
 
         if self._sight_distance(target) > 1:
             result['reason'] = 'not_adjacent'
             return result
 
-        if item not in target.inventory.items:
-            result['reason'] = 'item_not_found'
-            return result
+        # Auto-resolve what to steal: gold → unequipped by value → equipped
+        stealing_gold = False
+        stealing_equipped = False
+        if item is None:
+            target_gold = getattr(target, 'gold', 0)
+            if target_gold > 0:
+                stealing_gold = True
+                item = None  # gold path
+            else:
+                equipped_set = set(target.equipment.values())
+                unequipped = sorted(
+                    [i for i in target.inventory.items if i not in equipped_set],
+                    key=lambda i: getattr(i, 'value', 0), reverse=True
+                )
+                if unequipped:
+                    item = unequipped[0]
+                else:
+                    equipped_list = sorted(
+                        [i for i in equipped_set if i is not None],
+                        key=lambda i: getattr(i, 'value', 0), reverse=True
+                    )
+                    if equipped_list:
+                        item = equipped_list[0]
+                        stealing_equipped = True
+                    else:
+                        result['reason'] = 'nothing_to_steal'
+                        return result
 
-        if not self.can_carry(item):
-            result['reason'] = 'too_heavy'
-            return result
+        if item is not None and not stealing_gold:
+            if item not in target.inventory.items:
+                result['reason'] = 'item_not_found'
+                return result
+            if not self.can_carry(item):
+                result['reason'] = 'too_heavy'
+                return result
+            if item in set(target.equipment.values()):
+                stealing_equipped = True
 
-        # If target can see us, use deception; otherwise stealth
+        # Familiarity modifier: knowing someone well makes theft harder
+        rel = GRAPH.get_edge(target.uid, self.uid)
+        familiarity_bonus = abs(rel[0]) * 0.15 if rel else 0.0
+
+        # Contest: stealth if unseen, deception if seen
+        # Equipped items add -8 penalty to attacker
+        equip_penalty = -8 if stealing_equipped else 0
         if target.can_see(self):
-            won, _ = self.stats.contest(target.stats, 'deception_vs_detection')
+            won, margin = self.stats.contest(target.stats, 'deception_vs_detection')
         else:
-            won, _ = self.stats.contest(target.stats, 'stealth_vs_detection')
+            won, margin = self.stats.contest(target.stats, 'stealth_vs_detection')
+        adjusted_margin = margin + equip_penalty - familiarity_bonus
+        won = adjusted_margin > 0
 
         if won:
             result['success'] = True
             self._social_wins = getattr(self, '_social_wins', 0) + 1
-            target.inventory.items.remove(item)
-            self.inventory.items.append(item)
-            # Victim doesn't know (unless detected later)
+            if stealing_gold:
+                amount = max(1, int(target.gold * random.uniform(0.1, 0.5)))
+                target.gold -= amount
+                self.gold = getattr(self, 'gold', 0) + amount
+                result['stolen_value'] = float(amount)
+            else:
+                target.inventory.items.remove(item)
+                if stealing_equipped:
+                    for slot, eq in target.equipment.items():
+                        if eq is item:
+                            target.equipment[slot] = None
+                            break
+                self.inventory.items.append(item)
+                result['stolen_value'] = float(getattr(item, 'value', 1))
+            self._stolen_value = getattr(self, '_stolen_value', 0.0) + result['stolen_value']
         else:
             result['reason'] = 'caught'
-            # Caught stealing — severe trust damage
             target.record_interaction(self, -8.0)
             self.record_interaction(target, -2.0)
 

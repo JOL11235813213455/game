@@ -177,6 +177,16 @@ def compute_reward(creature, prev: dict, curr: dict,
     if social_delta > 0:
         signals['social_success'] = social_delta * 0.5
 
+    # Theft: reward scaled by value of what was stolen (ln transform)
+    theft_delta = curr.get('stolen_value', 0.0) - prev.get('stolen_value', 0.0)
+    if theft_delta > 0:
+        signals['theft'] = math.log(1 + theft_delta) * 0.5
+
+    # Deception stress: ongoing penalty per outstanding lie
+    outstanding = curr.get('outstanding_lies', 0)
+    if outstanding > 0:
+        signals['deception_stress'] = -outstanding * 0.02
+
     # ---- 8. Kills (scale 3.0) ----
     signals['kills'] = (curr['kills'] - prev['kills']) * 3.0
 
@@ -478,6 +488,8 @@ def make_reward_snapshot(creature) -> dict:
         'social_wins': getattr(creature, '_social_wins', 0),
         'damage_dealt': getattr(creature, '_damage_dealt', 0),
         'pickups': getattr(creature, '_pickups', 0),
+        'stolen_value': getattr(creature, '_stolen_value', 0.0),
+        'outstanding_lies': GRAPH.outstanding_lies(creature.uid),
         'stamina_ratio': stats.active[Stat.CUR_STAMINA]() / stam_max,
         'encumbrance_ratio': creature.carried_weight / max(1, stats.active[Stat.CARRY_WEIGHT]()),
     }
