@@ -4,13 +4,20 @@ Action space for the creature RL system.
 Each action is an enum value that maps to a creature method call.
 The dispatcher takes a creature, action index, and context, then
 executes the action and returns an outcome dict.
+
+Movement uses 8 directional MOVE actions. The locomotion mode
+(walk/run/sneak) is determined as:
+  - Sneak: if creature.movement_mode == 'sneak' (toggled by SET_SNEAK)
+  - Run:   auto-selected when a hostile creature is within sight and
+           stamina is sufficient
+  - Walk:  default (free, no stamina cost)
 """
 from __future__ import annotations
 from enum import IntEnum
 
 
 class Action(IntEnum):
-    # Movement (0-7: 8 directions)
+    # Movement (0-7: 8 directions, mode auto-selected)
     MOVE_N  = 0
     MOVE_NE = 1
     MOVE_E  = 2
@@ -20,68 +27,54 @@ class Action(IntEnum):
     MOVE_W  = 6
     MOVE_NW = 7
 
-    # Movement variants
-    RUN_N   = 8
-    RUN_NE  = 9
-    RUN_E   = 10
-    RUN_SE  = 11
-    RUN_S   = 12
-    RUN_SW  = 13
-    RUN_W   = 14
-    RUN_NW  = 15
-
-    SNEAK_N  = 16
-    SNEAK_NE = 17
-    SNEAK_E  = 18
-    SNEAK_SE = 19
-    SNEAK_S  = 20
-    SNEAK_SW = 21
-    SNEAK_W  = 22
-    SNEAK_NW = 23
+    # Movement mode toggle
+    SET_SNEAK = 8    # toggles sneak on/off; walk vs run is automatic
 
     # Combat
-    MELEE_ATTACK = 24
-    RANGED_ATTACK = 25
-    GRAPPLE = 26
-    CAST_SPELL = 27
+    MELEE_ATTACK = 9
+    RANGED_ATTACK = 10
+    GRAPPLE = 11
+    CAST_SPELL = 12
 
     # Social
-    INTIMIDATE = 28
-    DECEIVE = 29
-    TRADE = 30
-    BRIBE = 31
-    STEAL = 32
-    SHARE_RUMOR = 33
-    TALK = 34
+    INTIMIDATE = 13
+    DECEIVE = 14
+    TRADE = 15
+    BRIBE = 16
+    STEAL = 17
+    SHARE_RUMOR = 18
+    TALK = 19
 
     # Utility
-    PICKUP = 35
-    DROP = 36
-    USE_ITEM = 37
-    WAIT = 38
-    GUARD = 39
-    SEARCH = 40
-    FLEE = 41
-    FOLLOW = 42
-    CALL_BACKUP = 43
-    SLEEP = 44
-    SET_TRAP = 45
+    PICKUP = 20
+    DROP = 21
+    USE_ITEM = 22
+    WAIT = 23
+    GUARD = 24
+    SEARCH = 25
+    FLEE = 26
+    FOLLOW = 27
+    CALL_BACKUP = 28
+    SLEEP = 29
+    SET_TRAP = 30
 
     # Stances
-    BLOCK_STANCE = 46
-    EXIT_BLOCK = 47
-    EXIT_GUARD = 48
+    BLOCK_STANCE = 31
+    EXIT_BLOCK = 32
+    EXIT_GUARD = 33
 
-    # New actions
-    DIG = 49
-    PUSH = 50
-    CRAFT = 51
-    DISASSEMBLE = 52
-    HARVEST = 53
-    JOB = 54    # single parameterized action; dispatches via creature.do_job()
-    FARM = 55   # stewardship: boost resource growth on farming tiles
-    PROCESS = 56   # raw -> refined: bake/cook/smelt (tile-gated to crafting)
-    PAIR = 57      # propose pairing with adjacent fertile partner
+    # Economy
+    DIG = 34
+    PUSH = 35
+    CRAFT = 36
+    DISASSEMBLE = 37
+    HARVEST = 38
+    JOB = 39
+    FARM = 40
+    PROCESS = 41
+
+    # Reproduction
+    PAIR = 42
 
 
 NUM_ACTIONS = len(Action)
@@ -96,12 +89,10 @@ TILE_PURPOSES = (
 NUM_PURPOSES = len(TILE_PURPOSES)
 
 # Action → tile purpose alignment
-# When an action is performed on a tile whose purpose matches,
-# the reward is doubled. Multiple purposes can align with one action.
 ACTION_PURPOSE = {
     Action.TRADE: 'trading',
     Action.BRIBE: 'trading',
-    Action.STEAL: 'trading',       # stealing at a market...
+    Action.STEAL: 'trading',
     Action.MELEE_ATTACK: 'hunting',
     Action.RANGED_ATTACK: 'hunting',
     Action.GRAPPLE: 'hunting',
@@ -117,15 +108,12 @@ ACTION_PURPOSE = {
     Action.DIG: 'mining',
     Action.CRAFT: 'crafting',
     Action.DISASSEMBLE: 'crafting',
-    # HARVEST is polymorphic: reward uses tile's actual purpose (farming/
-    # fishing/gathering/hunting — whichever the resource comes from).
-    # 'farming' here is a fallback for tiles with a resource but no explicit purpose.
     Action.HARVEST: 'farming',
-    Action.FARM: 'farming',       # stewardship — distinct from extraction
-    Action.JOB: None,              # resolved at reward time from creature.job.purpose
-    Action.PROCESS: 'crafting',   # cook/smelt — tile-gated to crafting
+    Action.FARM: 'farming',
+    Action.JOB: None,
+    Action.PROCESS: 'crafting',
     Action.PAIR: 'pairing',
-    Action.USE_ITEM: 'eating',     # consumables
+    Action.USE_ITEM: 'eating',
     Action.SET_TRAP: 'hunting',
 }
 
@@ -135,10 +123,8 @@ def action_aligned_with_tile(action: int, tile, zone_purposes: set = None) -> bo
     aligned_purpose = ACTION_PURPOSE.get(action)
     if aligned_purpose is None:
         return False
-    # Check zone purposes first (primary)
     if zone_purposes and aligned_purpose in zone_purposes:
         return True
-    # Fallback to tile-level purpose
     purpose = getattr(tile, 'purpose', None)
     return purpose == aligned_purpose
 
@@ -162,6 +148,8 @@ ACTION_NAMES = {
     Action.JOB: 'job', Action.FARM: 'farm',
     Action.PROCESS: 'process',
     Action.PAIR: 'pair',
+    Action.SET_SNEAK: 'set_sneak',
+    Action.EXIT_BLOCK: 'exit_block', Action.EXIT_GUARD: 'exit_guard',
 }
 
 
@@ -194,48 +182,61 @@ _DIRS = {
 }
 
 
+def _should_run(creature, context) -> bool:
+    """Auto-select run mode when a hostile is in sight and stamina allows."""
+    from classes.stats import Stat
+    if creature.stats.active[Stat.CUR_STAMINA]() < 3:
+        return False
+    from classes.relationship_graph import GRAPH
+    from classes.stats import Stat
+    sight = creature.stats.active[Stat.SIGHT_RANGE]()
+    cx, cy = creature.location.x, creature.location.y
+    rels = GRAPH.edges_from(creature.uid)
+    if not rels:
+        return False
+    from classes.world_object import WorldObject
+    from classes.creature import Creature as _C
+    for obj in WorldObject.on_map(creature.current_map):
+        if not isinstance(obj, _C) or obj is creature or not obj.is_alive:
+            continue
+        dist = abs(cx - obj.location.x) + abs(cy - obj.location.y)
+        if dist > sight:
+            continue
+        rel = rels.get(obj.uid)
+        if rel and rel[0] < -5:
+            return True
+    return False
+
+
 def dispatch(creature, action: int, context: dict) -> dict:
-    """Execute an action for a creature. Records action in god counters,
-    bumps failed_actions on failure, and emits a sound event for any
-    action that should be audible to nearby creatures.
-    """
+    """Execute an action for a creature."""
     result = _dispatch_inner(creature, action, context)
     succeeded = result.get('success', result.get('hit', False))
     if succeeded:
         _record_god_action(action)
         _emit_action_sound(creature, action, context)
     else:
-        # Failed action: bump the counter so reward.py can penalize.
-        # Reward scale is per-stage; the curriculum mask decides
-        # whether the penalty actually fires.
         creature.failed_actions = getattr(creature, 'failed_actions', 0) + 1
     return result
 
 
-# Map action ranges/identifiers to the sound type they emit on success.
-# Actions not in this map are silent. Movement is intentionally low-
-# volume so it doesn't dominate the hearing buffer.
 def _emit_action_sound(creature, action: int, context: dict):
     from classes.sound import emit_sound
 
-    # Movement actions (0-23): footstep
-    if 0 <= action <= 23:
+    if 0 <= action <= 7:
         emit_sound(creature, 'footstep', tick=context.get('now', 0))
         return
 
-    # Combat
     if action in (Action.MELEE_ATTACK, Action.RANGED_ATTACK,
                    Action.GRAPPLE, Action.CAST_SPELL):
         emit_sound(creature, 'combat', tick=context.get('now', 0))
         return
 
-    # Social — speech
     if action in (Action.TALK, Action.INTIMIDATE, Action.DECEIVE,
                    Action.SHARE_RUMOR, Action.TRADE, Action.BRIBE):
         emit_sound(creature, 'speech', tick=context.get('now', 0))
         return
 
-    # Economic
     if action in (Action.HARVEST, Action.FARM, Action.PROCESS, Action.JOB):
         emit_sound(creature, 'harvest', tick=context.get('now', 0))
         return
@@ -250,49 +251,36 @@ def _emit_action_sound(creature, action: int, context: dict):
 
 
 def _dispatch_inner(creature, action: int, context: dict) -> dict:
-    """Inner dispatch — actual action execution.
-
-    Args:
-        creature: the Creature performing the action
-        action: Action enum value (int)
-        context: dict with keys depending on action:
-            cols, rows: map dimensions (required for movement)
-            target: target Creature (for combat/social)
-            item: target Item (for pickup/drop/use/steal/trap)
-            items: list of Items (for trade/bribe)
-            requested: list of Items (for trade)
-            now: current timestamp (for combat/sleep)
-
-    Returns:
-        dict with 'success' (bool) and action-specific keys
-    """
+    """Inner dispatch — actual action execution."""
     cols = context.get('cols', 0)
     rows = context.get('rows', 0)
     target = context.get('target')
     item = context.get('item')
     now = context.get('now', 0)
-    # Curriculum: combat may be disabled by the runner. When disabled,
-    # MELEE_ATTACK / RANGED_ATTACK / GRAPPLE / CAST_SPELL all early-fail
-    # so creatures cannot kill each other in early training stages.
+
     combat_enabled = context.get('combat_enabled', True)
     if not combat_enabled and action in (Action.MELEE_ATTACK, Action.RANGED_ATTACK,
                                           Action.GRAPPLE, Action.CAST_SPELL):
         return {'success': False, 'reason': 'combat_disabled'}
 
-    # -- Movement --
+    # -- Movement (auto walk/run/sneak) --
     if 0 <= action <= 7:
         dx, dy = _DIRS[action]
-        old = creature.location
-        creature.move(dx, dy, cols, rows)
-        return {'success': creature.location != old}
+        mode = getattr(creature, 'movement_mode', 'walk')
+        if mode == 'sneak':
+            return {'success': creature.sneak(dx, dy, cols, rows)}
+        elif _should_run(creature, context):
+            return {'success': creature.run(dx, dy, cols, rows)}
+        else:
+            old = creature.location
+            creature.move(dx, dy, cols, rows)
+            return {'success': creature.location != old}
 
-    if 8 <= action <= 15:
-        dx, dy = _DIRS[action - 8]
-        return {'success': creature.run(dx, dy, cols, rows)}
-
-    if 16 <= action <= 23:
-        dx, dy = _DIRS[action - 16]
-        return {'success': creature.sneak(dx, dy, cols, rows)}
+    # -- Sneak toggle --
+    if action == Action.SET_SNEAK:
+        current = getattr(creature, 'movement_mode', 'walk')
+        creature.movement_mode = 'walk' if current == 'sneak' else 'sneak'
+        return {'success': True}
 
     # -- Combat --
     if action == Action.MELEE_ATTACK:
@@ -313,7 +301,6 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
     if action == Action.CAST_SPELL:
         spell = context.get('spell')
         if spell is None:
-            # Auto-select first known spell
             from data.db import SPELLS
             known = creature.get_known_spells()
             for sk in known:
@@ -324,14 +311,7 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
                 return {'success': False, 'reason': 'no_spell'}
         return creature.cast_spell(spell, target, now)
 
-    # TRADE is handled before the social-action range check because it
-    # does its own target auto-selection and does not require a sentient
-    # counterparty (animals can be traded with in a simple economy).
     if action == Action.TRADE:
-        # Gold-denominated auto-trade: pick nearest adjacent creature as
-        # counterparty if none provided, let auto_trade decide direction
-        # and item. The NN just chooses "trade now," the system closes
-        # the loop with whatever makes economic sense.
         if target is None:
             from classes.world_object import WorldObject
             from classes.creature import Creature as _Creature
@@ -390,18 +370,19 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
 
     # -- Utility --
     if action == Action.PICKUP:
-        # Always grab tile gold first
         gold_picked = creature.pickup_gold()
         if item is None:
-            # Auto-pickup: grab first item on tile
             tile = creature.current_map.tiles.get(creature.location)
             if tile and tile.inventory.items:
                 item = tile.inventory.items[0]
             elif gold_picked > 0:
+                creature._pickups = getattr(creature, '_pickups', 0) + 1
                 return {'success': True, 'gold_picked': gold_picked}
             else:
                 return {'success': False, 'reason': 'nothing_here'}
         result = creature.pickup(item)
+        if result or gold_picked > 0:
+            creature._pickups = getattr(creature, '_pickups', 0) + 1
         return {'success': result or gold_picked > 0, 'gold_picked': gold_picked}
 
     if action == Action.DROP:
@@ -414,7 +395,6 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
 
     if action == Action.USE_ITEM:
         if item is None:
-            # Use first consumable
             from classes.inventory import Consumable
             for inv_item in creature.inventory.items:
                 if isinstance(inv_item, Consumable):
@@ -480,7 +460,6 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
     if action == Action.PUSH:
         if target is None:
             return {'success': False, 'reason': 'no_target'}
-        # Push direction: from creature toward target
         dx = target.location.x - creature.location.x
         dy = target.location.y - creature.location.y
         return creature.push(target, dx, dy, cols, rows)
@@ -490,7 +469,6 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
 
     if action == Action.DISASSEMBLE:
         if item is None:
-            # Auto-select first ItemFrame with ingredients
             from classes.inventory import ItemFrame as _IF
             for inv_item in creature.inventory.items:
                 if isinstance(inv_item, _IF) and inv_item.ingredients.items:
@@ -513,10 +491,6 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
         return creature.process()
 
     if action == Action.PAIR:
-        # Auto-target: find a fertile, adjacent, opposite-sex creature
-        # of the same species. The pairing helper itself does the
-        # contest (proposal, acceptance, fertility checks); dispatch
-        # only chooses the partner.
         if target is None:
             from classes.world_object import WorldObject
             from classes.creature import Creature as _Creature
@@ -532,8 +506,6 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
             )
             if target is None:
                 return {'success': False, 'reason': 'no_partner'}
-        # propose_pairing always wants the male as caller, female as
-        # partner; flip if needed.
         if creature.sex == 'male':
             return creature.propose_pairing(target, now)
         return target.propose_pairing(creature, now)

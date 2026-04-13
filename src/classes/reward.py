@@ -179,6 +179,11 @@ def compute_reward(creature, prev: dict, curr: dict,
     new_met = curr['creatures_met'] - prev['creatures_met']
     signals['exploration'] = new_tiles * 0.2 + new_met * 0.5
 
+    # ---- 9b. Pickup success ----
+    pickup_delta = curr.get('pickups', 0) - prev.get('pickups', 0)
+    if pickup_delta > 0:
+        signals['pickup_success'] = pickup_delta * 0.3
+
     # ---- 10. Piety (scale 2.0) ----
     signals['piety'] = 0.0
     if prev['piety'] > 0 or curr['piety'] > 0:
@@ -217,6 +222,11 @@ def compute_reward(creature, prev: dict, curr: dict,
 
     nearby = curr.get('nearby_count', 0)
     signals['crowding'] = -(nearby - 4) * 0.3 if nearby >= 5 else 0.0
+
+    # Idleness: small penalty for WAITing at full stamina
+    if (last_action is not None and last_action == 23  # WAIT
+            and curr.get('stamina_ratio', 1.0) > 0.9):
+        signals['idleness'] = -0.05
 
     # Water danger: penalty only for DEEP water (depth >= 1) without
     # swimming. Shallow banks (depth=0, liquid=True) are safe — the
@@ -435,4 +445,6 @@ def make_reward_snapshot(creature) -> dict:
         'gold': getattr(creature, 'gold', 0),
         'social_wins': getattr(creature, '_social_wins', 0),
         'damage_dealt': getattr(creature, '_damage_dealt', 0),
+        'pickups': getattr(creature, '_pickups', 0),
+        'stamina_ratio': stats.active[Stat.CUR_STAMINA]() / stam_max,
     }

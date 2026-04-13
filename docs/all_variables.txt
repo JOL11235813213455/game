@@ -344,18 +344,21 @@ Constants:
 ACTIONS (src/classes/actions.py)
 ================================================================================
 
-Action Enum (49 actions):
-  Movement:    MOVE_N..NW (0-7), RUN_N..NW (8-15), SNEAK_N..NW (16-23)
-  Combat:      MELEE_ATTACK (24), RANGED_ATTACK (25), GRAPPLE (26), CAST_SPELL (27)
-  Social:      INTIMIDATE (28), DECEIVE (29), TRADE (30), BRIBE (31),
-               STEAL (32), SHARE_RUMOR (33), TALK (34)
-  Utility:     PICKUP (35), DROP (36), USE_ITEM (37), WAIT (38), GUARD (39),
-               SEARCH (40), FLEE (41), FOLLOW (42), CALL_BACKUP (43),
-               SLEEP (44), SET_TRAP (45)
-  Stances:     BLOCK_STANCE (46), EXIT_BLOCK (47), EXIT_GUARD (48)
+Action Enum (43 actions):
+  Movement:    MOVE_N..NW (0-7), SET_SNEAK (8)
+  Combat:      MELEE_ATTACK (9), RANGED_ATTACK (10), GRAPPLE (11), CAST_SPELL (12)
+  Social:      INTIMIDATE (13), DECEIVE (14), TRADE (15), BRIBE (16),
+               STEAL (17), SHARE_RUMOR (18), TALK (19)
+  Utility:     PICKUP (20), DROP (21), USE_ITEM (22), WAIT (23), GUARD (24),
+               SEARCH (25), FLEE (26), FOLLOW (27), CALL_BACKUP (28),
+               SLEEP (29), SET_TRAP (30)
+  Stances:     BLOCK_STANCE (31), EXIT_BLOCK (32), EXIT_GUARD (33)
+  Economy:     DIG (34), PUSH (35), CRAFT (36), DISASSEMBLE (37),
+               HARVEST (38), JOB (39), FARM (40), PROCESS (41)
+  Reproduction: PAIR (42)
 
 Constants:
-  NUM_ACTIONS         int               49
+  NUM_ACTIONS         int               43
   ACTION_NAMES        dict              {Action: god_action_str}
 
 ================================================================================

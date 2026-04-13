@@ -321,7 +321,7 @@ def generate_arena(cols: int = 20, rows: int = 20,
     # Single depth-1 center (unwalkable, drowning danger) surrounded
     # by depth-0 banks (walkable, fishing purpose). Minimal footprint,
     # teaches water avoidance without eating map real estate.
-    pond_cx = 2
+    pond_cx = cols // 2
     pond_cy = rows // 2
     tiles[MapKey(pond_cx, pond_cy, 0)] = Tile(
         walkable=False, liquid=True, flow_direction='S',
@@ -372,7 +372,7 @@ def generate_arena(cols: int = 20, rows: int = 20,
                 if t.walkable and getattr(t, '_purpose', None) == purpose]
 
     # Food spread on eating tiles — a mix so the NN sees variety
-    for k in _tiles_for('eating')[:8]:
+    for k in _tiles_for('eating')[:16]:
         choice = random.choice([
             ('Bread', 3, 4.0),
             ('Cooked Fish', 5, 5.0),
@@ -510,11 +510,11 @@ def generate_arena(cols: int = 20, rows: int = 20,
             profile=profile,
             observation_mask=mask,
         )
-        # Give some creatures food
-        if random.random() < 0.3:
-            food = Consumable(name='Apple', weight=0.2, value=2.0,
-                              quantity=random.randint(1, 3),
-                              heal_amount=2, duration=0)
+        # All creatures start with food
+        for _ in range(random.randint(2, 3)):
+            food = Consumable(name=random.choice(['Apple', 'Bread', 'Berries']),
+                              weight=0.2, value=2.0,
+                              quantity=1, heal_amount=random.randint(2, 4), duration=0)
             food.is_food = True
             c.inventory.items.append(food)
 

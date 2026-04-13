@@ -217,12 +217,13 @@ def generate_action_schema() -> list[dict]:
     # Group actions by prefix
     groups = {
         'movement': range(0, 8),
-        'run': range(8, 16),
-        'sneak': range(16, 24),
-        'combat': [24, 25, 26, 27],
-        'social': [28, 29, 30, 31, 32, 33, 34],
-        'utility': [35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45],
-        'stances': [46, 47, 48],
+        'toggle': [8],                    # SET_SNEAK
+        'combat': [9, 10, 11, 12],
+        'social': [13, 14, 15, 16, 17, 18, 19],
+        'utility': [20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30],
+        'stances': [31, 32, 33],
+        'economy': [34, 35, 36, 37, 38, 39, 40, 41],
+        'reproduction': [42],
     }
 
     # Invert: action_idx -> group

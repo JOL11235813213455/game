@@ -143,6 +143,7 @@ class Creature(
         self._quest_steps_completed: int = 0
         self._max_hit_taken: int = 0        # worst single hit for survival anchor
         self._item_prices: dict = {}        # item id -> gold paid
+        self._pickups: int = 0              # successful PICKUP actions (RL counter)
 
         # Hunger: 1.0 = full, 0.0 = neutral, -1.0 = starving
         # Full bar (1.0 to -1.0) depletes in 1 game day (24 min real time)
@@ -216,6 +217,10 @@ class Creature(
         self.can_swim: bool = False  # learned skill — prevents drowning
         self.is_drowning: bool = False  # currently drowning (in liquid, no swim, submerged)
         self._drown_ticks: int = 0  # consecutive ticks spent drowning
+
+        # Movement mode: 'walk' (default) or 'sneak' (toggled by SET_SNEAK).
+        # Walk vs run is auto-selected by the dispatcher based on threat context.
+        self.movement_mode: str = 'walk'
 
         # Sleep deprivation
         self.sleep_debt: int = 0  # days without sleep

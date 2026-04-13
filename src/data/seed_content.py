@@ -858,30 +858,30 @@ def seed():
     # to select, so the policy focuses on what's relevant.
     # ==================================================================
 
-    # Action groups for progressive unlock
+    # Action groups for progressive unlock (collapsed action space: 43 actions)
+    # Movement is now 8 directions + SET_SNEAK toggle; run is auto-selected.
     _MOVE8 = list(range(0, 8))          # MOVE_N through MOVE_NW
-    _RUN8 = list(range(8, 16))          # RUN_N through RUN_NW
-    _SNEAK8 = list(range(16, 24))       # SNEAK_N through SNEAK_NW
-    _COMBAT = [24, 25, 26, 27]          # MELEE, RANGED, GRAPPLE, CAST
-    _SOCIAL = [28, 29, 30, 31, 32, 33, 34]  # INTIMIDATE..TALK
-    _UTILITY_BASIC = [38, 40]           # WAIT, SEARCH
-    _PICKUP_DROP = [35, 36]             # PICKUP, DROP
-    _USE = [37]                         # USE_ITEM
-    _FOLLOW = [42]                      # FOLLOW
-    _HARVEST = [49, 53, 55]             # DIG, HARVEST, FARM
-    _PROCESS = [51, 52, 56]             # CRAFT, DISASSEMBLE, PROCESS
-    _JOB = [54]                         # JOB
-    _TRADE = [30, 31, 32]              # TRADE, BRIBE, STEAL
-    _SLEEP = [39, 44, 48]              # GUARD, SLEEP, EXIT_GUARD
-    _SOCIAL_TALK = [28, 29, 33, 34, 43]  # INTIMIDATE, DECEIVE, SHARE_RUMOR, TALK, CALL_BACKUP
-    _COMBAT_FULL = [24, 25, 26, 27, 41, 45, 46, 47, 50]  # combat + FLEE, SET_TRAP, BLOCK, EXIT_BLOCK, PUSH
-    _PAIR = [57]                        # PAIR
+    _SNEAK_TOGGLE = [8]                  # SET_SNEAK
+    _COMBAT = [9, 10, 11, 12]           # MELEE..CAST
+    _SOCIAL = [13, 14, 15, 16, 17, 18, 19]  # INTIMIDATE..TALK
+    _UTILITY_BASIC = [23, 25]           # WAIT, SEARCH
+    _PICKUP_DROP = [20, 21]             # PICKUP, DROP
+    _USE = [22]                          # USE_ITEM
+    _FOLLOW = [27]                       # FOLLOW
+    _HARVEST = [34, 38, 40]             # DIG, HARVEST, FARM
+    _PROCESS = [36, 37, 41]             # CRAFT, DISASSEMBLE, PROCESS
+    _JOB = [39]                          # JOB
+    _TRADE = [15, 16, 17]               # TRADE, BRIBE, STEAL
+    _SLEEP = [24, 29, 33]               # GUARD, SLEEP, EXIT_GUARD
+    _SOCIAL_TALK = [13, 14, 18, 19, 28] # INTIMIDATE, DECEIVE, SHARE_RUMOR, TALK, CALL_BACKUP
+    _COMBAT_FULL = [9, 10, 11, 12, 26, 30, 31, 32, 35]  # combat + FLEE, SET_TRAP, BLOCK, EXIT_BLOCK, PUSH
+    _PAIR = [42]                         # PAIR
 
     # Build cumulative action sets per stage
     _s1_actions = sorted(_MOVE8 + _UTILITY_BASIC)
     _s2_actions = sorted(_s1_actions + _PICKUP_DROP)
-    _s3_actions = sorted(_s2_actions + _USE + _RUN8)
-    _s4_actions = sorted(_s3_actions + _FOLLOW + _SNEAK8)
+    _s3_actions = sorted(_s2_actions + _USE + _SNEAK_TOGGLE)
+    _s4_actions = sorted(_s3_actions + _FOLLOW)
     _s5_actions = sorted(_s4_actions + _HARVEST)
     _s6_actions = sorted(_s5_actions + _PROCESS)
     _s7_actions = sorted(_s6_actions + _JOB)
@@ -889,14 +889,15 @@ def seed():
     _s9_actions = sorted(_s8_actions + _SLEEP)
     _s10_actions = sorted(_s9_actions + _SOCIAL_TALK)
     _s11_actions = sorted(_s10_actions + _COMBAT_FULL)
-    _s12_actions = sorted(_s11_actions + _PAIR)  # all 58
+    _s12_actions = sorted(_s11_actions + _PAIR)  # all 43
 
     # S1 — Wander
     _stage(1, 'Wander',
            'Move and explore. No hunger, no combat, no economy. '
            'Failed actions and water danger penalized.',
            {'exploration': 1.0, 'hp': 0.3,
-            'failed_actions': 0.5, 'water_danger': 1.0},
+            'failed_actions': 0.5, 'water_danger': 1.0,
+            'idleness': 0.5},
            hunger=False, combat=False, gestation=False,
            mappo=20000, es_gens=0, es_vars=20, es_steps=1000, ppo=20000,
            allowed_actions=_s1_actions, fatigue_enabled=False)
@@ -906,7 +907,8 @@ def seed():
            'Grab items and surface gold off the ground. No hunger yet.',
            {'exploration': 0.5, 'hp': 0.3,
             'gold': 1.0, 'inventory': 1.0,
-            'failed_actions': 0.5, 'water_danger': 1.0},
+            'failed_actions': 0.5, 'water_danger': 1.0,
+            'idleness': 0.5, 'pickup_success': 0.3},
            hunger=False, combat=False, gestation=False,
            mappo=20000, es_gens=0, es_vars=20, es_steps=1000, ppo=30000,
            resume=1, allowed_actions=_s2_actions, fatigue_enabled=False)
@@ -917,7 +919,8 @@ def seed():
            {'exploration': 0.3, 'hp': 0.3,
             'gold': 0.5, 'inventory': 0.5,
             'hunger': 1.0,
-            'failed_actions': 0.5, 'water_danger': 0.7},
+            'failed_actions': 0.5, 'water_danger': 0.7,
+            'idleness': 0.5, 'pickup_success': 0.5},
            hunger=True, combat=False, gestation=False,
            mappo=20000, es_gens=0, es_vars=20, es_steps=1000, ppo=50000,
            resume=2, allowed_actions=_s3_actions, fatigue_enabled=False)
@@ -932,7 +935,8 @@ def seed():
             'xp': 0.1,
             'goal_progress': 0.7, 'goal_completed': 1.0,
             'purpose_proximity': 1.0,
-            'failed_actions': 0.5, 'water_danger': 0.7},
+            'failed_actions': 0.5, 'water_danger': 0.7,
+            'idleness': 0.5, 'pickup_success': 0.5},
            hunger=True, combat=False, gestation=False,
            mappo=20000, es_gens=0, es_vars=20, es_steps=1000, ppo=50000,
            resume=3, allowed_actions=_s4_actions, fatigue_enabled=False)
@@ -947,7 +951,8 @@ def seed():
             'xp': 0.1, 'equipment': 0.3,
             'goal_progress': 0.5, 'goal_completed': 1.0,
             'purpose_proximity': 0.7,
-            'failed_actions': 0.5, 'water_danger': 0.7},
+            'failed_actions': 0.5, 'water_danger': 0.7,
+            'idleness': 0.5, 'pickup_success': 0.5},
            hunger=True, combat=False, gestation=False,
            mappo=20000, es_gens=0, es_vars=20, es_steps=1000, ppo=60000,
            resume=4, allowed_actions=_s5_actions, fatigue_enabled=False)
@@ -962,7 +967,8 @@ def seed():
             'xp': 0.1, 'equipment': 0.3,
             'goal_progress': 0.5, 'goal_completed': 1.0,
             'purpose_proximity': 0.5,
-            'failed_actions': 0.5, 'water_danger': 0.5},
+            'failed_actions': 0.5, 'water_danger': 0.5,
+            'idleness': 0.5, 'pickup_success': 0.5},
            hunger=True, combat=False, gestation=False,
            mappo=20000, es_gens=0, es_vars=20, es_steps=1000, ppo=60000,
            resume=5, allowed_actions=_s6_actions, fatigue_enabled=False)
@@ -978,7 +984,8 @@ def seed():
             'xp': 0.2, 'equipment': 0.3,
             'goal_progress': 0.5, 'goal_completed': 1.0,
             'purpose_proximity': 0.5,
-            'failed_actions': 0.5, 'water_danger': 0.5},
+            'failed_actions': 0.5, 'water_danger': 0.5,
+            'idleness': 0.5, 'pickup_success': 0.5},
            hunger=True, combat=False, gestation=False,
            mappo=20000, es_gens=10, es_vars=20, es_steps=1500, ppo=60000,
            resume=6, allowed_actions=_s7_actions, fatigue_enabled=False)
@@ -993,7 +1000,8 @@ def seed():
             'xp': 0.2, 'equipment': 0.5, 'debt': 0.5,
             'goal_progress': 0.5, 'goal_completed': 1.0,
             'purpose_proximity': 0.5,
-            'failed_actions': 0.5, 'water_danger': 0.5},
+            'failed_actions': 0.5, 'water_danger': 0.5,
+            'idleness': 0.5, 'pickup_success': 0.5},
            hunger=True, combat=False, gestation=False,
            mappo=20000, es_gens=15, es_vars=30, es_steps=1500, ppo=80000,
            resume=7, allowed_actions=_s8_actions, fatigue_enabled=False)
@@ -1011,7 +1019,8 @@ def seed():
             'purpose_proximity': 0.5,
             'fatigue': 1.0, 'crowding': 1.0,
             'sleep_quality': 0.7,
-            'failed_actions': 0.5, 'water_danger': 0.5},
+            'failed_actions': 0.5, 'water_danger': 0.5,
+            'idleness': 0.5, 'pickup_success': 0.5},
            hunger=True, combat=False, gestation=False,
            mappo=20000, es_gens=10, es_vars=30, es_steps=1500, ppo=60000,
            resume=8, allowed_actions=_s9_actions, fatigue_enabled=True)
@@ -1030,7 +1039,8 @@ def seed():
             'reputation': 1.0, 'allies': 1.0,
             'fatigue': 1.0, 'crowding': 1.0,
             'sleep_quality': 1.0, 'social_success': 0.5,
-            'failed_actions': 0.7, 'water_danger': 0.5},
+            'failed_actions': 0.7, 'water_danger': 0.5,
+            'idleness': 0.5, 'pickup_success': 0.5},
            hunger=True, combat=False, gestation=False,
            mappo=20000, es_gens=10, es_vars=30, es_steps=1500, ppo=60000,
            resume=9, allowed_actions=_s10_actions, fatigue_enabled=True)
@@ -1051,7 +1061,8 @@ def seed():
             'kills': 1.0,
             'fatigue': 1.0, 'crowding': 1.0,
             'sleep_quality': 1.0, 'social_success': 0.7, 'damage_dealt': 0.7,
-            'failed_actions': 1.0, 'water_danger': 0.5},
+            'failed_actions': 1.0, 'water_danger': 0.5,
+            'idleness': 0.5, 'pickup_success': 0.5},
            hunger=True, combat=True, gestation=False,
            mappo=20000, es_gens=10, es_vars=30, es_steps=1500, ppo=80000,
            resume=10, allowed_actions=_s11_actions, fatigue_enabled=True)
@@ -1072,7 +1083,8 @@ def seed():
             'fatigue': 1.0, 'crowding': 0.5,
             'life_goals': 1.0,
             'sleep_quality': 1.0, 'social_success': 0.7, 'damage_dealt': 0.5,
-            'failed_actions': 1.0, 'water_danger': 0.5},
+            'failed_actions': 1.0, 'water_danger': 0.5,
+            'idleness': 0.5, 'pickup_success': 0.5},
            hunger=True, combat=True, gestation=True,
            mappo=20000, es_gens=10, es_vars=30, es_steps=1500, ppo=80000,
            resume=11, allowed_actions=_s12_actions, fatigue_enabled=True)
@@ -1093,7 +1105,8 @@ def seed():
             'life_goals': 0.7,
             'piety': 1.0, 'quests': 1.0,
             'sleep_quality': 1.0, 'social_success': 0.7, 'damage_dealt': 0.5,
-            'failed_actions': 1.0, 'water_danger': 0.5},
+            'failed_actions': 1.0, 'water_danger': 0.5,
+            'idleness': 0.5, 'pickup_success': 0.5},
            hunger=True, combat=True, gestation=True,
            mappo=20000, es_gens=10, es_vars=30, es_steps=1500, ppo=60000,
            resume=12, allowed_actions=_s12_actions, fatigue_enabled=True)
@@ -1114,7 +1127,8 @@ def seed():
             'life_goals': 1.0,
             'piety': 0.7, 'quests': 0.7,
             'sleep_quality': 1.0, 'social_success': 0.7, 'damage_dealt': 0.5,
-            'failed_actions': 1.0, 'water_danger': 0.5},
+            'failed_actions': 1.0, 'water_danger': 0.5,
+            'idleness': 0.5, 'pickup_success': 0.5},
            hunger=True, combat=True, gestation=True,
            mappo=20000, es_gens=15, es_vars=40, es_steps=2000, ppo=120000,
            resume=13, allowed_actions=_s12_actions, fatigue_enabled=True)
