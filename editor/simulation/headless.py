@@ -180,6 +180,15 @@ class Simulation:
             self._obs_snapshots[child.uid] = make_snapshot(child)
             self._reward_snapshots[child.uid] = make_reward_snapshot(child)
 
+        # --- Phase 3: fatigue accumulation for creatures that didn't sleep ---
+        if self.fatigue_enabled:
+            for c in self.creatures:
+                if not c.is_alive:
+                    continue
+                if not getattr(c, 'is_sleeping', False):
+                    c.add_sleep_debt(1)
+                c.age += 1
+
     def step(self) -> list[dict]:
         """Advance one simulation step.
 
