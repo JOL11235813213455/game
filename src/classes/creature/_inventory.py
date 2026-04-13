@@ -110,10 +110,9 @@ class InventoryMixin:
         # Auto-pop: check if this item triggers an ItemFrame creation
         self._check_auto_pop(item)
 
-        # Auto-equip: if this item is equippable and better than what's
-        # in the slot, swap automatically. The creature values its best
-        # gear without needing an explicit EQUIP action.
-        if isinstance(item, Equippable) and item.slots:
+        # Auto-equip for NN-controlled creatures only. The player
+        # manages their own equipment via the inventory menu.
+        if self.behavior is not None and isinstance(item, Equippable) and item.slots:
             self._try_auto_equip(item)
 
         return True
