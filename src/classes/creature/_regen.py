@@ -9,6 +9,23 @@ _HUNGRY = 0.0       # below this: negative effects start
 _STARVING = -0.5    # below this: HP/stamina/mana drain
 
 
+def encumbrance_penalty(ratio: float) -> float:
+    """S-curve penalty from carry weight ratio.
+
+    Returns 0.0 (no penalty) to 1.0 (full penalty).
+    No penalty below 100% carry weight. Above 100%: slow initial
+    decline, then plummets, then normalizes at 1.0.
+      ratio 0.0-1.0 → 0.0 (no penalty)
+      ratio 1.15    → ~0.5 (half regen speed)
+      ratio 1.3     → ~0.95 (almost no regen)
+      ratio 1.5+    → ~1.0 (regen stopped)
+    """
+    if ratio <= 1.0:
+        return 0.0
+    x = max(-20, min(20, 12 * (ratio - 1.15)))
+    return 1.0 / (1.0 + math.exp(-x))
+
+
 class RegenMixin:
     """HP, stamina, and mana regeneration methods for Creature."""
 
@@ -54,6 +71,14 @@ class RegenMixin:
         if damage > self._max_hit_taken:
             self._max_hit_taken = damage
 
+    def _encumbrance_multiplier(self) -> float:
+        """Return 1.0 (unencumbered) down to 0.0 (fully encumbered)."""
+        carry_max = self.stats.active[Stat.CARRY_WEIGHT]()
+        if carry_max <= 0:
+            return 1.0
+        ratio = self.carried_weight / carry_max
+        return max(0.0, 1.0 - encumbrance_penalty(ratio))
+
     def _do_hp_regen(self, now: int):
         """Fibonacci HP regen, capped at 15% of HP_MAX per second."""
         if now < self._regen_start:
@@ -64,30 +89,31 @@ class RegenMixin:
             return
         cap = max(1, int(hp_max * 0.15))
         heal = min(self._regen_fib[0], cap)
+        heal = max(1, int(heal * self._encumbrance_multiplier()))
         self.stats.base[Stat.HP_CURR] = min(hp_max, hp_curr + heal)
         self._regen_fib = (self._regen_fib[1], self._regen_fib[0] + self._regen_fib[1])
 
     def _do_stamina_regen(self, _now: int):
-        """Restore stamina per second based on STAM_REGEN. Well-fed bonus applies."""
+        """Restore stamina per second based on STAM_REGEN."""
         cur = self.stats.active[Stat.CUR_STAMINA]()
         mx = self.stats.active[Stat.MAX_STAMINA]()
         if cur >= mx:
             return
         regen = self.stats.active[Stat.STAM_REGEN]()
         bonus = getattr(self, '_hunger_regen_bonus', 0.0)
-        regen = int(regen * (1.0 + bonus))
-        self.stats.base[Stat.CUR_STAMINA] = min(mx, cur + regen)
+        regen = int(regen * (1.0 + bonus) * self._encumbrance_multiplier())
+        self.stats.base[Stat.CUR_STAMINA] = min(mx, cur + max(0, regen))
 
     def _do_mana_regen(self, _now: int):
-        """Restore mana per second based on MANA_REGEN. Well-fed bonus applies."""
+        """Restore mana per second based on MANA_REGEN."""
         cur = self.stats.active[Stat.CUR_MANA]()
         mx = self.stats.active[Stat.MAX_MANA]()
         if cur >= mx:
             return
         regen = self.stats.active[Stat.MANA_REGEN]()
         bonus = getattr(self, '_hunger_regen_bonus', 0.0)
-        regen = int(regen * (1.0 + bonus))
-        self.stats.base[Stat.CUR_MANA] = min(mx, cur + regen)
+        regen = int(regen * (1.0 + bonus) * self._encumbrance_multiplier())
+        self.stats.base[Stat.CUR_MANA] = min(mx, cur + max(0, regen))
 
     # -- Regen state checks ------------------------------------------------
 

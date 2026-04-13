@@ -391,10 +391,7 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
 
     if action == Action.DROP:
         if item is None:
-            if creature.inventory.items:
-                item = creature.inventory.items[0]
-            else:
-                return {'success': True, 'reason': 'nothing_to_drop'}
+            return {'success': creature.smart_drop()}
         return {'success': creature.drop(item)}
 
     if action == Action.USE_ITEM:

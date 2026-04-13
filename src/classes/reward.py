@@ -153,6 +153,17 @@ def compute_reward(creature, prev: dict, curr: dict,
     # ---- 5. Equipment KPI (scale 2.0) ----
     signals['equipment'] = _ln_ratio(curr['eq_kpi'] + 1, prev['eq_kpi'] + 1) * 2.0
 
+    # ---- 5b. Equipment upgrade: reward for equipping better gear ----
+    eq_delta = curr['eq_kpi'] - prev['eq_kpi']
+    if eq_delta > 0:
+        signals['equipment_upgrade'] = math.log(1 + eq_delta) * 0.5
+
+    # ---- 5c. Encumbrance relief: reward for reducing weight when over capacity ----
+    prev_enc = prev.get('encumbrance_ratio', 0.0)
+    curr_enc = curr.get('encumbrance_ratio', 0.0)
+    if prev_enc > 1.0 and curr_enc < prev_enc:
+        signals['encumbrance_relief'] = (prev_enc - curr_enc) * 2.0
+
     # ---- 6. Reputation (scale 3.0) ----
     offset = 50.0
     signals['reputation'] = _ln_ratio(curr['reputation'] + offset,
@@ -447,4 +458,5 @@ def make_reward_snapshot(creature) -> dict:
         'damage_dealt': getattr(creature, '_damage_dealt', 0),
         'pickups': getattr(creature, '_pickups', 0),
         'stamina_ratio': stats.active[Stat.CUR_STAMINA]() / stam_max,
+        'encumbrance_ratio': creature.carried_weight / max(1, stats.active[Stat.CARRY_WEIGHT]()),
     }

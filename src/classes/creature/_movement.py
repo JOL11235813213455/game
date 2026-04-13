@@ -85,6 +85,10 @@ class MovementMixin:
         return False
 
     def move(self, dx: int, dy: int, cols: int, rows: int):
+        # Encumbrance: at 200%+ carry weight, movement is impossible
+        carry_max = self.stats.active[Stat.CARRY_WEIGHT]()
+        if carry_max > 0 and self.carried_weight >= carry_max * 2:
+            return
         # Flow restriction: in flowing liquid, non-swimmers are axis-locked
         if self._flow_restricts_movement(dx, dy):
             return

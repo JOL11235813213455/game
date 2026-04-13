@@ -1,7 +1,16 @@
 from __future__ import annotations
 from classes.stats import Stat
-from classes.inventory import Equippable, Consumable, Slot
+from classes.inventory import Equippable, Wearable, Weapon, Consumable, Slot
 from classes.world_object import WorldObject
+
+
+def _item_score(item) -> float:
+    """Score an item for equip comparison. Higher = better."""
+    score = sum(abs(v) for v in getattr(item, 'buffs', {}).values())
+    if isinstance(item, Weapon):
+        score += getattr(item, 'damage', 0)
+    score += getattr(item, 'value', 0) * 0.1
+    return score
 
 
 class InventoryMixin:
@@ -100,6 +109,12 @@ class InventoryMixin:
 
         # Auto-pop: check if this item triggers an ItemFrame creation
         self._check_auto_pop(item)
+
+        # Auto-equip: if this item is equippable and better than what's
+        # in the slot, swap automatically. The creature values its best
+        # gear without needing an explicit EQUIP action.
+        if isinstance(item, Equippable) and item.slots:
+            self._try_auto_equip(item)
 
         return True
 
@@ -239,3 +254,34 @@ class InventoryMixin:
             self.inventory.items.remove(item)
 
         return True
+
+    def _try_auto_equip(self, item: Equippable):
+        """Equip item if it's better than what's currently in the slot.
+
+        Compares by _item_score (buff totals + damage + value).
+        If current slot is empty, equip. If occupied, only swap when
+        the new item scores strictly higher.
+        """
+        if not item.slots:
+            return
+        target_slot = item.slots[0]
+        current = self.equipment.get(target_slot)
+        if current is None:
+            self.equip(item)
+            return
+        if _item_score(item) > _item_score(current):
+            self.unequip(target_slot)
+            self.equip(item)
+
+    def smart_drop(self) -> bool:
+        """Drop the least valuable item by value-per-weight ratio.
+
+        Skips equipped items. Returns True if something was dropped.
+        """
+        candidates = [i for i in self.inventory.items
+                      if i not in set(self.equipment.values())]
+        if not candidates:
+            return False
+        worst = min(candidates,
+                    key=lambda i: getattr(i, 'value', 0) / max(0.01, getattr(i, 'weight', 0.01)))
+        return self.drop(worst)
