@@ -21,10 +21,15 @@ gives:
 """
 from __future__ import annotations
 from typing import Iterator
+from classes.trackable import Trackable
 
 
-class RelationshipGraph:
+class RelationshipGraph(Trackable):
     """Directed weighted graph of creature relationships and rumors.
+
+    Extends Trackable so the graph is automatically included in
+    ``Trackable.all_instances()`` and picked up by the save system's
+    pickle sweep — no special-case serialization needed.
 
     Storage shape:
         _edges[from_uid][to_uid] = [sentiment, count, min_score, max_score]
@@ -36,6 +41,7 @@ class RelationshipGraph:
     """
 
     def __init__(self):
+        super().__init__()
         self._edges: dict[int, dict[int, list]] = {}
         self._rumors: dict[int, dict[int, list]] = {}
 
@@ -225,25 +231,33 @@ class RelationshipGraph:
         self._rumors.clear()
 
     # ======================================================================
-    # Serialization
+    # Load support
     # ======================================================================
 
-    def serialize(self) -> dict:
-        """Return a dict suitable for pickling alongside save state."""
-        return {'edges': self._edges, 'rumors': self._rumors}
+    @classmethod
+    def get_instance(cls) -> 'RelationshipGraph':
+        """Return the current graph instance (the most recently created).
 
-    def deserialize(self, data: dict):
-        """Restore from a dict produced by ``serialize``.
-
-        Replaces all current state — callers should typically call
-        ``clear()`` first if they want to be explicit, but this
-        assigns the new dicts directly so existing state is dropped.
+        After a save-load cycle, the unpickled graph replaces the
+        module-level GRAPH via ``_rebind_after_load()``.
         """
-        self._edges = data.get('edges', {}) or {}
-        self._rumors = data.get('rumors', {}) or {}
+        instances = cls.all()
+        return instances[-1] if instances else None
+
+
+def _rebind_after_load():
+    """Update the module-level GRAPH reference after loading a save.
+
+    Called by the save system after unpickling — the loaded graph is
+    a new Trackable instance, so we need to point GRAPH at it.
+    """
+    global GRAPH
+    instance = RelationshipGraph.get_instance()
+    if instance is not None:
+        GRAPH = instance
 
 
 # Module-level singleton. Every relationship query in the codebase
-# goes through this instance. Save/load replaces its contents via
-# deserialize().
+# goes through this instance. On load, _rebind_after_load() points
+# it at the unpickled instance.
 GRAPH = RelationshipGraph()
