@@ -869,6 +869,10 @@ def build_observation(creature, cols: int, rows: int,
     _purpose_dists = {}
     water_min_d = None
     water_best = None
+    item_min_d = None
+    item_best = None
+    food_min_d = None
+    food_best = None
     _z = creature.location.z
     _tiles = game_map.tiles
     if tile:
@@ -885,10 +889,19 @@ def build_observation(creature, cols: int, rows: int,
                 if pt_purpose:
                     if pt_purpose not in _purpose_dists or manhat < _purpose_dists[pt_purpose]:
                         _purpose_dists[pt_purpose] = manhat
-                if getattr(pt, 'liquid', False):
+                if getattr(pt, 'liquid', False) and getattr(pt, 'depth', 0) >= 1:
                     if water_min_d is None or manhat < water_min_d:
                         water_min_d = manhat
                         water_best = (ddx, ddy)
+                pt_inv = pt.inventory.items
+                if pt_inv or getattr(pt, 'gold', 0) > 0:
+                    if item_min_d is None or manhat < item_min_d:
+                        item_min_d = manhat
+                        item_best = (ddx, ddy)
+                    if any(getattr(i, 'is_food', False) for i in pt_inv):
+                        if food_min_d is None or manhat < food_min_d:
+                            food_min_d = manhat
+                            food_best = (ddx, ddy)
     # Also scan visible objects with purpose (scaled by purpose_distance)
     for _dobj, obj in visible:
         obj_purpose = getattr(obj, 'purpose', None)
@@ -967,17 +980,28 @@ def build_observation(creature, cols: int, rows: int,
         mag = max(1, abs(dx) + abs(dy))
         return dx / mag, dy / mag
 
-    # Items direction (skip — expensive tile scan)
-    obs.extend([0.0, 0.0])
+    # Items direction + distance (from combined tile scan)
+    if item_best is not None:
+        imag = max(1, abs(item_best[0]) + abs(item_best[1]))
+        obs.append(item_best[0] / imag)
+        obs.append(item_best[1] / imag)
+    else:
+        obs.extend([0.0, 0.0])
 
     ex, ey = _avg_dir(enemies)
     obs.append(ex); obs.append(ey)
     ax, ay = _avg_dir(allies)
     obs.append(ax); obs.append(ay)
-    obs.extend([0.0, 0.0])  # structures direction
-    obs.append(0.0)  # num_linked_tiles
-    obs.append(0.0)  # num_structures
-    obs.append(0.0)  # tiles_with_items
+    # Food direction + nearest item/food distances (from combined tile scan)
+    if food_best is not None:
+        fmag = max(1, abs(food_best[0]) + abs(food_best[1]))
+        obs.append(food_best[0] / fmag)
+        obs.append(food_best[1] / fmag)
+    else:
+        obs.extend([0.0, 0.0])
+    obs.append(item_min_d / sight if item_min_d is not None else 1.0)
+    obs.append(food_min_d / sight if food_min_d is not None else 1.0)
+    obs.append(1.0 if food_min_d is not None else 0.0)  # food_visible flag
     obs.append(len(visible) / 10.0)  # tiles_with_creatures (approx)
 
     # Crowding metrics — nearby_count/cx/cy accumulated in single-pass
