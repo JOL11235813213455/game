@@ -362,6 +362,8 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
     ep_steps = 0
     action_counts = {}  # action_id → cumulative count
     trail_actions = []  # list of (step, action_id) for trailing window
+    ep_action_counts = {}  # per-episode action distribution for TB logging
+    ep_signal_totals = {}  # per-episode reward signal totals for TB logging
     TRAIL_WINDOW = 20   # 20 steps = 10 seconds at 500ms ticks
     step_rewards = []   # recent step rewards for rolling avg
     # Goal tracking per creature: {uid: (goal_obs, goal_idx, log_prob, value, cumul_reward)}
@@ -480,6 +482,9 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             if len(step_rewards) > 500:
                 step_rewards = step_rewards[-500:]
             ep_steps += 1
+            ep_action_counts[action] = ep_action_counts.get(action, 0) + 1
+            for sk, sv in signals.items():
+                ep_signal_totals[sk] = ep_signal_totals.get(sk, 0.0) + sv
 
             # Accumulate reward for goal model
             if c.uid in _goal_states:
@@ -553,6 +558,17 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             episode_rewards.append(avg)
             _log('mappo/episode_reward', avg, step)
             _log('mappo/alive_count', sim.alive_count, step)
+            # Log action distribution
+            total_a = max(1, sum(ep_action_counts.values()))
+            for aid, cnt in sorted(ep_action_counts.items(), key=lambda x: -x[1])[:10]:
+                try: aname = Action(aid).name.lower()
+                except ValueError: aname = f'act_{aid}'
+                _log(f'mappo/action/{aname}', cnt / total_a, step)
+            # Log signal breakdown
+            for sname, sval in sorted(ep_signal_totals.items(), key=lambda x: -abs(x[1])):
+                _log(f'mappo/signal/{sname}', sval / max(1, ep_steps), step)
+            ep_action_counts = {}
+            ep_signal_totals = {}
 
             if sink:
                 # Gather creature final states

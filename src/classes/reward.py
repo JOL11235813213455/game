@@ -34,6 +34,45 @@ def _current_tile_liquid(creature) -> bool:
         return False
 
 
+def _current_tile_deep_water(creature) -> bool:
+    """Return True if standing on liquid with depth >= 1 (drowning danger)."""
+    try:
+        tile = creature.current_map.tiles.get(creature.location)
+        return bool(tile and getattr(tile, 'liquid', False)
+                     and getattr(tile, 'depth', 0) >= 1)
+    except Exception:
+        return False
+
+
+def _nearest_deep_water(creature) -> float:
+    """Normalized distance to nearest deep water tile within sight.
+
+    Returns 1.0 if no deep water visible. Only counts tiles with
+    depth >= 1 (not shallow banks).
+    """
+    try:
+        sight = max(1, creature.stats.active[Stat.SIGHT_RANGE]())
+        cx, cy = creature.location.x, creature.location.y
+        z = creature.location.z
+        game_map = creature.current_map
+        from classes.maps import MapKey as _MK
+        best = None
+        for dx in range(-sight, sight + 1):
+            adx = abs(dx)
+            for dy in range(-sight, sight + 1):
+                d = adx + abs(dy)
+                if d > sight:
+                    continue
+                t = game_map.tiles.get(_MK(cx + dx, cy + dy, z))
+                if (t and getattr(t, 'liquid', False)
+                        and getattr(t, 'depth', 0) >= 1):
+                    if best is None or d < best:
+                        best = d
+        return best / sight if best is not None else 1.0
+    except Exception:
+        return 1.0
+
+
 def _resolve_action_purpose(creature, action: int) -> str | None:
     """Return the purpose string an action should count toward *right now*.
 
@@ -179,20 +218,16 @@ def compute_reward(creature, prev: dict, curr: dict,
     nearby = curr.get('nearby_count', 0)
     signals['crowding'] = -(nearby - 4) * 0.3 if nearby >= 5 else 0.0
 
-    # Water danger: steep penalty for standing on deep water without
-    # swimming. Anticipatory signal so non-swimmers learn distance to
-    # water matters; drowning damage already shows up in the hp signal.
-    if curr.get('in_liquid', False) and not curr.get('can_swim', False):
-        # Standing on water and can't swim. Steep penalty so the NN
-        # feels this independently of the HP drain that's already
-        # hitting the hp signal.
+    # Water danger: penalty only for DEEP water (depth >= 1) without
+    # swimming. Shallow banks (depth=0, liquid=True) are safe — the
+    # creature can fish there. The proximity warning only fires for
+    # deep water, not banks.
+    in_deep = curr.get('in_deep_water', False)
+    if in_deep and not curr.get('can_swim', False):
         signals['water_danger'] = -3.0
-    elif (curr.get('nearest_water_dist', 1.0) < 0.3
+    elif (curr.get('nearest_deep_water_dist', 1.0) < 0.3
           and not curr.get('can_swim', False)):
-        # Close to water without swim ability — mild warning penalty
-        # that scales with proximity. At 0.3 normalized (~2 tiles)
-        # penalty is -0.1; at 0.1 (~1 tile) -0.3.
-        proximity = 1.0 - curr.get('nearest_water_dist', 1.0)
+        proximity = 1.0 - curr.get('nearest_deep_water_dist', 1.0)
         signals['water_danger'] = -proximity * 1.0
 
     # Wage earned since last tick — rewards consistent job execution.
@@ -390,8 +425,10 @@ def make_reward_snapshot(creature) -> dict:
         'fatigue': getattr(creature, '_fatigue_level', 0),
         'hunger': getattr(creature, 'hunger', 0.0),
         'in_liquid': _current_tile_liquid(creature),
+        'in_deep_water': _current_tile_deep_water(creature),
         'can_swim': getattr(creature, 'can_swim', False),
-        'nearest_water_dist': 1.0,  # filled by observation builder if needed
+        'nearest_water_dist': 1.0,
+        'nearest_deep_water_dist': _nearest_deep_water(creature),
         'nearby_count': nearby_count,
         'wage_accumulated': getattr(creature, '_wage_accumulated', 0.0),
         'trade_surplus': getattr(creature, '_trade_surplus_accumulated', 0.0),

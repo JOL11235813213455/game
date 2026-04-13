@@ -104,7 +104,17 @@ class MovementMixin:
                 return
         if self._tile_blocked(self.current_map, nx, ny):
             return
+        old_loc = self.location
         self.location = self.location._replace(x=nx, y=ny)
+        if self.location != old_loc:
+            visited = getattr(self, '_visited_tiles', None)
+            if visited is None:
+                self._visited_tiles = set()
+                visited = self._visited_tiles
+            key = (self.location.x, self.location.y)
+            if key not in visited:
+                visited.add(key)
+                self._tiles_explored += 1
         behavior = self._DIR_BEHAVIORS.get((dx, dy), 'walk_south')
         self.play_animation(behavior)
 
