@@ -449,6 +449,13 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
         # Advance simulation
         sim.now += sim.tick_ms
         sim.step_count += 1
+        sim.game_clock.update(1.0)
+        # Day boundary: lifecycle ticks (egg gestation, hatching, fatigue)
+        current_day = int(sim.game_clock.day)
+        if current_day != sim._last_game_day:
+            for _ in range(max(1, current_day - sim._last_game_day)):
+                sim._tick_lifecycle_day()
+            sim._last_game_day = current_day
         for c in sim.creatures:
             if c.is_alive:
                 c.process_ticks(sim.now)
@@ -814,6 +821,12 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
         # Advance
         sim.now += sim.tick_ms
         sim.step_count += 1
+        sim.game_clock.update(1.0)
+        current_day = int(sim.game_clock.day)
+        if current_day != sim._last_game_day:
+            for _ in range(max(1, current_day - sim._last_game_day)):
+                sim._tick_lifecycle_day()
+            sim._last_game_day = current_day
         for c in sim.creatures:
             if c is not agent and c.is_alive:
                 c.update(sim.now, sim.cols, sim.rows)
