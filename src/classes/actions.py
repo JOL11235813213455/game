@@ -370,16 +370,20 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
 
     # -- Utility --
     if action == Action.PICKUP:
+        tile = creature.current_map.tiles.get(creature.location)
+        has_gold = getattr(tile, 'gold', 0) > 0 if tile else False
+        has_items = bool(tile and tile.inventory.items)
+        if not has_gold and not has_items and item is None:
+            return {'success': True, 'reason': 'nothing_here'}
         gold_picked = creature.pickup_gold()
         if item is None:
-            tile = creature.current_map.tiles.get(creature.location)
-            if tile and tile.inventory.items:
+            if has_items:
                 item = tile.inventory.items[0]
             elif gold_picked > 0:
                 creature._pickups = getattr(creature, '_pickups', 0) + 1
                 return {'success': True, 'gold_picked': gold_picked}
             else:
-                return {'success': False, 'reason': 'nothing_here'}
+                return {'success': True, 'reason': 'nothing_here'}
         result = creature.pickup(item)
         if result or gold_picked > 0:
             creature._pickups = getattr(creature, '_pickups', 0) + 1
@@ -390,7 +394,7 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
             if creature.inventory.items:
                 item = creature.inventory.items[0]
             else:
-                return {'success': False, 'reason': 'nothing_to_drop'}
+                return {'success': True, 'reason': 'nothing_to_drop'}
         return {'success': creature.drop(item)}
 
     if action == Action.USE_ITEM:
@@ -401,7 +405,7 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
                     item = inv_item
                     break
             if item is None:
-                return {'success': False, 'reason': 'no_consumable'}
+                return {'success': True, 'reason': 'no_consumable'}
         return {'success': creature.use_item(item)}
 
     if action == Action.WAIT:
