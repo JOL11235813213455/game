@@ -8,20 +8,17 @@ class CombatMixin:
     """Combat methods for Creature."""
 
     def _tick_durability(self, item):
-        """Decrement durability by 1 every 10 uses. Break at 0."""
+        """Decrement durability by 1 per hit. Break at 0."""
         if not hasattr(item, 'durability_current') or item.durability_current is None:
             return
-        item._use_count = getattr(item, '_use_count', 0) + 1
-        if item._use_count >= 10:
-            item._use_count = 0
-            item.durability_current -= 1
-            if item.durability_current <= 0:
-                for slot, eq in list(self.equipment.items()):
-                    if eq is item:
-                        self.equipment[slot] = None
-                        self.stats.remove_mods_by_source(f'equip_{item.uid}')
-                if item in self.inventory.items:
-                    self.inventory.items.remove(item)
+        item.durability_current -= 1
+        if item.durability_current <= 0:
+            for slot, eq in list(self.equipment.items()):
+                if eq is item:
+                    self.equipment[slot] = None
+                    self.stats.remove_mods_by_source(f'equip_{item.uid}')
+            if item in self.inventory.items:
+                self.inventory.items.remove(item)
 
     def _sight_distance(self, other) -> int:
         """Manhattan distance between self and other."""
