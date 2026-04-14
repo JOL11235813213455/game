@@ -448,9 +448,20 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
             import random as _rng
             dx, dy = _DIRS[_rng.randint(0, 7)]
         moved = _do_move(creature, dx, dy, cols, rows, context)
+        if not moved:
+            # Try a random alternative direction before giving up
+            import random as _rng
+            alt = list(range(8))
+            _rng.shuffle(alt)
+            for d in alt:
+                adx, ady = _DIRS[d]
+                if (adx, ady) != (dx, dy):
+                    moved = _do_move(creature, adx, ady, cols, rows, context)
+                    if moved:
+                        break
         if moved:
             _auto_work(creature, now)
-        return {'success': moved}
+        return {'success': True}  # MOVE always "succeeds" — intent to move is valid
 
     if action == Action.SET_SNEAK:
         current = getattr(creature, 'movement_mode', 'walk')
