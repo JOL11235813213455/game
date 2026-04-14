@@ -394,7 +394,8 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
                     g_obs, g_idx, g_lp, g_val, g_rew = gs
                     goal_buffer.store(g_obs, g_idx, g_rew, g_val, g_lp, not c.is_alive)
                 # Select new goal
-                goal_obs = build_goal_observation(c, sim.cols, sim.rows)
+                goal_obs = build_goal_observation(c, sim.cols, sim.rows,
+                                                   game_clock=sim.game_clock)
                 goal_obs_arr = np.array(goal_obs, dtype=np.float32)
                 known = set(c.known_locations.keys()) if c.known_locations else set()
                 g_idx, g_lp, g_val = goal_net.get_goal(goal_obs_arr, known_purposes=known)
@@ -778,7 +779,8 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             if _goal_state and goal_buffer:
                 gs = _goal_state
                 goal_buffer.store(gs[0], gs[1], gs[4], gs[3], gs[2], not agent.is_alive)
-            goal_obs = build_goal_observation(agent, sim.cols, sim.rows)
+            goal_obs = build_goal_observation(agent, sim.cols, sim.rows,
+                                               game_clock=sim.game_clock)
             goal_obs_arr = np.array(goal_obs, dtype=np.float32)
             known = set(agent.known_locations.keys()) if agent.known_locations else set()
             g_idx, g_lp, g_val = goal_net.get_goal(goal_obs_arr, known_purposes=known)

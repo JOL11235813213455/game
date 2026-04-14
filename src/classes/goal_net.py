@@ -101,7 +101,8 @@ class GoalNet:
 # Uses a subset of the full observation: self stats, economy, social summary,
 # spatial memory summary, current goal state
 
-def build_goal_observation(creature, cols: int, rows: int) -> list[float]:
+def build_goal_observation(creature, cols: int, rows: int,
+                           game_clock=None) -> list[float]:
     """Build a compact observation for goal selection.
 
     Much smaller than the full action observation — goals don't need
@@ -114,6 +115,7 @@ def build_goal_observation(creature, cols: int, rows: int) -> list[float]:
     - Self status (5): fatigue, sleep_debt, piety, is_pregnant, has_partner
     - Known location counts (NUM_PURPOSES): how many locations known per purpose
     - Nearest known distance (NUM_PURPOSES): distance to nearest known per purpose
+    - Job context (NUM_PURPOSES + 2): job purpose one-hot, is_work_hours, is_sleep_hours
     - Current goal (NUM_PURPOSES + 3): goal one-hot, distance, progress, ticks_elapsed
     """
     from classes.stats import Stat
@@ -182,6 +184,16 @@ def build_goal_observation(creature, cols: int, rows: int) -> list[float]:
         else:
             obs.append(1.0)  # completely unknown
 
+    # Job context (NUM_PURPOSES + 2): which purpose is my job + schedule state
+    job = getattr(creature, 'job', None)
+    schedule = getattr(creature, 'schedule', None)
+    for purpose in TILE_PURPOSES:
+        obs.append(1.0 if (job and job.purpose == purpose) else 0.0)
+    cur_hour = game_clock.hour if game_clock else 12.0
+    activity = schedule.activity_at(cur_hour) if schedule else 'open'
+    obs.append(1.0 if activity == 'work' else 0.0)
+    obs.append(1.0 if activity == 'sleep' else 0.0)
+
     # Current goal state (NUM_PURPOSES + 3)
     for purpose in TILE_PURPOSES:
         obs.append(1.0 if creature.current_goal == purpose else 0.0)
@@ -196,4 +208,5 @@ def build_goal_observation(creature, cols: int, rows: int) -> list[float]:
 GOAL_OBSERVATION_SIZE = (6 + 6 + 4 + 5 +  # self stats
                          NUM_PURPOSES +     # known counts
                          NUM_PURPOSES +     # nearest distances
+                         NUM_PURPOSES + 2 + # job context
                          NUM_PURPOSES + 3)  # current goal
