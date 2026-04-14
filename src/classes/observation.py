@@ -919,20 +919,32 @@ def build_observation(creature, cols: int, rows: int,
             obs.append(0.0)
 
     # ==== SECTION 17: SPATIAL WALLS + OPENNESS (25) ====
+    from classes.maps import DIRECTION_BOUNDS as _DB
     _dirs8 = [(0,-1),(0,1),(1,0),(-1,0),(1,-1),(-1,-1),(1,1),(-1,1)]
     for dx, dy in _dirs8:
         d = 0
+        _bd = _DB.get((dx, dy))
         for step in range(1, sight + 1):
+            prev = game_map.tiles.get(MapKey(cx + dx*(step-1), cy + dy*(step-1), creature.location.z))
             t = game_map.tiles.get(MapKey(cx + dx*step, cy + dy*step, creature.location.z))
-            if t and t.walkable:
-                d = step
-            else:
+            if not (t and t.walkable):
                 break
+            if _bd and prev:
+                _exit, _entry = _bd
+                if not getattr(prev.bounds, _exit, True) or not getattr(t.bounds, _entry, True):
+                    break
+            d = step
         obs.append(d / max(1, sight))
 
+    _cur_tile = game_map.tiles.get(creature.location)
     for dx, dy in _dirs8:
         t = game_map.tiles.get(MapKey(cx+dx, cy+dy, creature.location.z))
-        obs.append(1.0 if t and t.walkable else 0.0)
+        passable = bool(t and t.walkable)
+        if passable and _cur_tile and (dx, dy) in _DB:
+            _exit, _entry = _DB[(dx, dy)]
+            if not getattr(_cur_tile.bounds, _exit, True) or not getattr(t.bounds, _entry, True):
+                passable = False
+        obs.append(1.0 if passable else 0.0)
 
     # Ring walkability
     for ring in range(1, 4):
