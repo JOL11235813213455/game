@@ -213,6 +213,25 @@ def _should_run(creature, context) -> bool:
     return False
 
 
+def _auto_work(creature, now: int):
+    """Auto-engage work when creature arrives at workplace during work hours."""
+    job = getattr(creature, 'job', None)
+    if job is None or getattr(creature, '_occupation', None) is not None:
+        return
+    tile = creature.current_map.tiles.get(creature.location) if creature.current_map else None
+    if tile is None:
+        return
+    tile_purpose = getattr(tile, 'purpose', None)
+    if not tile_purpose or tile_purpose not in job.workplace_purposes:
+        return
+    schedule = getattr(creature, 'schedule', None)
+    if schedule is None:
+        return
+    from classes.creature._utility import _current_hour
+    if schedule.in_work_hours(_current_hour(now)):
+        creature.do_job(now)
+
+
 def dispatch(creature, action: int, context: dict) -> dict:
     """Execute an action for a creature."""
     result = _dispatch_inner(creature, action, context)
@@ -303,13 +322,16 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
         dx, dy = _DIRS[action]
         mode = getattr(creature, 'movement_mode', 'walk')
         if mode == 'sneak':
-            return {'success': creature.sneak(dx, dy, cols, rows)}
+            moved = creature.sneak(dx, dy, cols, rows)
         elif _should_run(creature, context):
-            return {'success': creature.run(dx, dy, cols, rows)}
+            moved = creature.run(dx, dy, cols, rows)
         else:
             old = creature.location
             creature.move(dx, dy, cols, rows)
-            return {'success': creature.location != old}
+            moved = creature.location != old
+        if moved:
+            _auto_work(creature, now)
+        return {'success': moved}
 
     # -- Sneak toggle --
     if action == Action.SET_SNEAK:

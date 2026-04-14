@@ -870,7 +870,7 @@ def seed():
     _FOLLOW = [27]                       # FOLLOW
     _HARVEST = [34, 38, 40]             # DIG, HARVEST, FARM
     _PROCESS = [36, 37, 41]             # CRAFT, DISASSEMBLE, PROCESS
-    _JOB = [39]                          # JOB
+    # JOB (39) is auto-triggered by movement — not in action mask
     _TRADE = [15, 16, 17, 43]           # TRADE, BRIBE, STEAL, REPAY_LOAN
     _SLEEP = [24, 29, 33]               # GUARD, SLEEP, EXIT_GUARD
     _SOCIAL_TALK = [13, 14, 18, 19, 28] # INTIMIDATE, DECEIVE, SHARE_RUMOR, TALK, CALL_BACKUP
@@ -884,7 +884,7 @@ def seed():
     _s4_actions = sorted(_s3_actions + _FOLLOW)
     _s5_actions = sorted(_s4_actions + _HARVEST)
     _s6_actions = sorted(_s5_actions + _PROCESS)
-    _s7_actions = sorted(_s6_actions + _JOB)
+    _s7_actions = sorted(_s6_actions)  # JOB is auto — no new action this stage
     _s8_actions = sorted(_s7_actions + _TRADE)
     _s9_actions = sorted(_s8_actions + _SLEEP)
     _s10_actions = sorted(_s9_actions + _SOCIAL_TALK)

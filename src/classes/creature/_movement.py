@@ -152,6 +152,7 @@ class MovementMixin:
         if landed and landed.link_auto and landed.linked_map:
             self._do_link(landed)
 
+
     # -- Map transitions ----------------------------------------------------
 
     def _do_link(self, tile):
