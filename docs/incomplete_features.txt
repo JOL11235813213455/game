@@ -14,9 +14,9 @@ HIGH IMPACT — Blocks curriculum stages
 MEDIUM IMPACT — Weakens learning
 ---------------------------------
 
-- No species/skill that sets can_swim=True yet. Swimming mechanic works
-  (swimmers walk through water, bypass flow, don't drown) but nothing
-  grants the flag.
+- Swimming exists but no species-level can_swim in DB yet. Arena spawns
+  20% innate swimmers; others learn by witnessing (10%/tick) or surviving
+  drowning (2%/tick).
 
 - Dialogue trees not loaded in training arena: TALK action succeeds but
   the conversation system (dialogue table, trees, effects) doesn't fire.

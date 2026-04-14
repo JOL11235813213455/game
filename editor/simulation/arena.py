@@ -510,6 +510,10 @@ def generate_arena(cols: int = 20, rows: int = 20,
             profile=profile,
             observation_mask=mask,
         )
+        # 20% chance of innate swimming ability
+        if random.random() < 0.20:
+            c.can_swim = True
+
         # All creatures start with food
         for _ in range(random.randint(2, 3)):
             food = Consumable(name=random.choice(['Apple', 'Bread', 'Berries']),

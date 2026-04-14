@@ -270,6 +270,32 @@ class MovementMixin:
 
     # -- Water / Flow -------------------------------------------------------
 
+    def _check_witness_swim(self):
+        """Learn to swim by watching another creature swim.
+
+        Checks visible creatures; if any are on a liquid tile with
+        can_swim=True, this creature has a 10% chance per tick of
+        learning to swim from observation.
+        """
+        from classes.world_object import WorldObject
+        from classes.creature import Creature as _C
+        sight = self.stats.active[Stat.SIGHT_RANGE]()
+        cx, cy = self.location.x, self.location.y
+        for obj in WorldObject.on_map(self.current_map):
+            if not isinstance(obj, _C) or obj is self or not obj.is_alive:
+                continue
+            if not obj.can_swim:
+                continue
+            dx = abs(cx - obj.location.x)
+            dy = abs(cy - obj.location.y)
+            if dx + dy > sight:
+                continue
+            obj_tile = self.current_map.tiles.get(obj.location)
+            if obj_tile and getattr(obj_tile, 'liquid', False):
+                if random.random() < 0.10:
+                    self.can_swim = True
+                return
+
     def _head_above_water(self, tile) -> bool:
         """Check if this creature's head is above water on the given tile."""
         if not getattr(tile, 'liquid', False):
@@ -284,11 +310,14 @@ class MovementMixin:
         return tile is not None and getattr(tile, 'liquid', False)
 
     def _do_water_tick(self, now: int):
-        """Periodic water check: drowning damage and flow movement."""
+        """Periodic water check: drowning damage, flow, and swim learning."""
         tile = self.current_map.tiles.get(self.location)
         if tile is None or not getattr(tile, 'liquid', False):
             self.is_drowning = False
             self._drown_ticks = 0
+            # Witness learning: on land but can see a swimmer in water
+            if not self.can_swim:
+                self._check_witness_swim()
             return
 
         head_clear = self._head_above_water(tile)
@@ -297,6 +326,12 @@ class MovementMixin:
         if not head_clear and not self.can_swim:
             self.is_drowning = True
             self._drown_ticks += 1
+            # Survival learning: 2% chance per drowning tick
+            if random.random() < 0.02:
+                self.can_swim = True
+                self.is_drowning = False
+                self._drown_ticks = 0
+                return
             dmg = min(5, self._drown_ticks)
             hp = self.stats.base.get(Stat.HP_CURR, 0)
             self.stats.base[Stat.HP_CURR] = max(0, hp - dmg)
