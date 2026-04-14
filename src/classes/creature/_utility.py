@@ -262,13 +262,14 @@ class UtilityMixin:
         return result
 
     def do_job(self, now: int = 0) -> dict:
-        """Perform one tick of assigned work.
+        """Begin a 1-game-hour work shift (60 ticks) as a sustained occupation.
 
-        Fails cleanly for wanderers and off-hours attempts. On success,
-        pays the job's wage_per_tick into the creature's gold, delegates
-        to the purpose-specific effect (farming → farm, mining → dig,
-        guarding → guard stance, hunting/crafting → search/craft, etc.)
-        so the job is doing something real on the tile.
+        On entry, validates workplace and hours, then sets the creature
+        as occupied. While occupied, ``_tick_work`` handles per-tick
+        wages and purpose effects. The creature can break from work
+        if a hostile appears in sight (flee/fight interrupt).
+
+        Fails cleanly for wanderers and off-hours attempts.
         """
         result = {'success': False}
 
@@ -281,48 +282,45 @@ class UtilityMixin:
             result['reason'] = 'no_tile'
             return result
 
-        # Must be at a workplace tile
         tile_purpose = getattr(tile, 'purpose', None)
         if tile_purpose not in self.job.workplace_purposes:
             result['reason'] = 'not_at_workplace'
             return result
 
-        # Must be during work hours
         hour = _current_hour(now)
         if not self.schedule.in_work_hours(hour):
             result['reason'] = 'off_hours'
             return result
 
-        # Purpose-specific effect. Every job performs a real action on
-        # the world; the wage is a reward for the work, not an
-        # independent money-printer.
-        effect = {'success': True}
+        self._occupation = 'work'
+        self._occupied_until = now + 60
+        self._tick_work(now)
+        result['success'] = True
+        result['purpose'] = self.job.purpose
+        self.gain_exp(2)
+        return result
+
+    def _tick_work(self, now: int = 0):
+        """Per-tick work processing: purpose effect + wage.
+
+        Called each tick while the creature is occupied with 'work'.
+        """
+        tile = self.current_map.tiles.get(self.location)
+        if tile is None or self.job is None:
+            return
         purpose = self.job.purpose
         if purpose == 'farming':
-            effect = self.farm()
+            self.farm()
         elif purpose == 'mining':
-            # Miners tend the ore vein — same stewardship model as farming.
-            # HARVEST on the tile is what actually extracts ore.
             if getattr(tile, 'resource_type', None) and tile.growth_rate > 0:
                 str_mod = (self.stats.active[Stat.STR]() - 10) // 2
                 multiplier = 2.0 + max(0, str_mod) * 0.5
                 boost = tile.growth_rate * multiplier
-                old = tile.resource_amount
-                tile.resource_amount = min(tile.resource_max, tile.resource_amount + boost)
-                effect['boost'] = tile.resource_amount - old
-            else:
-                effect = {'success': False, 'reason': 'not_a_vein'}
+                tile.resource_amount = min(tile.resource_max,
+                                           tile.resource_amount + boost)
         elif purpose == 'crafting':
-            # Crafters process raw materials into goods while working.
-            effect = self.process()
-            # Crafter still gets wage even if nothing to process right now —
-            # treat an empty inventory as "apprentice work" (wage, no output)
-            if not effect.get('success') and effect.get('reason') == 'no_recipe_match':
-                effect = {'success': True, 'idle': True}
+            self.process()
         elif purpose == 'trading':
-            # Traders attempt to move goods for the nearest adjacent
-            # creature. If no partner or no swap possible, they still
-            # collect the stall-keeper's wage for being on duty.
             from classes.world_object import WorldObject
             from classes.creature import Creature as _Creature
             partner = next(
@@ -334,11 +332,7 @@ class UtilityMixin:
                 None
             )
             if partner is not None:
-                effect = self.auto_trade(partner)
-                if not effect.get('success'):
-                    effect = {'success': True, 'idle': True}
-            else:
-                effect = {'success': True, 'idle': True}
+                self.auto_trade(partner)
         elif purpose == 'guarding':
             self.guard(cols=1, rows=1)
         elif purpose == 'hunting':
@@ -347,20 +341,43 @@ class UtilityMixin:
             cur = self.stats.active[Stat.CUR_MANA]()
             mx  = self.stats.active[Stat.MAX_MANA]()
             self.stats.base[Stat.CUR_MANA] = min(mx, cur + 1)
-        # 'trading' jobs collect wages for showing up — the real TRADE
-        # action is separate and NN-chosen.
 
-        # Pay wage if the underlying effect didn't hard-fail
-        if effect.get('success', True):
-            wage = self.job.wage_per_tick
-            self.gold = int(getattr(self, 'gold', 0) + wage)
-            self._wage_accumulated = getattr(self, '_wage_accumulated', 0.0) + wage
-            result['success'] = True
-            result['wage'] = wage
-            result['purpose'] = purpose
-        else:
-            result['reason'] = effect.get('reason', 'effect_failed')
-        return result
+        wage = self.job.wage_per_tick
+        self._wage_accumulated = getattr(self, '_wage_accumulated', 0.0) + wage
+        # Accumulate fractional gold; only bank whole units
+        self._wage_fractional = getattr(self, '_wage_fractional', 0.0) + wage
+        if self._wage_fractional >= 1.0:
+            whole = int(self._wage_fractional)
+            self.gold = getattr(self, 'gold', 0) + whole
+            self._wage_fractional -= whole
+
+    def _check_work_interrupt(self, now: int) -> bool:
+        """Check if a hostile creature is in sight, warranting a work break.
+
+        Returns True if the creature should stop working to respond.
+        """
+        if now >= self._occupied_until:
+            self._occupation = None
+            self._occupied_until = 0
+            return True
+        from classes.relationship_graph import GRAPH
+        from classes.world_object import WorldObject
+        from classes.creature import Creature as _C
+        sight = self.stats.active[Stat.SIGHT_RANGE]()
+        cx, cy = self.location.x, self.location.y
+        rels = GRAPH.edges_from(self.uid)
+        for obj in WorldObject.on_map(self.current_map):
+            if not isinstance(obj, _C) or obj is self or not obj.is_alive:
+                continue
+            d = abs(cx - obj.location.x) + abs(cy - obj.location.y)
+            if d > sight:
+                continue
+            rel = rels.get(obj.uid)
+            if rel and rel[0] < -5:
+                self._occupation = None
+                self._occupied_until = 0
+                return True
+        return False
 
     def guard(self, cols: int, rows: int) -> bool:
         """Enter guard stance on current tile.
@@ -425,30 +442,98 @@ class UtilityMixin:
         return responders
 
     def sleep(self, now: int) -> bool:
-        """Enter sleep state. Vulnerable but restores resources.
+        """Enter sleep state as a sustained occupation (6-8 game hours).
 
-        Fully restores stamina and mana. Clears sleep debt.
-        Sets a flag for vulnerability (reduced detection, no dodge/block).
-        Returns True if entered sleep.
+        While sleeping:
+          - Stamina/mana restore gradually (full over ~360 ticks / 6 hrs)
+          - sleep_debt decreases by 1 per 360 ticks of sleep
+          - Restfulness fills from 0→1 over the sleep duration
+          - Detection is severely reduced (vulnerable)
+
+        The creature stays asleep until:
+          - Natural wake: 360-480 ticks (6-8 game hours)
+          - Loud noise: combat/death_cry/struggle sound within hearing
+          - Being attacked: HP drops during sleep
+          - Sleepwalking: ~1% chance per tick, random move then resume
         """
         if getattr(self, '_sleeping', False):
-            return False  # Already sleeping
+            return False
 
+        import random as _rng
         self._sleeping = True
-        # Full stamina and mana restore
-        self.stats.base[Stat.CUR_STAMINA] = self.stats.active[Stat.MAX_STAMINA]()
-        self.stats.base[Stat.CUR_MANA] = self.stats.active[Stat.MAX_MANA]()
-        # Reduced detection while sleeping
+        self._occupation = 'sleep'
+        self._sleep_start_tick = now
+        self._sleep_ticks = 0
+        duration = _rng.randint(360, 480)
+        self._occupied_until = now + duration
+        self._sleep_hp_snapshot = self.stats.active[Stat.HP_CURR]()
         self._sleep_mod = self.stats.add_mod('sleep', Stat.DETECTION, -5)
-        # Clear sleep debt and fatigue debuffs
-        self.sleep_debt = 0
-        self._update_fatigue()
         return True
 
+    def _tick_sleep(self, now: int):
+        """Per-tick sleep processing: gradual restore + interrupt check.
+
+        Called by the dispatch occupation intercept each tick while
+        the creature is sleeping. Returns an interrupt action tuple
+        (action, reason) if the creature should wake, or None to
+        stay asleep.
+        """
+        import random as _rng
+        self._sleep_ticks += 1
+
+        # Gradual restore: full stamina/mana over ~360 ticks
+        max_stam = self.stats.active[Stat.MAX_STAMINA]()
+        max_mana = self.stats.active[Stat.MAX_MANA]()
+        stam_per_tick = max_stam / 360.0
+        mana_per_tick = max_mana / 360.0
+        cur_stam = self.stats.active[Stat.CUR_STAMINA]()
+        cur_mana = self.stats.active[Stat.CUR_MANA]()
+        self.stats.base[Stat.CUR_STAMINA] = min(max_stam, cur_stam + stam_per_tick)
+        self.stats.base[Stat.CUR_MANA] = min(max_mana, cur_mana + mana_per_tick)
+
+        # Reduce sleep debt: 1 day per 360 ticks of continuous sleep
+        if self._sleep_ticks > 0 and self._sleep_ticks % 360 == 0:
+            if self.sleep_debt > 0:
+                self.sleep_debt -= 1
+                self._update_fatigue()
+
+        # Restfulness fills linearly
+        duration = max(1, self._occupied_until - self._sleep_start_tick)
+        self._restfulness = min(1.0, self._sleep_ticks / duration)
+
+        # --- Interrupt checks ---
+
+        # Natural wake: occupation time expired
+        if now >= self._occupied_until:
+            self.sleep_debt = max(0, self.sleep_debt - 1)
+            self._update_fatigue()
+            return ('wake', 'rested')
+
+        # Attacked: HP dropped since sleep started
+        current_hp = self.stats.active[Stat.HP_CURR]()
+        if current_hp < getattr(self, '_sleep_hp_snapshot', current_hp):
+            return ('wake', 'attacked')
+
+        # Loud noise: check hearing buffer for combat/death_cry/struggle
+        buf = getattr(self, '_hearing_buffer', None)
+        if buf:
+            wake_types = {'combat', 'death_cry', 'struggle'}
+            for ev in buf:
+                if ev.type in wake_types and ev.tick >= self._sleep_start_tick:
+                    return ('wake', 'noise')
+
+        # Sleepwalking: ~1% chance per tick
+        if _rng.random() < 0.01:
+            return ('sleepwalk', 'sleepwalk')
+
+        return None
+
     def wake(self):
-        """Exit sleep state."""
+        """Exit sleep state and clear occupation."""
         if getattr(self, '_sleeping', False):
             self._sleeping = False
+            self._occupation = None
+            self._occupied_until = 0
             if hasattr(self, '_sleep_mod'):
                 self.stats.remove_mod(self._sleep_mod)
 

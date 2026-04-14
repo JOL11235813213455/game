@@ -147,6 +147,15 @@ class Creature(
         self._stolen_value: float = 0.0     # cumulative value of stolen items/gold (RL counter)
         self._active_social_target = None   # creature currently in TALK/TRADE with (for DECEIVE gate)
 
+        # Occupation: sustained multi-tick activities (SLEEP, JOB).
+        # While occupied, dispatch intercepts the NN action and either
+        # continues the occupation or allows an interrupt through.
+        self._occupation: str | None = None   # 'sleep' or 'work', None = free
+        self._occupied_until: int = 0         # tick when occupation ends naturally
+        self._sleep_start_tick: int = 0       # tick when sleep began (for gradual restore)
+        self._sleep_ticks: int = 0            # ticks spent sleeping this session
+        self._restfulness: float = 0.0        # 0.0=exhausted, 1.0=fully rested, fills during sleep
+
         # Hunger: 1.0 = full, 0.0 = neutral, -1.0 = starving
         # Full bar (1.0 to -1.0) depletes in 1 game day (24 min real time)
         # 1440 ticks/day, 2.0 range → ~0.00139/tick

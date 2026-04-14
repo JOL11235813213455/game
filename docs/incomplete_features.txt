@@ -21,6 +21,9 @@ MEDIUM IMPACT — Weakens learning
 - Dialogue trees not loaded in training arena: TALK action succeeds but
   the conversation system (dialogue table, trees, effects) doesn't fire.
 
+- No auto-wake from sleep in game runtime (player UI). Training uses the
+  occupation system, but the player sleep flow needs a UI wake trigger.
+
 - No REPAY_LOAN action: loans created by auto_trade fallback accumulate
   indefinitely. Debt signal fires but creature can't act on it.
 

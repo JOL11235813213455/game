@@ -266,6 +266,28 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
         if creature._social_context_ttl <= 0:
             creature._active_social_target = None
 
+    # -- Occupation intercept: sleeping/working creatures skip NN action --
+    occupation = getattr(creature, '_occupation', None)
+    if occupation == 'sleep':
+        interrupt = creature._tick_sleep(now)
+        if interrupt is None:
+            return {'success': True, 'reason': 'sleeping'}
+        kind, reason = interrupt
+        creature.wake()
+        if kind == 'sleepwalk':
+            import random as _rng
+            dx, dy = _DIRS[_rng.randint(0, 7)]
+            creature.move(dx, dy, cols, rows)
+            # Re-enter sleep — sleepwalking doesn't fully wake
+            creature.sleep(now)
+            return {'success': True, 'reason': 'sleepwalk'}
+        # Woke up — fall through to execute the NN's chosen action
+    elif occupation == 'work':
+        if not creature._check_work_interrupt(now):
+            creature._tick_work(now)
+            return {'success': True, 'reason': 'working'}
+        # Threat detected or shift ended — fall through to NN action
+
     combat_enabled = context.get('combat_enabled', True)
     if not combat_enabled and action in (Action.MELEE_ATTACK, Action.RANGED_ATTACK,
                                           Action.GRAPPLE, Action.CAST_SPELL):
