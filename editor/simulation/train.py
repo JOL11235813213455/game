@@ -507,7 +507,7 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             if c.uid not in tick_data:
                 continue
 
-            obs_arr, action, log_prob, value = tick_data[c.uid]
+            obs_arr, action, log_prob, value, _cmask = tick_data[c.uid]
 
             prev_rew = sim._reward_snapshots.get(c.uid)
             curr_rew = make_reward_snapshot(c)
