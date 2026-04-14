@@ -458,9 +458,15 @@ def pre_render_composite_anim(composite_name: str, anim_name: str,
 
     scale = block_size / 32 * tile_scale
 
-    frames = []
     step = max(1, frame_interval_ms)
     num_frames = max(1, duration // step)
+
+    # Two-pass rendering: first compute max bounding box across all
+    # frames, then render each frame padded to that size. This prevents
+    # per-frame jitter from moving layers changing the composite bounds.
+    native_frames = []  # [(surface, min_x, min_y) | None]
+    global_min_x = global_min_y = float('inf')
+    global_max_x = global_max_y = float('-inf')
 
     for i in range(num_frames):
         t = i * step
@@ -488,8 +494,6 @@ def pre_render_composite_anim(composite_name: str, anim_name: str,
                 if spr:
                     sprite_overrides[layer_name] = spr
 
-        # Resolve positions with offsets and rotations so children
-        # inherit parent movement and rotation
         positions, cumulative_rot = _resolve_composite_positions(
             comp, offset_overrides, rotation_overrides)
         result = _assemble_composite_native(comp, positions,
@@ -499,21 +503,41 @@ def pre_render_composite_anim(composite_name: str, anim_name: str,
                                              cumulative_rot,
                                              layer_scale)
         if result is None:
-            frames.append(None)
+            native_frames.append(None)
             continue
 
-        native_surf, _, _ = result
+        native_surf, mn_x, mn_y = result
         nw, nh = native_surf.get_size()
-        sw = max(1, round(nw * scale))
-        sh = max(1, round(nh * scale))
-        surface = pygame.transform.scale(native_surf, (sw, sh))
+        global_min_x = min(global_min_x, mn_x)
+        global_min_y = min(global_min_y, mn_y)
+        global_max_x = max(global_max_x, mn_x + nw)
+        global_max_y = max(global_max_y, mn_y + nh)
+        native_frames.append((native_surf, mn_x, mn_y))
 
-        from main.config import get_tile_height
-        tile_cx = block_size // 2
-        tile_cy = get_tile_height() // 2
-        blit_dx = tile_cx - sw // 2
-        blit_dy = tile_cy - sh
+    # Uniform canvas size from the global bounding box
+    if global_min_x == float('inf'):
+        return None
+    canvas_w = int(global_max_x - global_min_x) + 1
+    canvas_h = int(global_max_y - global_min_y) + 1
+    sw = max(1, round(canvas_w * scale))
+    sh = max(1, round(canvas_h * scale))
 
+    from main.config import get_tile_height
+    tile_cx = block_size // 2
+    tile_cy = get_tile_height() // 2
+    blit_dx = tile_cx - sw // 2
+    blit_dy = tile_cy - sh
+
+    frames = []
+    for entry in native_frames:
+        if entry is None:
+            frames.append(None)
+            continue
+        native_surf, mn_x, mn_y = entry
+        canvas = pygame.Surface((canvas_w, canvas_h), pygame.SRCALPHA)
+        canvas.blit(native_surf, (int(mn_x - global_min_x),
+                                   int(mn_y - global_min_y)))
+        surface = pygame.transform.scale(canvas, (sw, sh))
         frames.append((surface, (blit_dx, blit_dy)))
 
     # Build a hashable variant key from the animation's variant references
