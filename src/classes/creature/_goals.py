@@ -82,6 +82,45 @@ class GoalMixin:
         self.goal_target = None
         self.goal_started_tick = 0
         self.goal_prev_distance = 0.0
+        self._goal_stale_ticks = 0
+
+    def check_goal_abandonment(self, tick: int) -> bool:
+        """Check if the current goal should be abandoned.
+
+        Returns True if the goal was abandoned and cleared.
+        Conditions:
+          - Goal unreachable (distance is inf)
+          - Progress stalled for 30+ ticks
+          - Goal location no longer has matching purpose
+        """
+        if self.goal_target is None:
+            return False
+
+        d = self.goal_distance()
+        if d == float('inf'):
+            self.clear_goal()
+            return True
+
+        # Stale progress: no distance decrease for 30 ticks
+        stale = getattr(self, '_goal_stale_ticks', 0)
+        progress = self.goal_prev_distance - d
+        if progress <= 0 and d > 1:
+            self._goal_stale_ticks = stale + 1
+        else:
+            self._goal_stale_ticks = 0
+        if self._goal_stale_ticks >= 30:
+            self.clear_goal()
+            return True
+
+        # Location exhausted: at goal but purpose doesn't match
+        if self.at_goal():
+            tile = self.current_map.tiles.get(self.location) if self.current_map else None
+            tile_purpose = getattr(tile, 'purpose', None) if tile else None
+            if tile_purpose != self.current_goal:
+                self.clear_goal()
+                return True
+
+        return False
 
     def goal_distance(self, map_graph=None) -> float:
         """Manhattan distance to current goal target.

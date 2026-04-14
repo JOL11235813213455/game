@@ -193,12 +193,14 @@ class TorchCreatureNet(nn.Module):
 class TorchGoalNet(nn.Module):
     """PyTorch goal selection network for hierarchical RL training.
 
-    Smaller than the action net — goals are higher-level, slower decisions.
-    Input: goal observation (compact creature state + spatial memory summary)
-    Output: goal logits (probability over purposes) + goal value
+    Three hidden layers with LayerNorm for stable training across
+    heterogeneous input scales. Deeper than before to capture
+    interactions between urgency signals, schedule state, and
+    spatial memory.
     """
 
-    def __init__(self, input_size: int = None, h1: int = 256, h2: int = 128,
+    def __init__(self, input_size: int = None,
+                 h1: int = 384, h2: int = 256, h3: int = 128,
                  output_size: int = None):
         super().__init__()
         from classes.goal_net import GOAL_OBSERVATION_SIZE
@@ -208,13 +210,18 @@ class TorchGoalNet(nn.Module):
         if output_size is None:
             output_size = NUM_PURPOSES
         self.fc1 = nn.Linear(input_size, h1)
+        self.ln1 = nn.LayerNorm(h1)
         self.fc2 = nn.Linear(h1, h2)
-        self.goal_head = nn.Linear(h2, output_size)
-        self.value_head = nn.Linear(h2, 1)
+        self.ln2 = nn.LayerNorm(h2)
+        self.fc3 = nn.Linear(h2, h3)
+        self.ln3 = nn.LayerNorm(h3)
+        self.goal_head = nn.Linear(h3, output_size)
+        self.value_head = nn.Linear(h3, 1)
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
+        x = F.relu(self.ln1(self.fc1(x)))
+        x = F.relu(self.ln2(self.fc2(x)))
+        x = F.relu(self.ln3(self.fc3(x)))
         return self.goal_head(x), self.value_head(x)
 
     def get_goal(self, obs: np.ndarray, known_purposes: set = None,
@@ -255,8 +262,16 @@ class TorchGoalNet(nn.Module):
         np_weights = {
             'gw1': state['fc1.weight'].T.numpy(),
             'gb1': state['fc1.bias'].numpy(),
+            'gln1_g': state['ln1.weight'].numpy(),
+            'gln1_b': state['ln1.bias'].numpy(),
             'gw2': state['fc2.weight'].T.numpy(),
             'gb2': state['fc2.bias'].numpy(),
+            'gln2_g': state['ln2.weight'].numpy(),
+            'gln2_b': state['ln2.bias'].numpy(),
+            'gw3': state['fc3.weight'].T.numpy(),
+            'gb3': state['fc3.bias'].numpy(),
+            'gln3_g': state['ln3.weight'].numpy(),
+            'gln3_b': state['ln3.bias'].numpy(),
             'gw_goal': state['goal_head.weight'].T.numpy(),
             'gb_goal': state['goal_head.bias'].numpy(),
         }

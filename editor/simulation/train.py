@@ -347,28 +347,29 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
     }
     buffer = RolloutBuffer()
     goal_buffer = RolloutBuffer() if goal_net else None
-    GOAL_INTERVAL = 50  # re-evaluate goals every 50 action steps
 
     episode_rewards = []
     sim_kwargs = sim_kwargs or {}
     arena = generate_arena(**arena_kwargs)
     sim = Simulation(arena, **sim_kwargs)
 
-    # Disable built-in behavior — training loop controls all actions
     for c in sim.creatures:
         c.behavior = None
         c.unregister_tick('behavior')
 
     total_reward = 0.0
     ep_steps = 0
-    action_counts = {}  # action_id → cumulative count
-    trail_actions = []  # list of (step, action_id) for trailing window
-    ep_action_counts = {}  # per-episode action distribution for TB logging
-    ep_signal_totals = {}  # per-episode reward signal totals for TB logging
-    TRAIL_WINDOW = 20   # 20 steps = 10 seconds at 500ms ticks
-    step_rewards = []   # recent step rewards for rolling avg
-    # Goal tracking per creature: {uid: (goal_obs, goal_idx, log_prob, value, cumul_reward)}
-    _goal_states = {}
+    action_counts = {}
+    trail_actions = []
+    ep_action_counts = {}
+    ep_signal_totals = {}
+    TRAIL_WINDOW = 20
+    step_rewards = []
+    # Goal tracking per creature
+    _goal_states = {}   # uid → (goal_obs, goal_idx, log_prob, value, cumul_reward)
+    _next_goal = {}     # uid → step when next re-evaluation fires
+    _prev_hp = {}       # uid → hp last tick (for emergency detection)
+    _prev_hunger = {}   # uid → hunger last tick
 
     from collections import deque
     from classes.observation import build_observation, make_snapshot
@@ -379,35 +380,68 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
     from classes.temporal import make_history_snapshot
     from classes.goal_net import build_goal_observation
 
-    for step in range(steps):
-        # Store per-creature action data for this tick
-        tick_data = {}  # uid → (obs_arr, action, log_prob, value)
+    def _goal_interval_for(creature):
+        """Variable interval based on goal distance."""
+        d = creature.goal_distance() if creature.goal_target else 0
+        if d < 5:
+            return 20
+        elif d < 20:
+            return 40
+        return 60
 
-        # Goal selection (hierarchical): every GOAL_INTERVAL steps
-        if goal_net and step % GOAL_INTERVAL == 0:
+    def _needs_emergency_reeval(creature, step):
+        """Check for emergency state changes that should force goal re-evaluation."""
+        uid = creature.uid
+        hp = creature.stats.active[Stat.HP_CURR]()
+        hunger = getattr(creature, 'hunger', 0.0)
+        prev_hp = _prev_hp.get(uid, hp)
+        prev_h = _prev_hunger.get(uid, hunger)
+        _prev_hp[uid] = hp
+        _prev_hunger[uid] = hunger
+        hp_max = max(1, creature.stats.active[Stat.HP_MAX]())
+        if hp / hp_max < 0.3 and prev_hp / hp_max >= 0.3:
+            return True
+        if hunger < -0.3 and prev_h >= -0.3:
+            return True
+        if hasattr(creature, 'at_goal') and creature.at_goal():
+            return True
+        return False
+
+    def _select_goal(creature, step):
+        gs = _goal_states.get(creature.uid)
+        if gs and goal_buffer:
+            g_obs, g_idx, g_lp, g_val, g_rew = gs
+            interval = max(1, step - gs[5]) if len(gs) > 5 else 1
+            goal_buffer.store(g_obs, g_idx, g_rew / max(1, interval),
+                              g_val, g_lp, not creature.is_alive)
+        goal_obs = build_goal_observation(creature, sim.cols, sim.rows,
+                                           game_clock=sim.game_clock, tick=step)
+        goal_obs_arr = np.array(goal_obs, dtype=np.float32)
+        known = set(creature.known_locations.keys()) if creature.known_locations else set()
+        g_idx, g_lp, g_val = goal_net.get_goal(goal_obs_arr, known_purposes=known)
+        purpose = TILE_PURPOSES[g_idx]
+        target_info = creature.pick_goal_target(purpose)
+        if target_info:
+            creature.set_goal(purpose, *target_info, tick=sim.now)
+        else:
+            creature.set_goal(purpose, getattr(sim.game_map, 'name', ''),
+                               creature.location.x, creature.location.y, tick=sim.now)
+        _goal_states[creature.uid] = (goal_obs_arr, g_idx, g_lp, g_val, 0.0, step)
+        _next_goal[creature.uid] = step + _goal_interval_for(creature)
+
+    for step in range(steps):
+        tick_data = {}
+
+        # Dynamic goal selection: per-creature variable interval + emergency
+        if goal_net:
             for c in sim.creatures:
                 if not c.is_alive:
                     continue
-                # Collect goal reward from previous goal period
-                gs = _goal_states.get(c.uid)
-                if gs and goal_buffer:
-                    g_obs, g_idx, g_lp, g_val, g_rew = gs
-                    goal_buffer.store(g_obs, g_idx, g_rew, g_val, g_lp, not c.is_alive)
-                # Select new goal
-                goal_obs = build_goal_observation(c, sim.cols, sim.rows,
-                                                   game_clock=sim.game_clock)
-                goal_obs_arr = np.array(goal_obs, dtype=np.float32)
-                known = set(c.known_locations.keys()) if c.known_locations else set()
-                g_idx, g_lp, g_val = goal_net.get_goal(goal_obs_arr, known_purposes=known)
-                purpose = TILE_PURPOSES[g_idx]
-                # Set goal on creature
-                target_info = c.pick_goal_target(purpose)
-                if target_info:
-                    c.set_goal(purpose, *target_info, tick=sim.now)
-                else:
-                    c.set_goal(purpose, getattr(sim.game_map, 'name', ''),
-                               c.location.x, c.location.y, tick=sim.now)
-                _goal_states[c.uid] = (goal_obs_arr, g_idx, g_lp, g_val, 0.0)
+                abandoned = c.check_goal_abandonment(step)
+                due = _next_goal.get(c.uid, 0) <= step
+                emergency = _needs_emergency_reeval(c, step)
+                if due or emergency or abandoned:
+                    _select_goal(c, step)
 
         # Each creature acts using the shared net
         for c in sim.creatures:
@@ -498,7 +532,7 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             # Accumulate reward for goal model
             if c.uid in _goal_states:
                 gs = _goal_states[c.uid]
-                _goal_states[c.uid] = (gs[0], gs[1], gs[2], gs[3], gs[4] + reward)
+                _goal_states[c.uid] = (gs[0], gs[1], gs[2], gs[3], gs[4] + reward, gs[5])
 
             if sink:
                 sink.record_step(c.uid, action, reward, signals,
@@ -517,8 +551,8 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
                 sink.record_training_update(info['entropy'], info['value_loss'],
                                             info['policy_loss'])
 
-        # Goal PPO update (goal buffer fills slower — every GOAL_INTERVAL steps)
-        if goal_buffer and goal_ppo and len(goal_buffer) >= max(64, rollout_len // GOAL_INTERVAL):
+        # Goal PPO update
+        if goal_buffer and goal_ppo and len(goal_buffer) >= 64:
             g_info = goal_ppo.update(*goal_buffer.get())
             goal_buffer.clear()
             _log('mappo/goal_policy_loss', g_info['policy_loss'], step)
@@ -762,9 +796,11 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
     ppo_trail_actions = []
     PPO_TRAIL_WINDOW = 20
     ppo_step_rewards = []
-    GOAL_INTERVAL = 50
     goal_buffer = RolloutBuffer() if goal_net else None
-    _goal_state = None  # (goal_obs, goal_idx, log_prob, value, cumul_reward)
+    _goal_state = None   # (goal_obs, goal_idx, log_prob, value, cumul_reward, step)
+    _ppo_next_goal = 0   # step when next goal re-evaluation fires
+    _ppo_prev_hp = None
+    _ppo_prev_hunger = None
 
     from classes.observation import build_observation
     from classes.actions import dispatch, Action as ActionEnum, TILE_PURPOSES
@@ -772,26 +808,54 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
     from classes.creature import Creature
     from classes.goal_net import build_goal_observation
 
+    def _ppo_goal_interval():
+        d = agent.goal_distance() if agent.goal_target else 0
+        if d < 5: return 20
+        elif d < 20: return 40
+        return 60
+
+    def _ppo_select_goal(step):
+        nonlocal _goal_state, _ppo_next_goal
+        if _goal_state and goal_buffer:
+            gs = _goal_state
+            interval = max(1, step - gs[5])
+            goal_buffer.store(gs[0], gs[1], gs[4] / max(1, interval),
+                              gs[3], gs[2], not agent.is_alive)
+        goal_obs = build_goal_observation(agent, sim.cols, sim.rows,
+                                           game_clock=sim.game_clock, tick=step)
+        goal_obs_arr = np.array(goal_obs, dtype=np.float32)
+        known = set(agent.known_locations.keys()) if agent.known_locations else set()
+        g_idx, g_lp, g_val = goal_net.get_goal(goal_obs_arr, known_purposes=known)
+        purpose = TILE_PURPOSES[g_idx]
+        target_info = agent.pick_goal_target(purpose)
+        if target_info:
+            agent.set_goal(purpose, *target_info, tick=sim.now)
+        else:
+            agent.set_goal(purpose, getattr(sim.game_map, 'name', ''),
+                           agent.location.x, agent.location.y, tick=sim.now)
+        _goal_state = (goal_obs_arr, g_idx, g_lp, g_val, 0.0, step)
+        _ppo_next_goal = step + _ppo_goal_interval()
+
     for step in range(steps):
-        # Goal selection for the agent
-        if goal_net and agent.is_alive and step % GOAL_INTERVAL == 0:
-            # Collect previous goal reward
-            if _goal_state and goal_buffer:
-                gs = _goal_state
-                goal_buffer.store(gs[0], gs[1], gs[4], gs[3], gs[2], not agent.is_alive)
-            goal_obs = build_goal_observation(agent, sim.cols, sim.rows,
-                                               game_clock=sim.game_clock)
-            goal_obs_arr = np.array(goal_obs, dtype=np.float32)
-            known = set(agent.known_locations.keys()) if agent.known_locations else set()
-            g_idx, g_lp, g_val = goal_net.get_goal(goal_obs_arr, known_purposes=known)
-            purpose = TILE_PURPOSES[g_idx]
-            target_info = agent.pick_goal_target(purpose)
-            if target_info:
-                agent.set_goal(purpose, *target_info, tick=sim.now)
-            else:
-                agent.set_goal(purpose, getattr(sim.game_map, 'name', ''),
-                               agent.location.x, agent.location.y, tick=sim.now)
-            _goal_state = (goal_obs_arr, g_idx, g_lp, g_val, 0.0)
+        # Dynamic goal selection for agent
+        if goal_net and agent.is_alive:
+            emergency = False
+            hp = agent.stats.active[Stat.HP_CURR]()
+            hunger = getattr(agent, 'hunger', 0.0)
+            hp_max = max(1, agent.stats.active[Stat.HP_MAX]())
+            if _ppo_prev_hp is not None:
+                if hp / hp_max < 0.3 and _ppo_prev_hp / hp_max >= 0.3:
+                    emergency = True
+            if _ppo_prev_hunger is not None:
+                if hunger < -0.3 and _ppo_prev_hunger >= -0.3:
+                    emergency = True
+            if hasattr(agent, 'at_goal') and agent.at_goal():
+                emergency = True
+            _ppo_prev_hp = hp
+            _ppo_prev_hunger = hunger
+            abandoned = agent.check_goal_abandonment(step)
+            if step >= _ppo_next_goal or emergency or abandoned:
+                _ppo_select_goal(step)
 
         if agent.is_alive:
             agent.update_spatial_memory(sim.now)
@@ -868,7 +932,7 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
         # Accumulate reward for goal model
         if _goal_state:
             gs = _goal_state
-            _goal_state = (gs[0], gs[1], gs[2], gs[3], gs[4] + reward)
+            _goal_state = (gs[0], gs[1], gs[2], gs[3], gs[4] + reward, gs[5])
 
         # PPO update
         if len(buffer) >= rollout_len:
@@ -884,7 +948,7 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
                                             info['policy_loss'])
 
         # Goal PPO update
-        if goal_buffer and goal_ppo and len(goal_buffer) >= max(64, rollout_len // GOAL_INTERVAL):
+        if goal_buffer and goal_ppo and len(goal_buffer) >= 64:
             g_info = goal_ppo.update(*goal_buffer.get())
             goal_buffer.clear()
             _log('ppo/goal_policy_loss', g_info['policy_loss'], step)
