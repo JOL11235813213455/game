@@ -194,6 +194,7 @@ def _migrate(con: sqlite3.Connection) -> None:
     notes TEXT NOT NULL DEFAULT '',
     UNIQUE(name, version))""",
         "ALTER TABLE species ADD COLUMN sentient INTEGER NOT NULL DEFAULT 1",
+        "ALTER TABLE species ADD COLUMN can_swim INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE species ADD COLUMN model_name TEXT",
         "ALTER TABLE species ADD COLUMN model_version INTEGER",
         "ALTER TABLE creatures ADD COLUMN model_name TEXT",
@@ -576,6 +577,7 @@ def _load_species(con: sqlite3.Connection) -> None:
         if r['prudishness'] is not None:
             block['prudishness'] = r['prudishness']
         block['size'] = r['size'] or 'medium'
+        block['can_swim'] = bool(r['can_swim']) if 'can_swim' in r.keys() else False
         if r['egg_sprite'] is not None:
             block['egg_sprite'] = r['egg_sprite']
         SPECIES[name] = block

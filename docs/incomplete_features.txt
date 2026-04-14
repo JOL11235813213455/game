@@ -13,24 +13,7 @@ HIGH IMPACT — Blocks curriculum stages
 
 MEDIUM IMPACT — Weakens learning
 ---------------------------------
-- No species-level can_swim in DB: swimming mechanic works per-creature
-  (arena spawns 20% innate, others learn by witness 10%/tick or survival
-  2%/tick) but species table has no can_swim column for inheritance.
-
-- Dialogue trees not loaded in training arena: TALK action succeeds but
-  the conversation system (dialogue table, trees, effects) doesn't fire.
-  Dialogue data exists in DB but headless training never loads it.
-
-- Player UI has no sleep/wake flow: the occupation system handles
-  sleep in training (6-8hr duration, gradual restore, sound/damage wake)
-  but the player runtime has no UI trigger for sleeping or waking.
-
-- No REPAY_LOAN action: loans created by auto_trade fallback accumulate
-  indefinitely. Debt signal fires but creature can't act on it.
-
-- Durability never decrements: durability_max/durability_current on
-  Weapon/Wearable exist but are never reduced by use. Equipment lasts
-  forever.
+(none remaining)
 
 LOW IMPACT — Polish
 --------------------
@@ -58,25 +41,27 @@ Core Architecture
 Creature System
 - Single Creature class (no subclasses): players, NPCs, monsters all Creature
 - Stats: base/derived/mods/active layers, D&D-style modifiers, opposing contests
-- 43-action space: 8 directional movement + SET_SNEAK toggle + 34 utility/combat/social/economy actions
+- 44-action space: 8 directional movement + SET_SNEAK toggle + 35 utility/combat/social/economy actions
 - Auto walk/run/sneak: walk default, run when hostile in sight, sneak as persistent toggle
 - Movement: 8-dir walk/run/sneak, flee, follow, map transitions (enter/exit)
 - Combat: melee, ranged (with ammo), grapple, cast_spell (8 spells in DB), block stance
 - Social: intimidate, deceive (context-gated + rumor poisoning + deceit tracking), trade (auto + proposed), bribe, steal (auto-resolve + familiarity modifier), share_rumor, talk, call_backup, proselytize
 - Deceit system: outstanding lies tracked in RelationshipGraph, revelation via social interactions, deception_stress penalty signal, long-term honesty incentive
-- Economy: harvest (5 resource types), farm, dig, process (9 recipes), craft (ItemFrames), job (7 job types), trade with loan fallback
+- Economy: harvest (5 resource types), farm, dig, process (9 recipes), craft (ItemFrames), job (7 job types), trade with loan fallback, REPAY_LOAN
 - Inventory: pickup (auto + gold), smart drop (lowest value/weight), auto-equip (NN only), use_item (consumables + food)
 - Reproduction: propose_pairing, force_pairing, egg system, genetics (14-gene chromosomes, Mendelian inheritance), fecundity curves
 - Encumbrance: S-curve penalty above 100% carry weight (regen slowed), movement blocked at 200%
-- Swimming: can_swim creatures walk through liquid tiles; 3 learning paths (innate 20%, witness 10%/tick, survival 2%/tick)
+- Swimming: can_swim from species DB or learned (innate 20%, witness 10%/tick, survival 2%/tick)
 - Occupation system: SLEEP (6-8hr, gradual stamina/mana restore, wake on noise/damage/expiry, 1% sleepwalk), JOB (1hr, purpose effects + wage each tick, hostile interrupts)
+- Durability: weapons and armor lose 1 durability per 10 hits, break at 0 (removed from equipment)
+- Dialogue: full conversation tree system with conditions, effects, quest triggers (loaded in training via DB)
 
 RL Training Pipeline
 - Lifecycle ticks in headless training: _tick_lifecycle_day() fires on day boundaries (egg gestation/hatching, fatigue accumulation, age increment)
-- 14-stage curriculum with progressive action masking (10 -> 43 actions)
+- 14-stage curriculum with progressive action masking (10 -> 44 actions)
 - Per-stage signal_scales for reward masking with soft fade
 - Environment toggles: hunger_drain, combat_enabled, gestation_enabled, fatigue_enabled
-- 5-layer TorchCreatureNet (1811 -> 1536 -> 1024 -> 768 -> 384 -> 192 -> 43)
+- 5-layer TorchCreatureNet (1811 -> 1536 -> 1024 -> 768 -> 384 -> 192 -> 44)
 - TorchGoalNet for hierarchical purpose selection
 - PPO with GAE, entropy bonus, gradient clipping
 - MAPPO multi-agent + ES evolutionary + PPO single-agent pipeline
@@ -84,6 +69,7 @@ RL Training Pipeline
 - RolloutBuffer with per-step action masks
 - TensorBoard logging: episode reward, entropy, alive_count, per-action distribution, per-signal breakdown
 - Observation masks applied to NN input (apply_preset_mask in headless + train loops)
+- Game DB loaded in training arena (dialogue, quests, species data available)
 
 Observation (1811 floats)
 - 28+ sections: self stats/resources/combat/economy/slots/weapon/inventory/crafting/social/status/hunger/quest/goal/schedule/movement/genetics/identity/reputation
@@ -91,7 +77,7 @@ Observation (1811 floats)
 - Census: 45-float visible creature summary, 3-float audible
 - Per-engaged: 10 persistent perception slots x 51 floats (threat, sentiment, approaching/fleeing, size, status)
 - Social topology: 17 floats (cohesion, Laplacian eigenvalues, rest-of-crowd)
-- Social deception: outstanding_lies count, deceits_against count (replaced placeholder zeros)
+- Social deception: outstanding_lies count, deceits_against count
 - Water/hearing awareness, world time, temporal deltas, trends, time-since, reward signals, 264 math transforms
 
 Reward Signals (27+)
@@ -127,6 +113,7 @@ Presentation
 - Collision system with per-tile and structure collision masks
 - Bounds/entry system for tile traversal
 - Player UI: inventory menu, quest log, HUD, dialogue menu, contextual keybind strip
+- Player sleep: Z to sleep/wake, dark overlay, auto-wake on damage/noise/duration
 - Test Town demo world with houses, NPCs, cave
 
 FUTURE / NOT STARTED
@@ -135,6 +122,5 @@ FUTURE / NOT STARTED
 - Presentation layer: stylized text, SFX/music, cutscene engine
 - 3D rendering mode (Doom-style BSP from tile data)
 - Per-creature learnable reward weights (personality via 0.5-2.0 bounded scales)
-- Equipment durability system (decrement on use, break at 0)
 - Shop/vendor NPCs (distinct from peer-to-peer trade)
 - Pathfinding for NPC cross-map travel (map_graph exists, behavior module doesn't)

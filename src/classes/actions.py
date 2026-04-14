@@ -76,6 +76,9 @@ class Action(IntEnum):
     # Reproduction
     PAIR = 42
 
+    # Economy (debt)
+    REPAY_LOAN = 43
+
 
 NUM_ACTIONS = len(Action)
 
@@ -115,6 +118,7 @@ ACTION_PURPOSE = {
     Action.PAIR: 'pairing',
     Action.USE_ITEM: 'eating',
     Action.SET_TRAP: 'hunting',
+    Action.REPAY_LOAN: 'trading',
 }
 
 
@@ -148,6 +152,7 @@ ACTION_NAMES = {
     Action.JOB: 'job', Action.FARM: 'farm',
     Action.PROCESS: 'process',
     Action.PAIR: 'pair',
+    Action.REPAY_LOAN: 'repay_loan',
     Action.SET_SNEAK: 'set_sneak',
     Action.EXIT_BLOCK: 'exit_block', Action.EXIT_GUARD: 'exit_guard',
 }
@@ -571,5 +576,20 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
         if creature.sex == 'male':
             return creature.propose_pairing(target, now)
         return target.propose_pairing(creature, now)
+
+    if action == Action.REPAY_LOAN:
+        if not creature.loans:
+            return {'success': False, 'reason': 'no_debt'}
+        lender_uid = next(iter(creature.loans))
+        from classes.trackable import Trackable
+        from classes.creature import Creature as _C
+        lender = None
+        for obj in Trackable.all_instances():
+            if isinstance(obj, _C) and obj.uid == lender_uid and obj.is_alive:
+                lender = obj
+                break
+        if lender is None:
+            return {'success': False, 'reason': 'lender_gone'}
+        return creature.repay_loan(lender, creature.gold, now)
 
     return {'success': False, 'reason': 'unknown_action'}

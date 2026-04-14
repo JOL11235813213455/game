@@ -7,6 +7,22 @@ from classes.inventory import Weapon, Ammunition, Slot
 class CombatMixin:
     """Combat methods for Creature."""
 
+    def _tick_durability(self, item):
+        """Decrement durability by 1 every 10 uses. Break at 0."""
+        if not hasattr(item, 'durability_current') or item.durability_current is None:
+            return
+        item._use_count = getattr(item, '_use_count', 0) + 1
+        if item._use_count >= 10:
+            item._use_count = 0
+            item.durability_current -= 1
+            if item.durability_current <= 0:
+                for slot, eq in list(self.equipment.items()):
+                    if eq is item:
+                        self.equipment[slot] = None
+                        self.stats.remove_mods_by_source(f'equip_{item.uid}')
+                if item in self.inventory.items:
+                    self.inventory.items.remove(item)
+
     def _sight_distance(self, other) -> int:
         """Manhattan distance between self and other."""
         return abs(self.location.x - other.location.x) + abs(self.location.y - other.location.y)
@@ -117,6 +133,16 @@ class CombatMixin:
 
         # Reset defender's HP regen
         target.on_hit(now)
+
+        # Weapon durability tick
+        if weapon and isinstance(weapon, Weapon):
+            self._tick_durability(weapon)
+
+        # Armor durability tick on defender's equipped armor
+        from classes.inventory import Wearable
+        for eq in set(target.equipment.values()):
+            if eq is not None and isinstance(eq, Wearable):
+                target._tick_durability(eq)
 
         # Record combat interaction
         target.record_interaction(self, -5.0)
@@ -248,6 +274,16 @@ class CombatMixin:
         if target.stats.active[Stat.HP_CURR]() <= 0:
             self._kills = getattr(self, '_kills', 0) + 1
             self.gain_exp(10)
+
+        # Weapon durability tick
+        if weapon and isinstance(weapon, Weapon):
+            self._tick_durability(weapon)
+
+        # Armor durability tick on defender
+        from classes.inventory import Wearable
+        for eq in set(target.equipment.values()):
+            if eq is not None and isinstance(eq, Wearable):
+                target._tick_durability(eq)
 
         # Record interaction
         if target.can_see(self):

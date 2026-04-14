@@ -446,6 +446,7 @@ def migrate_db():
             "ALTER TABLE tile_templates ADD COLUMN bg_color TEXT",
             "ALTER TABLE tile_sets ADD COLUMN bg_color TEXT",
             "ALTER TABLE species ADD COLUMN sentient INTEGER NOT NULL DEFAULT 1",
+            "ALTER TABLE species ADD COLUMN can_swim INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE species ADD COLUMN model_name TEXT",
             "ALTER TABLE species ADD COLUMN model_version INTEGER",
             "ALTER TABLE creatures ADD COLUMN model_name TEXT",

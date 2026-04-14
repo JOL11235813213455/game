@@ -225,7 +225,7 @@ class Creature(
             self.register_tick('behavior', move_interval, self._do_behavior)
 
         # Skills
-        self.can_swim: bool = False  # learned skill — prevents drowning
+        self.can_swim: bool = bool(species_data.get('can_swim', False))
         self.is_drowning: bool = False  # currently drowning (in liquid, no swim, submerged)
         self._drown_ticks: int = 0  # consecutive ticks spent drowning
 

@@ -259,6 +259,11 @@ def main():
                         if event.key == pygame.K_l:
                             lvl = player.stats.active[Stat.LVL]()
                             player.gain_exp(exp_for_level(lvl + 1))
+                        if event.key == pygame.K_z:
+                            if player.is_sleeping:
+                                player.wake()
+                            else:
+                                player.sleep(now)
                         if event.key in (pygame.K_EQUALS, pygame.K_PLUS, pygame.K_KP_PLUS):
                             set_zoom(get_zoom() + ZOOM_STEP)
                         if event.key in (pygame.K_MINUS, pygame.K_KP_MINUS):
@@ -274,7 +279,13 @@ def main():
 
         dt_ms = clock.get_time()  # ms since last frame
 
-        if save_ui is None and not paused and now - last_move >= MOVE_DELAY:
+        # Auto-wake: check sleep interrupt conditions for player
+        if player.is_sleeping and player._occupation == 'sleep':
+            interrupt = player._tick_sleep(now)
+            if interrupt is not None:
+                player.wake()
+
+        if save_ui is None and not paused and not player.is_sleeping and now - last_move >= MOVE_DELAY:
             keys = pygame.key.get_pressed()
             dx = keys[pygame.K_RIGHT] - keys[pygame.K_LEFT]
             dy = keys[pygame.K_DOWN]  - keys[pygame.K_UP]
@@ -330,6 +341,16 @@ def main():
 
                 lit = apply_top_highlight(sprite_surf, sun_elev)
                 screen.blit(lit, (sx, sy))
+
+        # Sleep overlay: dark translucent + "Sleeping... (Z to wake)"
+        if player.is_sleeping:
+            sleep_overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+            sleep_overlay.fill((0, 0, 30, 160))
+            screen.blit(sleep_overlay, (0, 0))
+            _sf = pygame.font.SysFont(None, 48)
+            _st = _sf.render('Sleeping...  (Z to wake)', True, (180, 180, 255))
+            screen.blit(_st, (SCREEN_WIDTH // 2 - _st.get_width() // 2,
+                              SCREEN_HEIGHT // 2 - _st.get_height() // 2))
 
         # ambient day/night overlay (after all world rendering, before UI)
         draw_ambient_overlay(screen, game_clock.hour, game_clock.moon_brightness)

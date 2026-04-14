@@ -871,7 +871,7 @@ def seed():
     _HARVEST = [34, 38, 40]             # DIG, HARVEST, FARM
     _PROCESS = [36, 37, 41]             # CRAFT, DISASSEMBLE, PROCESS
     _JOB = [39]                          # JOB
-    _TRADE = [15, 16, 17]               # TRADE, BRIBE, STEAL
+    _TRADE = [15, 16, 17, 43]           # TRADE, BRIBE, STEAL, REPAY_LOAN
     _SLEEP = [24, 29, 33]               # GUARD, SLEEP, EXIT_GUARD
     _SOCIAL_TALK = [13, 14, 18, 19, 28] # INTIMIDATE, DECEIVE, SHARE_RUMOR, TALK, CALL_BACKUP
     _COMBAT_FULL = [9, 10, 11, 12, 26, 30, 31, 32, 35]  # combat + FLEE, SET_TRAP, BLOCK, EXIT_BLOCK, PUSH
@@ -889,7 +889,7 @@ def seed():
     _s9_actions = sorted(_s8_actions + _SLEEP)
     _s10_actions = sorted(_s9_actions + _SOCIAL_TALK)
     _s11_actions = sorted(_s10_actions + _COMBAT_FULL)
-    _s12_actions = sorted(_s11_actions + _PAIR)  # all 43
+    _s12_actions = sorted(_s11_actions + _PAIR)  # all 44
 
     # S1 — Wander
     _stage(1, 'Wander',

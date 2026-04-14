@@ -218,6 +218,13 @@ def spawn_creature(game_map: Map, location: MapKey,
     return c
 
 
+def _ensure_db_loaded():
+    """Load the game DB if not already loaded (populates DIALOGUE, QUESTS, etc.)."""
+    from data.db import load, _loaded
+    if not _loaded:
+        load()
+
+
 def generate_arena(cols: int = 20, rows: int = 20,
                    num_creatures: int = 6,
                    obstacle_density: float = 0.1,
@@ -247,6 +254,7 @@ def generate_arena(cols: int = 20, rows: int = 20,
     Returns:
         dict with keys: map, creatures, cols, rows
     """
+    _ensure_db_loaded()
     profiles = profiles or ['balanced', 'fighter', 'mage', 'rogue', 'social', 'random']
     species_mix = species_mix or {'human': 1.0}
     mask_pool = mask_pool or ['socially_deaf', 'blind', 'fearless', 'feral',
