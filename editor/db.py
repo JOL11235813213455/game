@@ -66,7 +66,7 @@ def fetch_sprite(name: str) -> dict | None:
         palette = {}
         for char, val in raw_palette.items():
             if isinstance(val, (list, tuple)):
-                r, g, b = val
+                r, g, b = val[0], val[1], val[2]
                 palette[char] = f'#{r:02x}{g:02x}{b:02x}'
             else:
                 palette[char] = val  # already a hex string
