@@ -87,16 +87,10 @@ def _resolve_action_purpose(creature, action: int) -> str | None:
     context is missing.
     """
     from classes.actions import Action, ACTION_PURPOSE
-    if action == Action.JOB:
-        job = getattr(creature, 'job', None)
-        if job is not None:
-            return job.purpose
-        return None
     if action == Action.HARVEST:
         tile = creature.current_map.tiles.get(creature.location) if creature.current_map else None
         if tile is not None and getattr(tile, 'purpose', None):
             return tile.purpose
-        # fall through to static default
     return ACTION_PURPOSE.get(action)
 
 
