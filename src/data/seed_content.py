@@ -893,9 +893,9 @@ def seed():
     _stage(1, 'Wander',
            'Move and explore. No hunger, no combat, no economy. '
            'Failed actions and water danger penalized.',
-           {'exploration': 1.0, 'hp': 0.3,
-            'failed_actions': 0.5, 'water_danger': 1.0,
-            'idleness': 0.5},
+           {'exploration': 3.0, 'hp': 0.3,
+            'failed_actions': 0.2, 'water_danger': 1.0,
+            'idleness': 1.0},
            hunger=False, combat=False, gestation=False,
            mappo=20000, es_gens=0, es_vars=20, es_steps=1000, ppo=20000,
            allowed_actions=_s1_actions, fatigue_enabled=False)
