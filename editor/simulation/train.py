@@ -331,7 +331,8 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
               sink=None, goal_net=None, goal_ppo=None,
               signal_scales: dict = None,
               sim_kwargs: dict = None,
-              action_mask: np.ndarray = None) -> TorchCreatureNet:
+              action_mask: np.ndarray = None,
+              viewer_extra: dict = None) -> TorchCreatureNet:
     """Phase 1: Multi-agent PPO — all creatures share weights.
 
     If goal_net is provided, runs hierarchical goal selection every
@@ -546,6 +547,7 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
                 'total_reward': round(total_reward, 2),
                 'ep_steps': ep_steps,
                 'top_actions': top_action_stats,
+                **(viewer_extra or {}),
             }
             write_state(sim, phase='MAPPO', step=step, info=viewer_info)
 
@@ -715,7 +717,8 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             sink=None, goal_net=None, goal_ppo=None,
             signal_scales: dict = None,
             sim_kwargs: dict = None,
-            action_mask: np.ndarray = None) -> TorchCreatureNet:
+            action_mask: np.ndarray = None,
+            viewer_extra: dict = None) -> TorchCreatureNet:
     """Phase 3: Single-agent PPO against diverse opponents."""
     print(f'\n=== PPO Phase ({steps} steps) ===')
     arena_kwargs = arena_kwargs or {
@@ -907,6 +910,7 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
                 'total_reward': round(total_reward, 2),
                 'ep_steps': len(ppo_step_rewards),
                 'top_actions': top_action_stats,
+                **(viewer_extra or {}),
             }
             write_state(sim, phase='PPO', step=step, info=viewer_info)
 
@@ -1126,6 +1130,9 @@ def train_curriculum_stage(stage_number: int, model_name: str,
 
     pipeline_t0 = time.time()
     signal_scales = stage['signal_scales']
+    _viewer_extra = {
+        'curriculum_stage': f"S{stage_number} {stage['name']}",
+    }
 
     # MAPPO
     if stage['mappo_steps'] > 0:
@@ -1135,7 +1142,8 @@ def train_curriculum_stage(stage_number: int, model_name: str,
                         goal_net=goal_net, goal_ppo=goal_ppo,
                         signal_scales=signal_scales,
                         sim_kwargs=sim_kwargs,
-                        action_mask=stage['action_mask'])
+                        action_mask=stage['action_mask'],
+                        viewer_extra=_viewer_extra)
         net.export_to_numpy(SAVE_DIR / 'mappo.npz')
         print(f'  MAPPO complete in {time.time() - mappo_t0:.0f}s')
 
@@ -1159,7 +1167,8 @@ def train_curriculum_stage(stage_number: int, model_name: str,
                       goal_net=goal_net, goal_ppo=goal_ppo,
                       signal_scales=signal_scales,
                       sim_kwargs=sim_kwargs,
-                      action_mask=stage['action_mask'])
+                      action_mask=stage['action_mask'],
+                      viewer_extra=_viewer_extra)
         print(f'  PPO complete in {time.time() - ppo_t0:.0f}s')
 
     total_seconds = time.time() - pipeline_t0

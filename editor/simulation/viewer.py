@@ -555,6 +555,9 @@ def run_training_viewer(cell_size: int = 20):
 
         stale = state.get('stale', False)
         phase = state.get('phase', '?')
+        stage = state.get('info', {}).get('curriculum_stage', '')
+        if stage:
+            text(f'Stage: {stage}', C_YELLOW)
         text(f'Phase: {phase}', C_YELLOW if not stale else C_RED)
         text(f'Step: {state["step"]}')
         text(f'Tick: {state["tick"]}')
@@ -599,7 +602,7 @@ def run_training_viewer(cell_size: int = 20):
                 text(f'Mask: {c["mask"]}', C_ORANGE)
 
         # Population
-        y = need_h - 100
+        y += 10
         text('--- Population ---', C_GRAY)
         sp_count = {}
         total_gold = 0
