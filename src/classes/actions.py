@@ -1,83 +1,68 @@
 """
 Action space for the creature RL system.
 
-Each action is an enum value that maps to a creature method call.
-The dispatcher takes a creature, action index, and context, then
-executes the action and returns an outcome dict.
-
-Movement uses 8 directional MOVE actions. The locomotion mode
-(walk/run/sneak) is determined as:
+32 actions organized by category. Movement is a single MOVE action
+that auto-resolves direction toward the creature's goal target.
+Locomotion mode (walk/run/sneak) is auto-selected:
   - Sneak: if creature.movement_mode == 'sneak' (toggled by SET_SNEAK)
-  - Run:   auto-selected when a hostile creature is within sight and
-           stamina is sufficient
-  - Walk:  default (free, no stamina cost)
+  - Run:   auto-selected when a hostile creature is within sight
+  - Walk:  default
+
+Dynamic action masking: compute_dynamic_mask() returns a per-tick
+binary array based on creature state. Combined with the static
+curriculum mask via AND to prevent impossible actions.
 """
 from __future__ import annotations
 from enum import IntEnum
+import numpy as np
 
 
 class Action(IntEnum):
-    # Movement (0-7: 8 directions, mode auto-selected)
-    MOVE_N  = 0
-    MOVE_NE = 1
-    MOVE_E  = 2
-    MOVE_SE = 3
-    MOVE_S  = 4
-    MOVE_SW = 5
-    MOVE_W  = 6
-    MOVE_NW = 7
-
-    # Movement mode toggle
-    SET_SNEAK = 8    # toggles sneak on/off; walk vs run is automatic
+    # Movement
+    MOVE = 0             # auto-direction toward goal, auto walk/run/sneak
+    SET_SNEAK = 1        # toggle sneak mode
+    FLEE = 2             # move away from nearest threat
+    FOLLOW = 3           # move toward target creature
 
     # Combat
-    MELEE_ATTACK = 9
-    RANGED_ATTACK = 10
-    GRAPPLE = 11
-    CAST_SPELL = 12
+    MELEE_ATTACK = 4
+    RANGED_ATTACK = 5
+    GRAPPLE = 6
+    CAST_SPELL = 7
 
     # Social
-    INTIMIDATE = 13
-    DECEIVE = 14
-    TRADE = 15
-    BRIBE = 16
-    STEAL = 17
-    SHARE_RUMOR = 18
-    TALK = 19
+    INTIMIDATE = 8
+    DECEIVE = 9          # gated on active social context (TALK/TRADE first)
+    TRADE = 10
+    STEAL = 11
+    TALK = 12            # auto-shares rumor on success
 
     # Utility
-    PICKUP = 20
-    DROP = 21
-    USE_ITEM = 22
-    WAIT = 23
-    GUARD = 24
-    SEARCH = 25
-    FLEE = 26
-    FOLLOW = 27
-    CALL_BACKUP = 28
-    SLEEP = 29
-    SET_TRAP = 30
-
-    # Stances
-    BLOCK_STANCE = 31
-    EXIT_BLOCK = 32
-    EXIT_GUARD = 33
+    PICKUP = 13
+    DROP = 14
+    USE_ITEM = 15
+    WAIT = 16
+    GUARD = 17           # toggle: re-select to exit guard stance
+    SEARCH = 18
+    SLEEP = 19
+    SET_TRAP = 20
+    BLOCK_STANCE = 21    # toggle: re-select to exit block stance
+    CALL_BACKUP = 22
 
     # Economy
-    DIG = 34
-    PUSH = 35
-    CRAFT = 36
-    DISASSEMBLE = 37
-    HARVEST = 38
-    JOB = 39
-    FARM = 40
-    PROCESS = 41
+    DIG = 23
+    PUSH = 24
+    CRAFT = 25
+    DISASSEMBLE = 26
+    HARVEST = 27
+    FARM = 28
+    PROCESS = 29
 
     # Reproduction
-    PAIR = 42
+    PAIR = 30
 
-    # Economy (debt)
-    REPAY_LOAN = 43
+    # Debt
+    REPAY_LOAN = 31
 
 
 NUM_ACTIONS = len(Action)
@@ -94,7 +79,6 @@ NUM_PURPOSES = len(TILE_PURPOSES)
 # Action → tile purpose alignment
 ACTION_PURPOSE = {
     Action.TRADE: 'trading',
-    Action.BRIBE: 'trading',
     Action.STEAL: 'trading',
     Action.MELEE_ATTACK: 'hunting',
     Action.RANGED_ATTACK: 'hunting',
@@ -103,7 +87,6 @@ ACTION_PURPOSE = {
     Action.INTIMIDATE: 'socializing',
     Action.DECEIVE: 'socializing',
     Action.TALK: 'socializing',
-    Action.SHARE_RUMOR: 'gossiping',
     Action.SLEEP: 'sleeping',
     Action.GUARD: 'guarding',
     Action.SEARCH: 'gathering',
@@ -113,7 +96,6 @@ ACTION_PURPOSE = {
     Action.DISASSEMBLE: 'crafting',
     Action.HARVEST: 'farming',
     Action.FARM: 'farming',
-    Action.JOB: None,
     Action.PROCESS: 'crafting',
     Action.PAIR: 'pairing',
     Action.USE_ITEM: 'eating',
@@ -123,7 +105,6 @@ ACTION_PURPOSE = {
 
 
 def action_aligned_with_tile(action: int, tile, zone_purposes: set = None) -> bool:
-    """Return True if the action matches the tile's purpose or zone purposes."""
     aligned_purpose = ACTION_PURPOSE.get(action)
     if aligned_purpose is None:
         return False
@@ -134,32 +115,10 @@ def action_aligned_with_tile(action: int, tile, zone_purposes: set = None) -> bo
 
 
 # Action → god-tracking name
-ACTION_NAMES = {
-    Action.MELEE_ATTACK: 'melee_attack', Action.RANGED_ATTACK: 'ranged_attack',
-    Action.GRAPPLE: 'grapple', Action.CAST_SPELL: 'cast_spell',
-    Action.INTIMIDATE: 'intimidate', Action.DECEIVE: 'deceive',
-    Action.TRADE: 'trade', Action.BRIBE: 'bribe',
-    Action.STEAL: 'steal', Action.SHARE_RUMOR: 'share_rumor',
-    Action.TALK: 'talk', Action.PICKUP: 'pickup', Action.DROP: 'drop',
-    Action.USE_ITEM: 'use_item', Action.WAIT: 'wait',
-    Action.GUARD: 'guard', Action.SEARCH: 'search',
-    Action.FLEE: 'flee', Action.FOLLOW: 'follow',
-    Action.CALL_BACKUP: 'call_backup', Action.SLEEP: 'sleep',
-    Action.SET_TRAP: 'set_trap', Action.BLOCK_STANCE: 'block_stance',
-    Action.DIG: 'dig', Action.PUSH: 'push',
-    Action.CRAFT: 'craft', Action.DISASSEMBLE: 'disassemble',
-    Action.HARVEST: 'harvest',
-    Action.JOB: 'job', Action.FARM: 'farm',
-    Action.PROCESS: 'process',
-    Action.PAIR: 'pair',
-    Action.REPAY_LOAN: 'repay_loan',
-    Action.SET_SNEAK: 'set_sneak',
-    Action.EXIT_BLOCK: 'exit_block', Action.EXIT_GUARD: 'exit_guard',
-}
+ACTION_NAMES = {a: a.name.lower() for a in Action}
 
 
 def _record_god_action(action: int):
-    """Record an action in the WorldData god counters (if WorldData exists)."""
     action_name = ACTION_NAMES.get(action)
     if action_name is None:
         return
@@ -174,7 +133,7 @@ def _record_god_action(action: int):
         pass
 
 
-# Direction vectors for movement actions
+# Direction vectors for 8-dir movement (used by FLEE, FOLLOW, sleepwalk)
 _DIRS = {
     0: (0, -1),   # N
     1: (1, -1),   # NE
@@ -188,12 +147,10 @@ _DIRS = {
 
 
 def _should_run(creature, context) -> bool:
-    """Auto-select run mode when a hostile is in sight and stamina allows."""
     from classes.stats import Stat
     if creature.stats.active[Stat.CUR_STAMINA]() < 3:
         return False
     from classes.relationship_graph import GRAPH
-    from classes.stats import Stat
     sight = creature.stats.active[Stat.SIGHT_RANGE]()
     cx, cy = creature.location.x, creature.location.y
     rels = GRAPH.edges_from(creature.uid)
@@ -213,8 +170,20 @@ def _should_run(creature, context) -> bool:
     return False
 
 
+def _do_move(creature, dx, dy, cols, rows, context):
+    """Execute one movement step with auto walk/run/sneak."""
+    mode = getattr(creature, 'movement_mode', 'walk')
+    if mode == 'sneak':
+        return creature.sneak(dx, dy, cols, rows)
+    elif _should_run(creature, context):
+        return creature.run(dx, dy, cols, rows)
+    else:
+        old = creature.location
+        creature.move(dx, dy, cols, rows)
+        return creature.location != old
+
+
 def _auto_work(creature, now: int):
-    """Auto-engage work when creature arrives at workplace during work hours."""
     job = getattr(creature, 'job', None)
     if job is None or getattr(creature, '_occupation', None) is not None:
         return
@@ -232,8 +201,160 @@ def _auto_work(creature, now: int):
         creature.do_job(now)
 
 
+def _auto_share_rumor(creature, target, now):
+    """Auto-share a rumor during TALK if creature has gossip."""
+    from classes.relationship_graph import GRAPH
+    import random as _rng
+    rels = GRAPH.edges_from(creature.uid)
+    candidates = [(uid, r[0]) for uid, r in rels.items()
+                  if uid != target.uid and abs(r[0]) > 3 and r[1] >= 2]
+    if candidates:
+        subject_uid, sentiment = _rng.choice(candidates)
+        confidence = min(1.0, abs(sentiment) / 20.0)
+        creature.share_rumor(target, subject_uid, sentiment, now)
+
+
+# ---------------------------------------------------------------------------
+# Dynamic action mask
+# ---------------------------------------------------------------------------
+
+def compute_dynamic_mask(creature, context: dict = None) -> np.ndarray:
+    """Compute a per-tick binary mask based on creature state.
+
+    Returns a NUM_ACTIONS-length array where 1 = available, 0 = impossible.
+    This is ANDed with the static curriculum mask before action selection.
+    """
+    from classes.stats import Stat
+    from classes.inventory import Consumable, Weapon, Equippable, Slot
+    from classes.inventory import ItemFrame as _IF
+
+    mask = np.ones(NUM_ACTIONS, dtype=np.float32)
+
+    # Context
+    has_adjacent = False
+    has_visible = False
+    has_hostile_visible = False
+    if creature.current_map:
+        from classes.world_object import WorldObject
+        from classes.creature import Creature as _C
+        from classes.relationship_graph import GRAPH
+        cx, cy = creature.location.x, creature.location.y
+        sight = creature.stats.active[Stat.SIGHT_RANGE]()
+        rels = GRAPH.edges_from(creature.uid)
+        for obj in WorldObject.on_map(creature.current_map):
+            if not isinstance(obj, _C) or obj is creature or not obj.is_alive:
+                continue
+            d = abs(cx - obj.location.x) + abs(cy - obj.location.y)
+            if d <= 1:
+                has_adjacent = True
+                has_visible = True
+            elif d <= sight:
+                has_visible = True
+            rel = rels.get(obj.uid)
+            if rel and rel[0] < -5 and d <= sight:
+                has_hostile_visible = True
+
+    tile = creature.current_map.tiles.get(creature.location) if creature.current_map else None
+
+    # Combat: need adjacent/visible targets
+    if not has_adjacent:
+        mask[Action.MELEE_ATTACK] = 0
+        mask[Action.GRAPPLE] = 0
+        mask[Action.PUSH] = 0
+    if not has_visible:
+        mask[Action.RANGED_ATTACK] = 0
+        mask[Action.INTIMIDATE] = 0
+        mask[Action.TALK] = 0
+        mask[Action.FOLLOW] = 0
+    if not has_hostile_visible:
+        mask[Action.FLEE] = 0
+    if not has_adjacent:
+        mask[Action.STEAL] = 0
+        mask[Action.TRADE] = 0
+        mask[Action.PAIR] = 0
+
+    # Ranged: need weapon + ammo
+    weapon = creature.equipment.get(Slot.HAND_R) or creature.equipment.get(Slot.HAND_L)
+    if not (weapon and isinstance(weapon, Weapon) and weapon.range > 1):
+        mask[Action.RANGED_ATTACK] = 0
+
+    # Spell: need known spells + mana
+    if not (hasattr(creature, 'get_known_spells') and creature.get_known_spells()):
+        mask[Action.CAST_SPELL] = 0
+
+    # Deceive: need social context
+    if getattr(creature, '_active_social_target', None) is None:
+        mask[Action.DECEIVE] = 0
+
+    # Inventory
+    has_consumable = any(isinstance(i, Consumable) for i in creature.inventory.items)
+    has_trap = any(getattr(i, 'is_trap', False) for i in creature.inventory.items)
+    has_frame_complete = any(isinstance(i, _IF) and hasattr(i, 'is_complete') and i.is_complete
+                            for i in creature.inventory.items)
+    has_frame_ingredients = any(isinstance(i, _IF) and i.ingredients.items
+                               for i in creature.inventory.items)
+
+    if not has_consumable:
+        mask[Action.USE_ITEM] = 0
+    if not creature.inventory.items:
+        mask[Action.DROP] = 0
+    if not has_trap:
+        mask[Action.SET_TRAP] = 0
+    if not has_frame_complete:
+        mask[Action.CRAFT] = 0
+    if not has_frame_ingredients:
+        mask[Action.DISASSEMBLE] = 0
+
+    # Tile-based
+    tile_has_items = tile and (tile.inventory.items or getattr(tile, 'gold', 0) > 0)
+    tile_has_resource = tile and getattr(tile, 'resource_type', None) and getattr(tile, 'resource_amount', 0) > 0
+    tile_has_buried = tile and getattr(tile, 'buried_gold', 0) > 0
+    has_shovel = any(getattr(i, 'name', '') == 'Shovel' for i in creature.inventory.items) or \
+                 any(getattr(e, 'name', '') == 'Shovel' for e in creature.equipment.values() if e)
+
+    if not tile_has_items:
+        mask[Action.PICKUP] = 0
+    if not tile_has_resource:
+        mask[Action.HARVEST] = 0
+        mask[Action.FARM] = 0
+    if not (tile_has_buried and has_shovel):
+        mask[Action.DIG] = 0
+    if not (tile and getattr(tile, 'purpose', None) == 'crafting'):
+        mask[Action.PROCESS] = 0
+
+    # Stances (toggle: if already active, allow to toggle off; mask if no weapon for block)
+    if getattr(creature, '_guarding', False):
+        pass  # allow GUARD to toggle off
+    elif creature.stats.active[Stat.CUR_STAMINA]() < 2:
+        mask[Action.GUARD] = 0
+
+    blocking = getattr(creature, 'is_blocking', False)
+    if not blocking:
+        hand_r = creature.equipment.get(Slot.HAND_R)
+        hand_l = creature.equipment.get(Slot.HAND_L)
+        if not (hand_r or hand_l):
+            mask[Action.BLOCK_STANCE] = 0
+
+    # Sleep: already sleeping
+    if getattr(creature, '_sleeping', False):
+        mask[Action.SLEEP] = 0
+
+    # Pair: cooldown, not fertile, no eligible adjacent
+    if getattr(creature, '_pair_cooldown', 0) > 0 or not creature.is_fertile:
+        mask[Action.PAIR] = 0
+
+    # Debt
+    if not creature.loans or creature.gold <= 0:
+        mask[Action.REPAY_LOAN] = 0
+
+    return mask
+
+
+# ---------------------------------------------------------------------------
+# Dispatch
+# ---------------------------------------------------------------------------
+
 def dispatch(creature, action: int, context: dict) -> dict:
-    """Execute an action for a creature."""
     result = _dispatch_inner(creature, action, context)
     succeeded = result.get('success', result.get('hit', False))
     if succeeded:
@@ -246,51 +367,57 @@ def dispatch(creature, action: int, context: dict) -> dict:
 
 def _emit_action_sound(creature, action: int, context: dict):
     from classes.sound import emit_sound
+    tick = context.get('now', 0)
 
-    if 0 <= action <= 7:
-        emit_sound(creature, 'footstep', tick=context.get('now', 0))
-        return
-
-    if action in (Action.MELEE_ATTACK, Action.RANGED_ATTACK,
-                   Action.GRAPPLE, Action.CAST_SPELL):
-        emit_sound(creature, 'combat', tick=context.get('now', 0))
-        return
-
-    if action in (Action.TALK, Action.INTIMIDATE, Action.DECEIVE,
-                   Action.SHARE_RUMOR, Action.TRADE, Action.BRIBE):
-        emit_sound(creature, 'speech', tick=context.get('now', 0))
-        return
-
-    if action in (Action.HARVEST, Action.FARM, Action.PROCESS, Action.JOB):
-        emit_sound(creature, 'harvest', tick=context.get('now', 0))
-        return
-
-    if action in (Action.DROP, Action.PICKUP):
-        emit_sound(creature, 'drop', tick=context.get('now', 0))
-        return
-
-    if action == Action.PUSH:
-        emit_sound(creature, 'struggle', tick=context.get('now', 0))
-        return
+    if action == Action.MOVE:
+        emit_sound(creature, 'footstep', tick=tick)
+    elif action in (Action.MELEE_ATTACK, Action.RANGED_ATTACK,
+                    Action.GRAPPLE, Action.CAST_SPELL):
+        emit_sound(creature, 'combat', tick=tick)
+    elif action in (Action.TALK, Action.INTIMIDATE, Action.DECEIVE,
+                    Action.TRADE):
+        emit_sound(creature, 'speech', tick=tick)
+    elif action in (Action.HARVEST, Action.FARM, Action.PROCESS):
+        emit_sound(creature, 'harvest', tick=tick)
+    elif action in (Action.DROP, Action.PICKUP):
+        emit_sound(creature, 'drop', tick=tick)
+    elif action == Action.PUSH:
+        emit_sound(creature, 'struggle', tick=tick)
 
 
 def _dispatch_inner(creature, action: int, context: dict) -> dict:
-    """Inner dispatch — actual action execution."""
     cols = context.get('cols', 0)
     rows = context.get('rows', 0)
     target = context.get('target')
     item = context.get('item')
     now = context.get('now', 0)
 
-    # Decay social context TTL — TALK/TRADE set a 2-tick window
-    # during which DECEIVE can fire as a follow-up action.
+    # Decay social context TTL
     ttl = getattr(creature, '_social_context_ttl', 0)
     if ttl > 0 and action != Action.DECEIVE:
         creature._social_context_ttl = ttl - 1
         if creature._social_context_ttl <= 0:
             creature._active_social_target = None
 
-    # -- Occupation intercept: sleeping/working creatures skip NN action --
+    # -- Auto-triggers --
+    # Forced sleep at fatigue level 4 (collapse)
+    if getattr(creature, '_fatigue_level', 0) >= 4 and not getattr(creature, '_sleeping', False):
+        creature.sleep(now)
+        return {'success': True, 'reason': 'collapse'}
+
+    # Auto-eat at extreme hunger
+    hunger = getattr(creature, 'hunger', 0.0)
+    if hunger < -0.8 and getattr(creature, '_occupation', None) is None:
+        from classes.inventory import Consumable
+        food = next((i for i in creature.inventory.items
+                     if isinstance(i, Consumable) and getattr(i, 'is_food', False)), None)
+        if food:
+            creature.use_item(food)
+            if hasattr(creature, 'eat'):
+                creature.eat(0.3)
+            return {'success': True, 'reason': 'auto_eat'}
+
+    # -- Occupation intercept --
     occupation = getattr(creature, '_occupation', None)
     if occupation == 'sleep':
         interrupt = creature._tick_sleep(now)
@@ -302,42 +429,43 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
             import random as _rng
             dx, dy = _DIRS[_rng.randint(0, 7)]
             creature.move(dx, dy, cols, rows)
-            # Re-enter sleep — sleepwalking doesn't fully wake
             creature.sleep(now)
             return {'success': True, 'reason': 'sleepwalk'}
-        # Woke up — fall through to execute the NN's chosen action
     elif occupation == 'work':
         if not creature._check_work_interrupt(now):
             creature._tick_work(now)
             return {'success': True, 'reason': 'working'}
-        # Threat detected or shift ended — fall through to NN action
 
     combat_enabled = context.get('combat_enabled', True)
     if not combat_enabled and action in (Action.MELEE_ATTACK, Action.RANGED_ATTACK,
                                           Action.GRAPPLE, Action.CAST_SPELL):
         return {'success': False, 'reason': 'combat_disabled'}
 
-    # -- Movement (auto walk/run/sneak) --
-    if 0 <= action <= 7:
-        dx, dy = _DIRS[action]
-        mode = getattr(creature, 'movement_mode', 'walk')
-        if mode == 'sneak':
-            moved = creature.sneak(dx, dy, cols, rows)
-        elif _should_run(creature, context):
-            moved = creature.run(dx, dy, cols, rows)
-        else:
-            old = creature.location
-            creature.move(dx, dy, cols, rows)
-            moved = creature.location != old
+    # -- MOVE: auto-direction toward goal --
+    if action == Action.MOVE:
+        dx, dy = creature.direction_to_goal()
+        if dx == 0 and dy == 0:
+            import random as _rng
+            dx, dy = _DIRS[_rng.randint(0, 7)]
+        moved = _do_move(creature, dx, dy, cols, rows, context)
         if moved:
             _auto_work(creature, now)
         return {'success': moved}
 
-    # -- Sneak toggle --
     if action == Action.SET_SNEAK:
         current = getattr(creature, 'movement_mode', 'walk')
         creature.movement_mode = 'walk' if current == 'sneak' else 'sneak'
         return {'success': True}
+
+    if action == Action.FLEE:
+        if target is None:
+            return {'success': False, 'reason': 'no_threat'}
+        return {'success': creature.flee(target, cols, rows)}
+
+    if action == Action.FOLLOW:
+        if target is None:
+            return {'success': False, 'reason': 'no_target'}
+        return {'success': creature.follow(target, cols, rows)}
 
     # -- Combat --
     if action == Action.MELEE_ATTACK:
@@ -368,6 +496,7 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
                 return {'success': False, 'reason': 'no_spell'}
         return creature.cast_spell(spell, target, now)
 
+    # -- Social --
     if action == Action.TRADE:
         if target is None:
             from classes.world_object import WorldObject
@@ -390,14 +519,11 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
             target._check_deceit_revelation(creature)
         return result
 
-    # -- Social (requires sentient target) --
-    if Action.INTIMIDATE <= action <= Action.TALK:
+    if action == Action.INTIMIDATE:
         if target is None:
             return {'success': False, 'reason': 'no_target'}
         if not getattr(target, 'sentient', True):
             return {'success': False, 'reason': 'not_sentient'}
-
-    if action == Action.INTIMIDATE:
         return creature.intimidate(target)
 
     if action == Action.DECEIVE:
@@ -408,12 +534,6 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
         creature._active_social_target = None
         creature._social_context_ttl = 0
         return result
-
-    if action == Action.BRIBE:
-        if target is None:
-            return {'success': False, 'reason': 'no_target'}
-        items = context.get('items', [])
-        return creature.bribe(target, items)
 
     if action == Action.STEAL:
         if target is None:
@@ -431,21 +551,11 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
                 return {'success': False, 'reason': 'no_target'}
         return creature.steal(target, item)
 
-    if action == Action.SHARE_RUMOR:
-        if target is None:
-            return {'success': False, 'reason': 'no_target'}
-        subject_uid = context.get('subject_uid', 0)
-        sentiment = context.get('sentiment', 0.0)
-        tick = context.get('tick', now)
-        success = creature.share_rumor(target, subject_uid, sentiment, tick)
-        if success:
-            creature._check_deceit_revelation(target)
-            target._check_deceit_revelation(creature)
-        return {'success': success}
-
     if action == Action.TALK:
         if target is None:
             return {'success': False, 'reason': 'no_target'}
+        if not getattr(target, 'sentient', True):
+            return {'success': False, 'reason': 'not_sentient'}
         conv = context.get('conversation')
         roots = creature.start_conversation(target, conv)
         success = len(roots) > 0
@@ -454,6 +564,7 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
             creature._social_context_ttl = 2
             creature._check_deceit_revelation(target)
             target._check_deceit_revelation(creature)
+            _auto_share_rumor(creature, target, now)
         return {'success': success, 'roots': roots}
 
     # -- Utility --
@@ -497,24 +608,13 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
         return {'success': creature.wait()}
 
     if action == Action.GUARD:
+        if getattr(creature, '_guarding', False):
+            creature.stop_guard()
+            return {'success': True}
         return {'success': creature.guard(cols, rows)}
 
     if action == Action.SEARCH:
         return creature.search_tile()
-
-    if action == Action.FLEE:
-        if target is None:
-            return {'success': False, 'reason': 'no_threat'}
-        return {'success': creature.flee(target, cols, rows)}
-
-    if action == Action.FOLLOW:
-        if target is None:
-            return {'success': False, 'reason': 'no_target'}
-        return {'success': creature.follow(target, cols, rows)}
-
-    if action == Action.CALL_BACKUP:
-        responders = creature.call_backup()
-        return {'success': len(responders) > 0, 'responders': responders}
 
     if action == Action.SLEEP:
         return {'success': creature.sleep(now)}
@@ -530,19 +630,17 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
         dc = getattr(item, 'trap_dc', None) or context.get('trap_dc', 10)
         return {'success': creature.set_trap(item, dc)}
 
-    # -- Stances --
     if action == Action.BLOCK_STANCE:
+        if getattr(creature, 'is_blocking', False):
+            creature.exit_block_stance()
+            return {'success': True}
         return {'success': creature.enter_block_stance()}
 
-    if action == Action.EXIT_BLOCK:
-        creature.exit_block_stance()
-        return {'success': True}
+    if action == Action.CALL_BACKUP:
+        responders = creature.call_backup()
+        return {'success': len(responders) > 0, 'responders': responders}
 
-    if action == Action.EXIT_GUARD:
-        creature.stop_guard()
-        return {'success': True}
-
-    # -- Dig / Push --
+    # -- Economy --
     if action == Action.DIG:
         return creature.dig()
 
@@ -573,12 +671,10 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
     if action == Action.FARM:
         return creature.farm()
 
-    if action == Action.JOB:
-        return creature.do_job(context.get('now', 0))
-
     if action == Action.PROCESS:
         return creature.process()
 
+    # -- Reproduction --
     if action == Action.PAIR:
         if target is None:
             from classes.world_object import WorldObject
@@ -599,6 +695,7 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
             return creature.propose_pairing(target, now)
         return target.propose_pairing(creature, now)
 
+    # -- Debt --
     if action == Action.REPAY_LOAN:
         if not creature.loans:
             return {'success': False, 'reason': 'no_debt'}

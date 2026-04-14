@@ -858,38 +858,36 @@ def seed():
     # to select, so the policy focuses on what's relevant.
     # ==================================================================
 
-    # Action groups for progressive unlock (collapsed action space: 43 actions)
-    # Movement is now 8 directions + SET_SNEAK toggle; run is auto-selected.
-    _MOVE8 = list(range(0, 8))          # MOVE_N through MOVE_NW
-    _SNEAK_TOGGLE = [8]                  # SET_SNEAK
-    _COMBAT = [9, 10, 11, 12]           # MELEE..CAST
-    _SOCIAL = [13, 14, 15, 16, 17, 18, 19]  # INTIMIDATE..TALK
-    _UTILITY_BASIC = [23, 25]           # WAIT, SEARCH
-    _PICKUP_DROP = [20, 21]             # PICKUP, DROP
-    _USE = [22]                          # USE_ITEM
-    _FOLLOW = [27]                       # FOLLOW
-    _HARVEST = [34, 38, 40]             # DIG, HARVEST, FARM
-    _PROCESS = [36, 37, 41]             # CRAFT, DISASSEMBLE, PROCESS
-    # JOB (39) is auto-triggered by movement — not in action mask
-    _TRADE = [15, 16, 17, 43]           # TRADE, BRIBE, STEAL, REPAY_LOAN
-    _SLEEP = [24, 29, 33]               # GUARD, SLEEP, EXIT_GUARD
-    _SOCIAL_TALK = [13, 14, 18, 19, 28] # INTIMIDATE, DECEIVE, SHARE_RUMOR, TALK, CALL_BACKUP
-    _COMBAT_FULL = [9, 10, 11, 12, 26, 30, 31, 32, 35]  # combat + FLEE, SET_TRAP, BLOCK, EXIT_BLOCK, PUSH
-    _PAIR = [42]                         # PAIR
+    # Action groups for progressive unlock (32-action space)
+    # MOVE (0) auto-resolves direction toward goal. JOB auto-triggers on
+    # arrival. BRIBE/SHARE_RUMOR/EXIT_BLOCK/EXIT_GUARD removed (merged/auto).
+    # Dynamic masking prevents impossible actions each tick.
+    _MOVE_BASE = [0, 16, 18]             # MOVE, WAIT, SEARCH
+    _PICKUP_DROP = [13, 14]              # PICKUP, DROP
+    _USE = [15]                          # USE_ITEM
+    _SNEAK = [1]                         # SET_SNEAK
+    _FOLLOW = [3]                        # FOLLOW
+    _HARVEST = [23, 27, 28]              # DIG, HARVEST, FARM
+    _PROCESS = [25, 26, 29]              # CRAFT, DISASSEMBLE, PROCESS
+    _TRADE = [10, 11, 31]               # TRADE, STEAL, REPAY_LOAN
+    _SLEEP = [17, 19]                    # GUARD, SLEEP
+    _SOCIAL = [8, 9, 12, 22]            # INTIMIDATE, DECEIVE, TALK, CALL_BACKUP
+    _COMBAT = [2, 4, 5, 6, 7, 20, 21, 24]  # FLEE, MELEE, RANGED, GRAPPLE, CAST_SPELL, SET_TRAP, BLOCK_STANCE, PUSH
+    _PAIR = [30]                         # PAIR
 
     # Build cumulative action sets per stage
-    _s1_actions = sorted(_MOVE8 + _UTILITY_BASIC)
+    _s1_actions = sorted(_MOVE_BASE)
     _s2_actions = sorted(_s1_actions + _PICKUP_DROP)
-    _s3_actions = sorted(_s2_actions + _USE + _SNEAK_TOGGLE)
+    _s3_actions = sorted(_s2_actions + _USE + _SNEAK)
     _s4_actions = sorted(_s3_actions + _FOLLOW)
     _s5_actions = sorted(_s4_actions + _HARVEST)
     _s6_actions = sorted(_s5_actions + _PROCESS)
-    _s7_actions = sorted(_s6_actions)  # JOB is auto — no new action this stage
+    _s7_actions = sorted(_s6_actions)     # JOB is auto — no new action
     _s8_actions = sorted(_s7_actions + _TRADE)
     _s9_actions = sorted(_s8_actions + _SLEEP)
-    _s10_actions = sorted(_s9_actions + _SOCIAL_TALK)
-    _s11_actions = sorted(_s10_actions + _COMBAT_FULL)
-    _s12_actions = sorted(_s11_actions + _PAIR)  # all 44
+    _s10_actions = sorted(_s9_actions + _SOCIAL)
+    _s11_actions = sorted(_s10_actions + _COMBAT)
+    _s12_actions = sorted(_s11_actions + _PAIR)  # all 32
 
     # S1 — Wander
     _stage(1, 'Wander',

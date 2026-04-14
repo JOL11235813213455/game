@@ -460,11 +460,14 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
                 apply_preset_mask(obs, c.observation_mask)
 
             obs_arr = np.array(obs, dtype=np.float32)
+            from classes.actions import compute_dynamic_mask
+            dyn_mask = compute_dynamic_mask(c, {'cols': sim.cols, 'rows': sim.rows, 'now': sim.now})
+            combined_mask = action_mask * dyn_mask if action_mask is not None else dyn_mask
             action, log_prob, value = net.get_action(obs_arr, temperature=hunger_temperature(c),
-                                                      action_mask=action_mask)
+                                                      action_mask=combined_mask)
 
             # Store for later collection
-            tick_data[c.uid] = (obs_arr, action, log_prob, value)
+            tick_data[c.uid] = (obs_arr, action, log_prob, value, combined_mask)
 
             # Dispatch action
             target = None
@@ -519,8 +522,9 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             if hasattr(c, '_history'):
                 c._history.append(make_history_snapshot(c))
 
+            stored_mask = tick_data[c.uid][4] if c.uid in tick_data else action_mask
             buffer.store(obs_arr, action, reward, value, log_prob,
-                         not c.is_alive, action_mask=action_mask)
+                         not c.is_alive, action_mask=stored_mask)
             total_reward += reward
             step_rewards.append(reward)
             if len(step_rewards) > 500:
@@ -869,8 +873,11 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             if agent.observation_mask:
                 apply_preset_mask(obs, agent.observation_mask)
             obs_arr = np.array(obs, dtype=np.float32)
+            from classes.actions import compute_dynamic_mask
+            dyn_mask = compute_dynamic_mask(agent, {'cols': sim.cols, 'rows': sim.rows, 'now': sim.now})
+            combined_mask = action_mask * dyn_mask if action_mask is not None else dyn_mask
             action, log_prob, value = net.get_action(obs_arr, temperature=hunger_temperature(agent),
-                                                      action_mask=action_mask)
+                                                      action_mask=combined_mask)
 
             target = None
             for obj in WorldObject.on_map(agent.current_map):
@@ -929,7 +936,7 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
 
         if agent.is_alive:
             buffer.store(obs_arr, action, reward, value, log_prob,
-                         not agent.is_alive, action_mask=action_mask)
+                         not agent.is_alive, action_mask=combined_mask)
 
         # Accumulate reward for goal model
         if _goal_state:
