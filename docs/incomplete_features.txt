@@ -14,9 +14,9 @@ HIGH IMPACT — Blocks curriculum stages
 MEDIUM IMPACT — Weakens learning
 ---------------------------------
 
-- No swimming mechanic: can_swim flag exists but is never set to True.
-  Water is always a one-way death trap. No way to learn water as a resource
-  rather than a hazard.
+- No species/skill that sets can_swim=True yet. Swimming mechanic works
+  (swimmers walk through water, bypass flow, don't drown) but nothing
+  grants the flag.
 
 - Dialogue trees not loaded in training arena: TALK action succeeds but
   the conversation system (dialogue table, trees, effects) doesn't fire.

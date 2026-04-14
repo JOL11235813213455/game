@@ -100,7 +100,8 @@ class MovementMixin:
         ny = max(0, min(rows - 1 - max_oy, self.location.y + dy))
         current_tile = self.current_map.tiles.get(self.location)
         target = self.current_map.tiles.get(MapKey(nx, ny, self.location.z))
-        if not (target and target.walkable):
+        if not (target and (target.walkable or
+                (self.can_swim and getattr(target, 'liquid', False)))):
             return
         if current_tile and (dx, dy) in DIRECTION_BOUNDS:
             exit_attr, entry_attr = DIRECTION_BOUNDS[(dx, dy)]
