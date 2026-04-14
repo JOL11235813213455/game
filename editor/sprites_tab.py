@@ -1085,7 +1085,7 @@ class SpritesTab(ttk.Frame):
         self._palette = {}
         for char, val in raw_palette.items():
             if isinstance(val, (list, tuple)):
-                r2, g2, b2 = val
+                r2, g2, b2 = val[0], val[1], val[2]
                 self._palette[char] = f'#{r2:02x}{g2:02x}{b2:02x}'
             else:
                 self._palette[char] = val
