@@ -150,8 +150,9 @@ class WorldObject(Trackable):
 
         cols = data['width']
         rows = len(data['pixels'])
-        w = int(cols * (block_size / 32) * self.tile_scale)
-        h = int(rows * (block_size / 32) * self.tile_scale)
+        scale = block_size / 32.0 * self.tile_scale
+        w = max(1, round(cols * scale))
+        h = max(1, round(rows * scale))
 
         surface = get_scaled(name, w, h, block_size)
         if surface is None:

@@ -32,9 +32,10 @@ _composite_anim_cache: dict[tuple, list] = {}
 _last_block_size: int = 0
 
 
-def invalidate():
-    """Clear all caches (call on zoom change or data reload)."""
-    _native_cache.clear()
+def invalidate(full: bool = False):
+    """Clear zoom-dependent caches. Native cache is preserved unless full=True."""
+    if full:
+        _native_cache.clear()
     _surface_cache.clear()
     _composite_cache.clear()
     _composite_anim_cache.clear()
@@ -362,10 +363,10 @@ def get_composite(composite_name: str, block_size: int,
         return None
 
     native_surf, _, _ = result
-    scale = block_size / 32 * tile_scale
+    scale = block_size / 32.0 * tile_scale
     nw, nh = native_surf.get_size()
-    sw = max(1, int(nw * scale))
-    sh = max(1, int(nh * scale))
+    sw = max(1, round(nw * scale))
+    sh = max(1, round(nh * scale))
     surface = pygame.transform.scale(native_surf, (sw, sh))
 
     from main.config import get_tile_height
@@ -503,8 +504,8 @@ def pre_render_composite_anim(composite_name: str, anim_name: str,
 
         native_surf, _, _ = result
         nw, nh = native_surf.get_size()
-        sw = max(1, int(nw * scale))
-        sh = max(1, int(nh * scale))
+        sw = max(1, round(nw * scale))
+        sh = max(1, round(nh * scale))
         surface = pygame.transform.scale(native_surf, (sw, sh))
 
         from main.config import get_tile_height

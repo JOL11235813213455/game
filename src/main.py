@@ -316,7 +316,7 @@ def main():
         # Pass 2: draw sprites/structures sorted by Y (z_index breaks ties on same tile)
         renderables = [o for o in WorldObject.on_map(player.current_map)
                        if isinstance(o, (Creature, Structure))]
-        for obj in sorted(renderables, key=lambda o: (o.location.y, o.z_index)):
+        for obj in sorted(renderables, key=lambda o: (o.location.y, o.z_index, o.location.x, id(o))):
             result = obj.make_surface(bs)
             if result:
                 sprite_surf, (bdx, bdy) = result
