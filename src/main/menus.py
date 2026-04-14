@@ -304,10 +304,12 @@ class InventoryMenu:
                 e_flag = self.font_sm.render('[E]quipped', True, C_GOLD_BRIGHT)
                 surface.blit(e_flag, (x + w - e_flag.get_width() - 12, row_y + 7))
             elif isinstance(item, Consumable):
-                e_flag = self.font_sm.render('[E] use', True, C_TEXT_DIM)
+                verb = getattr(item, 'action_word', '') or 'use'
+                e_flag = self.font_sm.render(f'[E] {verb}', True, C_TEXT_DIM)
                 surface.blit(e_flag, (x + w - e_flag.get_width() - 12, row_y + 7))
             elif isinstance(item, Equippable):
-                e_flag = self.font_sm.render('[E] equip', True, C_TEXT_DIM)
+                verb = getattr(item, 'action_word', '') or 'equip'
+                e_flag = self.font_sm.render(f'[E] {verb}', True, C_TEXT_DIM)
                 surface.blit(e_flag, (x + w - e_flag.get_width() - 12, row_y + 7))
 
     def _draw_equipment(self, surface, player, x, y, w, h):

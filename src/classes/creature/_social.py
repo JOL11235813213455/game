@@ -438,13 +438,11 @@ class SocialMixin:
         if target_net >= 0:
             # Accept trade
             result['accepted'] = True
-            # Execute the swap
+            # Execute the swap via transfer_item
             for item in offered:
-                self.inventory.items.remove(item)
-                target.inventory.items.append(item)
+                self.transfer_item(item, self.inventory, target.inventory)
             for item in requested:
-                target.inventory.items.remove(item)
-                self.inventory.items.append(item)
+                self.transfer_item(item, target.inventory, self.inventory)
 
             # Fair or exploitative?
             self_net = self_gain - self_loss

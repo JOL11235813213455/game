@@ -1,6 +1,6 @@
 from __future__ import annotations
 from classes.stats import Stat
-from classes.inventory import Equippable, Wearable, Weapon, Consumable, Slot
+from classes.inventory import Equippable, Wearable, Weapon, Consumable, Stackable, Slot
 from classes.world_object import WorldObject
 
 
@@ -107,6 +107,9 @@ class InventoryMixin:
         tile.inventory.items.remove(item)
         self.inventory.items.append(item)
 
+        if isinstance(item, Stackable):
+            Stackable.coalesce(self.inventory)
+
         # Auto-pop: check if this item triggers an ItemFrame creation
         self._check_auto_pop(item)
 
@@ -183,13 +186,17 @@ class InventoryMixin:
         return True
 
     def transfer_item(self, item, source, target):
+        """Move an item between accessible inventories (self, tile, adjacent creatures)."""
         from classes.creature import Creature
         tile = self.current_map.tiles.get(self.location)
         accessible = [self.inventory]
         if tile:
             accessible.append(tile.inventory)
-            for creature in WorldObject.on_map(self.current_map):
-                if isinstance(creature, Creature) and creature is not self and creature.location == self.location:
+        cx, cy = self.location.x, self.location.y
+        for creature in WorldObject.on_map(self.current_map):
+            if isinstance(creature, Creature) and creature is not self and creature.is_alive:
+                d = abs(cx - creature.location.x) + abs(cy - creature.location.y)
+                if d <= 1:
                     accessible.append(creature.inventory)
         if source not in accessible or target not in accessible:
             return False

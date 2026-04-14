@@ -25,7 +25,21 @@ class CombatMixin:
         return abs(self.location.x - other.location.x) + abs(self.location.y - other.location.y)
 
     def can_see(self, other) -> bool:
-        """Return True if other is within effective sight range."""
+        """Return True if other is within effective sight range.
+
+        Covered tiles block cross-cover vision: a creature under cover
+        cannot see outside, and an uncovered creature cannot see in,
+        unless both are on the same tile.
+        """
+        if self.location == other.location:
+            effective_range = self.stats.active[Stat.SIGHT_RANGE]() - other.stats.active[Stat.STEALTH]()
+            return self._sight_distance(other) <= effective_range
+        my_tile = self.current_map.tiles.get(self.location) if self.current_map else None
+        their_tile = other.current_map.tiles.get(other.location) if other.current_map else None
+        my_covered = getattr(my_tile, 'covered', False) if my_tile else False
+        their_covered = getattr(their_tile, 'covered', False) if their_tile else False
+        if my_covered != their_covered:
+            return False
         effective_range = self.stats.active[Stat.SIGHT_RANGE]() - other.stats.active[Stat.STEALTH]()
         return self._sight_distance(other) <= effective_range
 
@@ -492,6 +506,8 @@ class CombatMixin:
         trap_dc = tile.stat_mods.get('trap_dc')
         if trap_dc is None:
             return
+        if tile.stat_mods.get('trap_creator_uid') == self.uid:
+            return
 
         # Detection check: d20 + DETECTION vs trap_dc
         detection = self.stats.active[Stat.DETECTION]()
@@ -519,6 +535,7 @@ class CombatMixin:
             tile.inventory.items.remove(trap_item)
         tile.stat_mods.pop('trap_dc', None)
         tile.stat_mods.pop('trap_item', None)
+        tile.stat_mods.pop('trap_creator_uid', None)
 
     def die(self):
         """Handle creature death: drop inventory + gold on tile, remove from map."""

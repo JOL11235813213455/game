@@ -97,6 +97,7 @@ def emit_sound(creature, sound_type: str, volume: float = None, tick: int = 0):
         tick=tick,
     )
     creature.current_map._sound_events.append(ev)
+    creature._noise_emitted = getattr(creature, '_noise_emitted', 0.0) + volume
 
 
 def clear_sounds(game_map):

@@ -88,6 +88,8 @@ class MovementMixin:
         # Encumbrance: at 200%+ carry weight, movement is impossible
         carry_max = self.stats.active[Stat.CARRY_WEIGHT]()
         if carry_max > 0 and self.carried_weight >= carry_max * 2:
+            from classes.sound import emit_sound
+            emit_sound(self, 'struggle', volume=2.0, tick=0)
             return
         # Flow restriction: in flowing liquid, non-swimmers are axis-locked
         if self._flow_restricts_movement(dx, dy):
@@ -120,6 +122,24 @@ class MovementMixin:
             if key not in visited:
                 visited.add(key)
                 self._tiles_explored += 1
+        # Stealth tracking: sneaking past hostiles without detection
+        if getattr(self, 'movement_mode', 'walk') == 'sneak' and self.location != old_loc:
+            from classes.relationship_graph import GRAPH
+            from classes.world_object import WorldObject
+            from classes.creature import Creature as _C
+            rels = GRAPH.edges_from(self.uid)
+            sight = self.stats.active[Stat.SIGHT_RANGE]()
+            for obj in WorldObject.on_map(self.current_map):
+                if not isinstance(obj, _C) or obj is self or not obj.is_alive:
+                    continue
+                rel = rels.get(obj.uid)
+                if not rel or rel[0] >= -5:
+                    continue
+                d = abs(self.location.x - obj.location.x) + abs(self.location.y - obj.location.y)
+                if d <= sight and not obj.can_see(self):
+                    self._stealth_moves = getattr(self, '_stealth_moves', 0) + 1
+                    break
+
         behavior = self._DIR_BEHAVIORS.get((dx, dy), 'walk_south')
         self.play_animation(behavior)
 

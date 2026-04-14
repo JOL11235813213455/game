@@ -195,6 +195,11 @@ def compute_reward(creature, prev: dict, curr: dict,
     if dmg_delta > 0:
         signals['damage_dealt'] = math.log(1 + dmg_delta) * 1.0
 
+    # Stealth: reward for sneaking past hostiles undetected
+    stealth_delta = curr.get('stealth_moves', 0) - prev.get('stealth_moves', 0)
+    if stealth_delta > 0:
+        signals['stealth_success'] = stealth_delta * 0.8
+
     # ---- 9. Exploration (scale 0.5) ----
     new_tiles = curr['tiles_explored'] - prev['tiles_explored']
     new_met = curr['creatures_met'] - prev['creatures_met']
@@ -252,6 +257,11 @@ def compute_reward(creature, prev: dict, curr: dict,
         crowd_penalty = -(hostile_nearby - 1) * 0.5
     crowd_bonus = min(0.3, friendly_nearby * 0.1)
     signals['crowding'] = crowd_penalty + crowd_bonus
+
+    # Noise: penalty for loud creatures (teaches stealth value)
+    noise_delta = curr.get('noise_emitted', 0.0) - prev.get('noise_emitted', 0.0)
+    if noise_delta > 0:
+        signals['noise_penalty'] = -math.log(1 + noise_delta) * 0.1
 
     # Idleness: small penalty for WAITing at full stamina
     if (last_action is not None and last_action == 23  # WAIT
@@ -489,6 +499,8 @@ def make_reward_snapshot(creature) -> dict:
         'damage_dealt': getattr(creature, '_damage_dealt', 0),
         'pickups': getattr(creature, '_pickups', 0),
         'stolen_value': getattr(creature, '_stolen_value', 0.0),
+        'stealth_moves': getattr(creature, '_stealth_moves', 0),
+        'noise_emitted': getattr(creature, '_noise_emitted', 0.0),
         'outstanding_lies': GRAPH.outstanding_lies(creature.uid),
         'stamina_ratio': stats.active[Stat.CUR_STAMINA]() / stam_max,
         'encumbrance_ratio': creature.carried_weight / max(1, stats.active[Stat.CARRY_WEIGHT]()),

@@ -17,15 +17,7 @@ MEDIUM IMPACT — Weakens learning
 
 LOW IMPACT — Polish
 --------------------
-- Trap creator not immune to own trap
-- No explicit stealth reward for undetected movement past hostiles
-- Movement at 200%+ carry blocks correctly, but no feedback to player (no message/sound)
-- Sound emission has no RL learning signal (no reward for silence)
-- render_on_creature field on items has no rendering path
-- action_word on items has no description-building consumer
-- Stackable.coalesce() implemented but never called (.add() is used by harvest)
-- transfer_item() fully implemented but never called
-- covered tile property declared but never read
+(none remaining)
 
 COMPLETED SYSTEMS
 =================
@@ -48,13 +40,15 @@ Creature System
 - Social: intimidate, deceive (context-gated + rumor poisoning + deceit tracking), trade (auto + proposed), bribe, steal (auto-resolve + familiarity modifier), share_rumor, talk, call_backup, proselytize
 - Deceit system: outstanding lies tracked in RelationshipGraph, revelation via social interactions, deception_stress penalty signal, long-term honesty incentive
 - Economy: harvest (5 resource types), farm, dig, process (9 recipes), craft (ItemFrames), job (7 job types), trade with loan fallback, REPAY_LOAN
-- Inventory: pickup (auto + gold), smart drop (lowest value/weight), auto-equip (NN only), use_item (consumables + food)
+- Inventory: pickup (auto + gold + coalesce), smart drop (lowest value/weight), auto-equip (NN only), use_item (consumables + food), transfer_item (adjacent inventories)
 - Reproduction: propose_pairing, force_pairing, egg system, genetics (14-gene chromosomes, Mendelian inheritance), fecundity curves
-- Encumbrance: S-curve penalty above 100% carry weight (regen slowed), movement blocked at 200%
+- Encumbrance: S-curve penalty above 100% carry weight (regen slowed), movement blocked at 200% with struggle sound feedback
 - Swimming: can_swim from species DB or learned (innate 20%, witness 10%/tick, survival 2%/tick)
 - Occupation system: SLEEP (6-8hr, gradual stamina/mana restore, wake on noise/damage/expiry, 1% sleepwalk), JOB (1hr, purpose effects + wage each tick, hostile interrupts)
-- Durability: weapons and armor lose 1 durability per 10 hits, break at 0 (removed from equipment)
+- Durability: weapons and armor lose 1 durability per hit, break at 0 (removed from equipment)
 - Dialogue: full conversation tree system with conditions, effects, quest triggers (loaded in training via DB)
+- Traps: creator-immune (trap_creator_uid stored on tile, checked before trigger)
+- Covered tiles: block cross-cover vision (creatures under cover can't see out, uncovered can't see in)
 
 RL Training Pipeline
 - Lifecycle ticks in headless training: _tick_lifecycle_day() fires on day boundaries (egg gestation/hatching, fatigue accumulation, age increment)
@@ -80,13 +74,13 @@ Observation (1811 floats)
 - Social deception: outstanding_lies count, deceits_against count
 - Water/hearing awareness, world time, temporal deltas, trends, time-since, reward signals, 264 math transforms
 
-Reward Signals (27+)
+Reward Signals (29+)
 - hp, gold, debt, inventory, equipment, equipment_upgrade, encumbrance_relief
 - reputation, allies, social_success, kills, damage_dealt
 - exploration, pickup_success, piety, quests, life_goals, xp, wage, trade
 - hunger, goal_progress, goal_completed, purpose_proximity
-- theft (ln-scaled by stolen value)
-- Penalties: failed_actions, fatigue, crowding, water_danger, idleness, deception_stress, death
+- theft (ln-scaled by stolen value), stealth_success (undetected moves past hostiles)
+- Penalties: failed_actions, fatigue, crowding, water_danger, idleness, deception_stress, noise_penalty, death
 
 Arena
 - Purpose districts (14 types), resource tiles (5 types with regrowth)
@@ -106,13 +100,14 @@ Editor
 
 Presentation
 - Composite sprite rendering with layer connections and keyframe animations
+- Equipment overlay: render_on_creature items composited over creature sprite
 - Deterministic render sort (y, z_index, x, id) — no flickering
 - Uniform animation bounding box — no per-frame jitter
 - round() scaling for consistent NPC sizing across zoom levels
 - Day/night cycle with moon phases, shadows, top-lighting
 - Collision system with per-tile and structure collision masks
 - Bounds/entry system for tile traversal
-- Player UI: inventory menu, quest log, HUD, dialogue menu, contextual keybind strip
+- Player UI: inventory menu (with action_word verbs), quest log, HUD, dialogue menu, contextual keybind strip
 - Player sleep: Z to sleep/wake, dark overlay, auto-wake on damage/noise/duration
 - Test Town demo world with houses, NPCs, cave
 

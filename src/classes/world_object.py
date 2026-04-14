@@ -172,7 +172,40 @@ class WorldObject(Trackable):
         blit_dx = tile_cx - ap_sx
         blit_dy = tile_cy - ap_sy
 
-        return surface, (blit_dx, blit_dy)
+        result = (surface, (blit_dx, blit_dy))
+        return self._overlay_equipment(result, block_size)
+
+    def _overlay_equipment(self, result, block_size: int):
+        """Overlay equipped items with render_on_creature=True."""
+        equipment = getattr(self, 'equipment', None)
+        if not equipment:
+            return result
+        from main.sprite_cache import get_scaled
+        from data.db import SPRITE_DATA
+        surface, offsets = result
+        overlaid = False
+        for item in set(equipment.values()):
+            if item is None or not getattr(item, 'render_on_creature', False):
+                continue
+            if not item.sprite_name:
+                continue
+            idata = SPRITE_DATA.get(item.sprite_name)
+            if idata is None:
+                continue
+            scale = block_size / 32.0 * self.tile_scale
+            iw = max(1, round(idata['width'] * scale))
+            ih = max(1, round(len(idata['pixels']) * scale))
+            item_surf = get_scaled(item.sprite_name, iw, ih, block_size)
+            if item_surf is None:
+                continue
+            if not overlaid:
+                import pygame
+                surface = surface.copy()
+                overlaid = True
+            ix = (surface.get_width() - iw) // 2
+            iy = (surface.get_height() - ih) // 2
+            surface.blit(item_surf, (ix, iy))
+        return (surface, offsets) if overlaid else result
 
     def _make_composite_surface(self, block_size: int):
         """Get cached composite surface, using pre-rendered animation frames when available."""

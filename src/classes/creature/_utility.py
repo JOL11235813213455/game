@@ -146,6 +146,10 @@ class UtilityMixin:
             'wheat', 'berries', 'fish', 'mushrooms', 'corn', 'game')
         self.inventory.items.append(harvested)
 
+        from classes.inventory import Stackable
+        if isinstance(harvested, Stackable):
+            Stackable.coalesce(self.inventory)
+
         result['success'] = True
         result['item'] = harvested
         result['amount'] = amount
@@ -254,6 +258,10 @@ class UtilityMixin:
                     break
         if not merged:
             self.inventory.items.append(output)
+
+        from classes.inventory import Stackable
+        if isinstance(output, Stackable):
+            Stackable.coalesce(self.inventory)
 
         result['success'] = True
         result['recipe'] = recipe.name
@@ -608,6 +616,7 @@ class UtilityMixin:
         craft_bonus = self.stats.active[Stat.CRAFT_QUALITY]()
         tile.stat_mods['trap_dc'] = dc + craft_bonus
         tile.stat_mods['trap_item'] = trap_item.name
+        tile.stat_mods['trap_creator_uid'] = self.uid
 
         return True
 
