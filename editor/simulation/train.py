@@ -372,6 +372,7 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
     _prev_hunger = {}   # uid → hunger last tick
 
     from collections import deque
+    from classes.stats import Stat
     from classes.observation import build_observation, make_snapshot
     from classes.actions import dispatch, Action, TILE_PURPOSES
     from classes.world_object import WorldObject
@@ -802,6 +803,7 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
     _ppo_prev_hp = None
     _ppo_prev_hunger = None
 
+    from classes.stats import Stat
     from classes.observation import build_observation
     from classes.actions import dispatch, Action as ActionEnum, TILE_PURPOSES
     from classes.world_object import WorldObject
