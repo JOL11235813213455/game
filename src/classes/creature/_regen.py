@@ -31,6 +31,8 @@ class RegenMixin:
 
     def _do_hunger_tick(self, _now: int):
         """Drain hunger over time. Apply starvation effects."""
+        if not self.is_alive:
+            return
         self.hunger = max(-1.0, self.hunger - self._hunger_drain)
 
         # Well-fed bonus: boost regen rates

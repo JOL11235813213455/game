@@ -557,6 +557,7 @@ class CombatMixin:
             return
 
         self.play_animation('death')
+        self._timed_events.clear()
 
         # Permanently remove non-ghost dead creature from spatial registries.
         # Keep incoming relationship edges — survivors remember the dead.

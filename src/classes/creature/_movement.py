@@ -317,6 +317,8 @@ class MovementMixin:
 
     def _do_water_tick(self, now: int):
         """Periodic water check: drowning damage, flow, and swim learning."""
+        if self.current_map is None:
+            return
         tile = self.current_map.tiles.get(self.location)
         if tile is None or not getattr(tile, 'liquid', False):
             self.is_drowning = False
