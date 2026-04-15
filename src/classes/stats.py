@@ -387,6 +387,7 @@ class Stats:
 
         # ---- modifier layer ----
         self.mods: list[dict] = []
+        self._mod_cache: dict[Stat, int] | None = None  # invalidated on mod change
 
         # ---- active layer (callables) ----
         self.active: dict[Stat, callable] = {}
@@ -430,19 +431,35 @@ class Stats:
         """Get active value for a base stat (used by derived formulas)."""
         return self.base.get(stat, 0) + self._sum_mods(stat)
 
-    def _sum_mods(self, stat: Stat) -> int:
-        """Sum all modifier amounts for a given stat, respecting stackability."""
-        total = 0
-        seen_sources: set[str] = set()
+    def _rebuild_mod_cache(self):
+        """Rebuild the {stat: total_modifier} cache from the mods list."""
+        cache: dict[Stat, int] = {}
+        seen: dict[Stat, set] = {}
         for mod in self.mods:
-            if mod['stat'] != stat:
-                continue
+            st = mod['stat']
             source = mod['source']
-            if not mod.get('stackable', True) and source in seen_sources:
-                continue
-            seen_sources.add(source)
-            total += mod['amount']
-        return total
+            stackable = mod.get('stackable', True)
+            if not stackable:
+                s = seen.get(st)
+                if s is None:
+                    s = set()
+                    seen[st] = s
+                if source in s:
+                    continue
+                s.add(source)
+            cache[st] = cache.get(st, 0) + mod['amount']
+        self._mod_cache = cache
+
+    def _sum_mods(self, stat: Stat) -> int:
+        """Sum all modifier amounts for a given stat (cached)."""
+        if not self.mods:
+            return 0
+        if self._mod_cache is None:
+            self._rebuild_mod_cache()
+        return self._mod_cache.get(stat, 0)
+
+    def _invalidate_mod_cache(self):
+        self._mod_cache = None
 
     # -- modifier management ------------------------------------------------
 
@@ -452,18 +469,21 @@ class Stats:
         mod = {'source': source, 'stat': stat, 'amount': amount,
                'stackable': stackable}
         self.mods.append(mod)
+        self._invalidate_mod_cache()
         return mod
 
     def remove_mod(self, mod: dict):
         """Remove a specific modifier (by identity)."""
         try:
             self.mods.remove(mod)
+            self._invalidate_mod_cache()
         except ValueError:
             pass
 
     def remove_mods_by_source(self, source: str):
         """Remove all modifiers from a given source."""
         self.mods = [m for m in self.mods if m['source'] != source]
+        self._invalidate_mod_cache()
 
     # -- leveling -----------------------------------------------------------
 
