@@ -465,6 +465,10 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
                 if due or emergency or abandoned:
                     _select_goal(c, step)
 
+        # Sync Cython hot arrays before observation builds
+        if hasattr(sim, 'sync_hot_array'):
+            sim.sync_hot_array()
+
         # Each creature acts using the shared net
         for c in sim.creatures:
             if not c.is_alive:
@@ -882,6 +886,8 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
                 _ppo_select_goal(step)
 
         if agent.is_alive:
+            if hasattr(sim, 'sync_hot_array'):
+                sim.sync_hot_array()
             agent.update_spatial_memory(sim.now)
 
             obs = build_observation(agent, sim.cols, sim.rows,

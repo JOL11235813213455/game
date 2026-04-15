@@ -92,6 +92,21 @@ class Simulation:
         from classes.gods import WorldData
         self.world_data = WorldData()
 
+        # Cython acceleration structures (transient, synced per step)
+        self._hot_creatures = None
+        self._tile_grid = None
+        try:
+            from fast_native.fast_creatures import CreatureHotArray
+            self._hot_creatures = CreatureHotArray()
+        except ImportError:
+            pass
+        try:
+            from fast_native.fast_tiles import TileGrid
+            self._tile_grid = TileGrid()
+            self._tile_grid.sync(self.game_map)
+        except ImportError:
+            pass
+
         # Game clock — drives schedules, day/night, temporal observations.
         # Convention: 1 tick (500ms) = 1 game minute, so 1 game hour = 60
         # ticks and 1 full game day = 1440 ticks (~12 real minutes).
@@ -198,6 +213,15 @@ class Simulation:
         self.now += self.tick_ms
         self.step_count += 1
 
+        # Set tile grid reference (synced once at init, tiles don't change often)
+        from classes.creature import Creature as _Creature
+        if self._tile_grid is not None:
+            _Creature._tile_grid = self._tile_grid
+        # Hot creature array: set reference but DON'T sync every step.
+        # Training loops call sync_hot_array() explicitly before obs builds.
+        if self._hot_creatures is not None:
+            _Creature._hot_array = self._hot_creatures
+
         # Clear sound buffer at the START of the tick. Action handlers
         # called during the creature update pass will emit fresh sounds
         # into this empty buffer; the perception delivery pass at the
@@ -276,6 +300,11 @@ class Simulation:
             })
 
         return results
+
+    def sync_hot_array(self):
+        """Sync the Cython creature hot array. Call before observation builds."""
+        if self._hot_creatures is not None:
+            self._hot_creatures.sync(list(self.creatures))
 
     @property
     def alive_count(self) -> int:

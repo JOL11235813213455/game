@@ -919,60 +919,62 @@ def build_observation(creature, cols: int, rows: int,
             obs.append(0.0)
 
     # ==== SECTION 17: SPATIAL WALLS + OPENNESS (25) ====
-    from classes.maps import DIRECTION_BOUNDS as _DB
-    _dirs8 = [(0,-1),(0,1),(1,0),(-1,0),(1,-1),(-1,-1),(1,1),(-1,1)]
-    for dx, dy in _dirs8:
-        d = 0
-        _bd = _DB.get((dx, dy))
-        for step in range(1, sight + 1):
-            prev = game_map.tiles.get(MapKey(cx + dx*(step-1), cy + dy*(step-1), creature.location.z))
-            t = game_map.tiles.get(MapKey(cx + dx*step, cy + dy*step, creature.location.z))
-            if not (t and t.walkable):
-                break
-            if _bd and prev:
-                _exit, _entry = _bd
-                if not getattr(prev.bounds, _exit, True) or not getattr(t.bounds, _entry, True):
+    from classes.creature import Creature as _CreatureRef
+    _tg = _CreatureRef._tile_grid
+    if _tg is not None:
+        _sw_vals = _tg.spatial_walls(cx, cy, sight)
+        obs.extend(_sw_vals)  # all 25 floats including exit direction
+    else:
+        from classes.maps import DIRECTION_BOUNDS as _DB
+        _dirs8 = [(0,-1),(0,1),(1,0),(-1,0),(1,-1),(-1,-1),(1,1),(-1,1)]
+        for dx, dy in _dirs8:
+            d = 0
+            _bd = _DB.get((dx, dy))
+            for step in range(1, sight + 1):
+                prev = game_map.tiles.get(MapKey(cx + dx*(step-1), cy + dy*(step-1), creature.location.z))
+                t = game_map.tiles.get(MapKey(cx + dx*step, cy + dy*step, creature.location.z))
+                if not (t and t.walkable):
                     break
-            d = step
-        obs.append(d / max(1, sight))
+                if _bd and prev:
+                    _exit, _entry = _bd
+                    if not getattr(prev.bounds, _exit, True) or not getattr(t.bounds, _entry, True):
+                        break
+                d = step
+            obs.append(d / max(1, sight))
 
-    _cur_tile = game_map.tiles.get(creature.location)
-    for dx, dy in _dirs8:
-        t = game_map.tiles.get(MapKey(cx+dx, cy+dy, creature.location.z))
-        passable = bool(t and t.walkable)
-        if passable and _cur_tile and (dx, dy) in _DB:
-            _exit, _entry = _DB[(dx, dy)]
-            if not getattr(_cur_tile.bounds, _exit, True) or not getattr(t.bounds, _entry, True):
-                passable = False
-        obs.append(1.0 if passable else 0.0)
+        _cur_tile = game_map.tiles.get(creature.location)
+        for dx, dy in _dirs8:
+            t = game_map.tiles.get(MapKey(cx+dx, cy+dy, creature.location.z))
+            passable = bool(t and t.walkable)
+            if passable and _cur_tile and (dx, dy) in _DB:
+                _exit, _entry = _DB[(dx, dy)]
+                if not getattr(_cur_tile.bounds, _exit, True) or not getattr(t.bounds, _entry, True):
+                    passable = False
+            obs.append(1.0 if passable else 0.0)
 
-    # Ring walkability
-    for ring in range(1, 4):
-        ring_tiles = 0
-        ring_walk = 0
-        for ddx in range(-ring, ring+1):
-            for ddy in range(-ring, ring+1):
-                if abs(ddx) == ring or abs(ddy) == ring:
-                    ring_tiles += 1
-                    t = game_map.tiles.get(MapKey(cx+ddx, cy+ddy, creature.location.z))
-                    if t and t.walkable:
-                        ring_walk += 1
-        obs.append(ring_walk / max(1, ring_tiles))
+        for ring in range(1, 4):
+            ring_tiles = 0
+            ring_walk = 0
+            for ddx in range(-ring, ring+1):
+                for ddy in range(-ring, ring+1):
+                    if abs(ddx) == ring or abs(ddy) == ring:
+                        ring_tiles += 1
+                        t = game_map.tiles.get(MapKey(cx+ddx, cy+ddy, creature.location.z))
+                        if t and t.walkable:
+                            ring_walk += 1
+            obs.append(ring_walk / max(1, ring_tiles))
 
-    # Chokepoint detection
-    adj_walk = sum(1 for dx, dy in _dirs8[:4]
-                   if game_map.tiles.get(MapKey(cx+dx, cy+dy, creature.location.z))
-                   and game_map.tiles[MapKey(cx+dx, cy+dy, creature.location.z)].walkable)
-    obs.append(1.0 if adj_walk <= 2 else 0.0)
-    obs.append(1.0 if adj_walk >= 6 else 0.0)
-    obs.append(1.0 if adj_walk <= 2 else 0.0)  # corner approx
+        adj_walk = sum(1 for dx, dy in _dirs8[:4]
+                       if game_map.tiles.get(MapKey(cx+dx, cy+dy, creature.location.z))
+                       and game_map.tiles[MapKey(cx+dx, cy+dy, creature.location.z)].walkable)
+        obs.append(1.0 if adj_walk <= 2 else 0.0)
+        obs.append(1.0 if adj_walk >= 6 else 0.0)
+        obs.append(1.0 if adj_walk <= 2 else 0.0)
 
-    # Direction to nearest exit
-    nearest_exit_dx, nearest_exit_dy = 0.0, 0.0
-    # Simplified: skip exit scan for performance
-
-    obs.append(nearest_exit_dx)
-    obs.append(nearest_exit_dy)
+    # Direction to nearest exit (included in TileGrid.spatial_walls when available)
+    if _tg is None:
+        obs.append(0.0)
+        obs.append(0.0)
 
     # ==== SECTION 18: SPATIAL FEATURE LOCATIONS (12) ====
     # Directions reuse the enemies/allies lists pre-computed in the
