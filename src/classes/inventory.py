@@ -299,6 +299,7 @@ class Structure(Item):
         self.collision_mask  = [tuple(p) for p in (collision_mask or list(self.footprint))]
         self.entry_points    = entry_points or {}
         self.nested_map_name = nested_map
+        self.wall_face: str | None = None  # N/S/E/W — locks sprite to a wall face in first-person
 
 class Egg(Item):
     """An egg containing an unhatched creature.

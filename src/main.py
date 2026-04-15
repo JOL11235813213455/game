@@ -58,26 +58,28 @@ def main():
         stats={Stat.VIT: 10},
     )
     # Place decorative structures on the map from a hand-laid list.
-    # Each entry: (map_name, x, y, sprite_name, z_index).
-    # Only fires when the matching map is the currently-loaded one.
+    # Each entry: (map_name, x, y, sprite_name, z_index, wall_face).
+    # wall_face: None=billboard, 'N'/'S'/'E'/'W'=flush against that wall face.
     _structures = [
         # --- test_town structures ---
-        ('test_town', 8,  8,  's_house_wood',      3),  # NW house
-        ('test_town', 15, 8,  's_house_wood',      3),  # NE house
-        ('test_town', 8,  15, 's_house_wood',      3),  # SW house
-        ('test_town', 15, 15, 's_house_wood',      3),  # SE house
-        ('test_town', 15, 5,  's_house_wood',      3),  # far N house
-        ('test_town', 12, 11, 's_well',            2),  # well in town square
-        ('test_town', 1,  12, 's_cave_entrance',   3),  # cave entrance (west)
-        ('test_town', 12, 2,  's_sign',            2),  # town sign (north)
-        ('test_town', 21, 12, 's_sign',            2),  # signpost east
+        ('test_town', 8,  8,  's_house_wood',      3, 'S'),   # NW house
+        ('test_town', 15, 8,  's_house_wood',      3, 'S'),   # NE house
+        ('test_town', 8,  15, 's_house_wood',      3, 'S'),   # SW house
+        ('test_town', 15, 15, 's_house_wood',      3, 'S'),   # SE house
+        ('test_town', 15, 5,  's_house_wood',      3, 'S'),   # far N house
+        ('test_town', 12, 11, 's_well',            2, None),  # well (billboard)
+        ('test_town', 1,  12, 's_cave_entrance',   3, 'E'),   # cave entrance (west wall, faces east)
+        ('test_town', 12, 2,  's_sign',            2, 'S'),   # town sign
+        ('test_town', 21, 12, 's_sign',            2, 'W'),   # signpost east
         # --- cave interior ---
-        ('cave_test', 4,  3,  's_chest',           2),  # locket's hiding spot
-        ('cave_test', 8,  3,  's_treasure',        2),  # bonus treasure
+        ('cave_test', 4,  3,  's_chest',           2, None),  # chest (billboard)
+        ('cave_test', 8,  3,  's_treasure',        2, None),  # treasure (billboard)
     ]
 
     spawned_structures = []  # strong refs to keep Structure instances alive
-    for (smap, sx, sy, sprite_name, z) in _structures:
+    for entry in _structures:
+        smap, sx, sy, sprite_name, z = entry[:5]
+        wface = entry[5] if len(entry) > 5 else None
         if smap != game_map.name:
             continue
         s = Structure(
@@ -87,7 +89,7 @@ def main():
             footprint=[[0, 0]],
         )
         s.z_index = z
-        # Place on the map via current_map setter (registers in _by_map)
+        s.wall_face = wface
         s.current_map = game_map
         s.location = MapKey(sx, sy, 0)
         spawned_structures.append(s)

@@ -166,6 +166,41 @@ def cast_rays(player_x: float, player_y: float, angle: float,
     return results
 
 
+def _build_wall_structure_lookup(game_map) -> dict:
+    """Build {(tile_x, tile_y, face): structure} for wall-aligned structures."""
+    from classes.world_object import WorldObject
+    from classes.inventory import Structure
+    lookup = {}
+    for obj in WorldObject.on_map(game_map):
+        if not isinstance(obj, Structure):
+            continue
+        face = getattr(obj, 'wall_face', None)
+        if face:
+            key = (obj.location.x, obj.location.y, face)
+            lookup[key] = obj
+    return lookup
+
+
+def _get_structure_wall_strip(structure, wall_frac: float,
+                               strip_h: int) -> pygame.Surface | None:
+    """Sample a vertical strip from a structure's sprite for wall rendering."""
+    result = structure.make_surface(32)
+    if result is None:
+        return None
+    surf, _ = result
+    sw_s, sh_s = surf.get_size()
+    if sw_s <= 0 or sh_s <= 0:
+        return None
+    src_x = int(wall_frac * (sw_s - 1))
+    src_x = max(0, min(sw_s - 1, src_x))
+    strip = pygame.Surface((1, strip_h), pygame.SRCALPHA)
+    for dy in range(strip_h):
+        src_y = int(dy / strip_h * sh_s)
+        src_y = min(sh_s - 1, src_y)
+        strip.set_at((0, dy), surf.get_at((src_x, src_y)))
+    return strip
+
+
 def render_first_person(screen: pygame.Surface, player, game_map,
                         cols: int, rows: int, game_clock=None):
     """Render the first-person view."""
@@ -186,6 +221,9 @@ def render_first_person(screen: pygame.Surface, player, game_map,
 
     # Depth buffer for sprite clipping
     depth_buffer = [MAX_DEPTH] * sw
+
+    # Build wall-structure lookup for this frame
+    wall_structures = _build_wall_structure_lookup(game_map)
 
     # Determine if player is under cover
     player_tile = game_map.tiles.get(player.location)
@@ -237,8 +275,29 @@ def render_first_person(screen: pygame.Surface, player, game_map,
         line_height = int(sh / dist * WALL_HEIGHT_SCALE)
         draw_start = max(0, half_h - line_height // 2)
         draw_end = min(sh, half_h + line_height // 2)
+        strip_h = draw_end - draw_start
 
-        # Wall color with distance fog
+        # Check for wall-aligned structure on this face
+        if side == 0:
+            face = 'W' if hx > px else 'E'
+        else:
+            face = 'N' if hy > py else 'S'
+        ws_key = (hx, hy, face)
+        wall_struct = wall_structures.get(ws_key)
+
+        if wall_struct and strip_h > 0:
+            strip = _get_structure_wall_strip(wall_struct, wall_frac, strip_h)
+            if strip:
+                fog = max(0.2, 1.0 - dist / MAX_DEPTH)
+                if fog < 0.95 or ambient < 0.95:
+                    dark = pygame.Surface((1, strip_h), pygame.SRCALPHA)
+                    alpha = int((1.0 - fog * ambient) * 200)
+                    dark.fill((0, 0, 0, min(255, alpha)))
+                    strip.blit(dark, (0, 0))
+                screen.blit(strip, (col, draw_start))
+                continue
+
+        # Default wall color with distance fog
         base_color = _get_wall_color(tile, side)
         fog = max(0.2, 1.0 - dist / MAX_DEPTH)
         r = int(base_color[0] * fog * ambient)
@@ -269,6 +328,8 @@ def _draw_sprites(screen, player, px, py, angle, game_map,
         if not isinstance(obj, (Creature, Structure)):
             continue
         if isinstance(obj, Creature) and not obj.is_alive:
+            continue
+        if isinstance(obj, Structure) and getattr(obj, 'wall_face', None):
             continue
 
         ox = obj.location.x + 0.5
