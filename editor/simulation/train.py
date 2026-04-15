@@ -662,7 +662,10 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
 
         if step % 10000 == 9999:
             avg = np.mean(episode_rewards[-10:]) if episode_rewards else 0
-            print(f'  Step {step+1}: avg_reward={avg:.6f}, alive={sim.alive_count}')
+            _day = int(sim.game_clock.day)
+            _hr = int(sim.game_clock.hour)
+            _mn = int((sim.game_clock.hour % 1) * 60)
+            print(f'  Step {step+1}: avg_reward={avg:.6f}, alive={sim.alive_count}, clock={_day:02d}:{_hr:02d}:{_mn:02d}')
 
     print(f'  MAPPO complete. Episodes: {len(episode_rewards)}')
     return net
@@ -1042,7 +1045,10 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
 
         if step % 10000 == 9999:
             avg = np.mean(episode_rewards[-10:]) if episode_rewards else 0
-            print(f'  Step {step+1}: avg_reward={avg:.4f}')
+            _day = int(sim.game_clock.day)
+            _hr = int(sim.game_clock.hour)
+            _mn = int((sim.game_clock.hour % 1) * 60)
+            print(f'  Step {step+1}: avg_reward={avg:.4f}, clock={_day:02d}:{_hr:02d}:{_mn:02d}')
 
     print(f'  PPO complete.')
     return net
