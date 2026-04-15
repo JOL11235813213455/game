@@ -1153,6 +1153,13 @@ def _run_mappo_parallel(net, ppo, steps, arena_kwargs, signal_scales,
 
     with ParallelTrainer(n_workers, 'mappo', config) as trainer:
         while total_collected < steps:
+            # Write "collecting" state so viewer isn't stale
+            write_parallel_state(
+                [{'worker_id': i, 'alive': 0, 'total': 0, 'avg_reward': 0,
+                  'samples': 0, 'status': 'collecting'} for i in range(n_workers)],
+                phase='MAPPO', step=total_collected,
+                info={**(viewer_extra or {}), 'status': 'collecting rollouts...'})
+
             weights = _export_weights(net)
             rollouts = trainer.collect_rollouts(weights)
             merged = ParallelTrainer.merge_rollouts(rollouts)
@@ -1226,6 +1233,12 @@ def _run_ppo_parallel(net, ppo, steps, arena_kwargs, signal_scales,
 
     with ParallelTrainer(n_workers, 'ppo', config) as trainer:
         while total_collected < steps:
+            write_parallel_state(
+                [{'worker_id': i, 'alive': 0, 'total': 0, 'avg_reward': 0,
+                  'samples': 0, 'status': 'collecting'} for i in range(n_workers)],
+                phase='PPO', step=total_collected,
+                info={**(viewer_extra or {}), 'status': 'collecting rollouts...'})
+
             weights = _export_weights(net)
             rollouts = trainer.collect_rollouts(weights)
             merged = ParallelTrainer.merge_rollouts(rollouts)

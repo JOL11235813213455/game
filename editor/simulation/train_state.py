@@ -123,8 +123,9 @@ def read_state() -> dict | None:
     try:
         if STATE_FILE.exists():
             data = json.loads(STATE_FILE.read_text())
-            # Stale check — if older than 5 seconds, training may have stopped
-            if time.time() - data.get('timestamp', 0) > 5:
+            # Stale check — parallel mode takes longer between updates
+            stale_limit = 120 if data.get('parallel') else 5
+            if time.time() - data.get('timestamp', 0) > stale_limit:
                 data['stale'] = True
             return data
     except Exception:
