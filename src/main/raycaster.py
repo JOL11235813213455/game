@@ -247,9 +247,15 @@ def render_first_person(screen: pygame.Surface, player, game_map,
     # Build wall-structure lookup for this frame
     wall_structures = _build_wall_structure_lookup(game_map)
 
-    # Cast all rays
-    ray_results = cast_rays(px, py, angle, game_map, sw,
-                            wall_structures=wall_structures)
+    # Cast all rays — use Cython TileGrid if available
+    from classes.creature import Creature as _CRef
+    _tg = _CRef._tile_grid
+    if _tg is not None:
+        ray_results = _tg.cast_rays(px, py, angle, sw,
+                                     wall_structures=wall_structures)
+    else:
+        ray_results = cast_rays(px, py, angle, game_map, sw,
+                                wall_structures=wall_structures)
 
     # Depth buffer for sprite clipping
     depth_buffer = [MAX_DEPTH] * sw
@@ -293,7 +299,14 @@ def render_first_person(screen: pygame.Surface, player, game_map,
         pygame.draw.line(screen, (r, g, b), (0, y), (sw - 1, y))
 
     # Draw walls column by column
-    for col, (dist, tile, side, wall_frac, hx, hy) in enumerate(ray_results):
+    for col, ray in enumerate(ray_results):
+        if len(ray) == 6 and isinstance(ray[1], int):
+            # C format: (dist, side, wall_frac, hx, hy, is_wall_struct)
+            dist, side, wall_frac, hx, hy, is_ws = ray
+            tile = game_map.tiles.get((hx, hy, 0)) if dist < MAX_DEPTH else None
+        else:
+            # Python format: (dist, tile, side, wall_frac, hx, hy)
+            dist, tile, side, wall_frac, hx, hy = ray
         if dist >= MAX_DEPTH:
             depth_buffer[col] = MAX_DEPTH
             continue

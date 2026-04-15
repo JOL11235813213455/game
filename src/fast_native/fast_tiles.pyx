@@ -232,3 +232,151 @@ cdef class TileGrid:
         result.append(0.0)
 
         return result
+
+    def cast_rays(self, double player_x, double player_y, double angle,
+                  int screen_w, int max_depth=40, dict wall_structures=None):
+        """DDA raycasting using C tile arrays — zero Python object access in inner loop.
+
+        Returns list of (dist, side, wall_frac, hx, hy, is_wall_struct).
+        """
+        cdef double half_fov = M_PI / 6.0
+        cdef double fov = M_PI / 3.0
+        cdef double ray_angle, sin_a, cos_a
+        cdef double delta_dist_x, delta_dist_y
+        cdef double side_dist_x, side_dist_y
+        cdef int step_x, step_y, map_x, map_y
+        cdef int side, depth, col
+        cdef double perp_dist, wall_x, cos_corr
+        cdef int exit_bit, entry_bit, prev_x, prev_y
+
+        results = []
+
+        for col in range(screen_w):
+            ray_angle = angle - half_fov + (<double>col / <double>screen_w) * fov
+            sin_a = sin(ray_angle)
+            cos_a = cos(ray_angle)
+            if cos_a == 0.0: cos_a = 1e-8
+            if sin_a == 0.0: sin_a = 1e-8
+
+            map_x = <int>player_x
+            map_y = <int>player_y
+            delta_dist_x = fabs(1.0 / cos_a)
+            delta_dist_y = fabs(1.0 / sin_a)
+
+            if cos_a < 0:
+                step_x = -1
+                side_dist_x = (player_x - map_x) * delta_dist_x
+            else:
+                step_x = 1
+                side_dist_x = (map_x + 1.0 - player_x) * delta_dist_x
+            if sin_a < 0:
+                step_y = -1
+                side_dist_y = (player_y - map_y) * delta_dist_y
+            else:
+                step_y = 1
+                side_dist_y = (map_y + 1.0 - player_y) * delta_dist_y
+
+            hit = False
+            side = 0
+            depth = 0
+            cos_corr = cos(ray_angle - angle)
+
+            while depth < max_depth:
+                if side_dist_x < side_dist_y:
+                    side_dist_x += delta_dist_x
+                    map_x += step_x
+                    side = 0
+                else:
+                    side_dist_y += delta_dist_y
+                    map_y += step_y
+                    side = 1
+                depth += 1
+
+                # Wall structure check
+                if wall_structures is not None:
+                    if side == 0:
+                        face = 'W' if step_x > 0 else 'E'
+                    else:
+                        face = 'N' if step_y > 0 else 'S'
+                    ws_key = (map_x, map_y, face)
+                    if ws_key in wall_structures:
+                        if side == 0:
+                            perp_dist = side_dist_x - delta_dist_x
+                        else:
+                            perp_dist = side_dist_y - delta_dist_y
+                        if perp_dist < 0.001: perp_dist = 0.001
+                        perp_dist *= cos_corr
+                        if side == 0:
+                            wall_x = player_y + perp_dist * sin_a / cos_corr
+                        else:
+                            wall_x = player_x + perp_dist * cos_a / cos_corr
+                        wall_x -= floor(wall_x)
+                        results.append((perp_dist, side, wall_x, map_x, map_y, True))
+                        hit = True
+                        break
+
+                # C tile array check — no Python dict lookup
+                if not self._in_bounds(map_x, map_y) or not self._is_walkable(map_x, map_y):
+                    if side == 0:
+                        perp_dist = side_dist_x - delta_dist_x
+                    else:
+                        perp_dist = side_dist_y - delta_dist_y
+                    if perp_dist < 0.001: perp_dist = 0.001
+                    perp_dist *= cos_corr
+                    if side == 0:
+                        wall_x = player_y + perp_dist * sin_a / cos_corr
+                    else:
+                        wall_x = player_x + perp_dist * cos_a / cos_corr
+                    wall_x -= floor(wall_x)
+                    results.append((perp_dist, side, wall_x, map_x, map_y, False))
+                    hit = True
+                    break
+
+                # Bounds check via packed bytes
+                if side == 0:
+                    exit_bit = B_E if step_x > 0 else B_W
+                    entry_bit = B_W if step_x > 0 else B_E
+                    prev_x = map_x - step_x
+                    prev_y = map_y
+                else:
+                    exit_bit = B_S if step_y > 0 else B_N
+                    entry_bit = B_N if step_y > 0 else B_S
+                    prev_x = map_x
+                    prev_y = map_y - step_y
+
+                if self._in_bounds(prev_x, prev_y) and not self._check_exit(prev_x, prev_y, exit_bit):
+                    if side == 0:
+                        perp_dist = side_dist_x - delta_dist_x
+                    else:
+                        perp_dist = side_dist_y - delta_dist_y
+                    if perp_dist < 0.001: perp_dist = 0.001
+                    perp_dist *= cos_corr
+                    if side == 0:
+                        wall_x = player_y + perp_dist * sin_a / cos_corr
+                    else:
+                        wall_x = player_x + perp_dist * cos_a / cos_corr
+                    wall_x -= floor(wall_x)
+                    results.append((perp_dist, side, wall_x, map_x, map_y, False))
+                    hit = True
+                    break
+
+                if not self._check_exit(map_x, map_y, entry_bit):
+                    if side == 0:
+                        perp_dist = side_dist_x - delta_dist_x
+                    else:
+                        perp_dist = side_dist_y - delta_dist_y
+                    if perp_dist < 0.001: perp_dist = 0.001
+                    perp_dist *= cos_corr
+                    if side == 0:
+                        wall_x = player_y + perp_dist * sin_a / cos_corr
+                    else:
+                        wall_x = player_x + perp_dist * cos_a / cos_corr
+                    wall_x -= floor(wall_x)
+                    results.append((perp_dist, side, wall_x, map_x, map_y, False))
+                    hit = True
+                    break
+
+            if not hit:
+                results.append((<double>max_depth, 0, 0.0, 0, 0, False))
+
+        return results

@@ -168,6 +168,14 @@ def main():
     tick_scheduler = TickScheduler(max_per_frame=25)
     frame_number = 0
     first_person = False  # V toggles between top-down and first-person
+    # Init Cython tile grid for raycaster (if available)
+    try:
+        from fast_native.fast_tiles import TileGrid as _TG
+        _tile_grid = _TG()
+        _tile_grid.sync(game_map)
+        Creature._tile_grid = _tile_grid
+    except ImportError:
+        pass
 
     running = True
     while running:

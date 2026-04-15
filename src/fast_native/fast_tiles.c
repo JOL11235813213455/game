@@ -2257,6 +2257,20 @@ static CYTHON_INLINE int __Pyx_PyList_Append(PyObject* list, PyObject* x) {
 /* IncludeStdlibH.proto */
 #include <stdlib.h>
 
+/* ArgTypeTestFunc.export */
+static int __Pyx__ArgTypeTest(PyObject *obj, PyTypeObject *type, const char *name, int exact);
+
+/* ArgTypeTest.proto */
+#define __Pyx_ArgTypeTest(obj, type, none_allowed, name, exact)\
+    ((likely(__Pyx_IS_TYPE(obj, type) | (none_allowed && (obj == Py_None)))) ? 1 :\
+        __Pyx__ArgTypeTest(obj, type, name, exact))
+
+/* PyDictContains.proto */
+static CYTHON_INLINE int __Pyx_PyDict_ContainsTF(PyObject* item, PyObject* dict, int eq) {
+    int result = PyDict_Contains(dict, item);
+    return unlikely(result < 0) ? result : (result == (eq == Py_EQ));
+}
+
 /* PyTypeError_Check.proto */
 #define __Pyx_PyExc_TypeError_Check(obj)  __Pyx_TypeCheck(obj, PyExc_TypeError)
 
@@ -2865,8 +2879,9 @@ static PyObject *__pyx_pf_10fast_tiles_8TileGrid_4sync(struct __pyx_obj_10fast_t
 static PyObject *__pyx_pf_10fast_tiles_8TileGrid_6is_walkable(struct __pyx_obj_10fast_tiles_TileGrid *__pyx_v_self, int __pyx_v_x, int __pyx_v_y); /* proto */
 static PyObject *__pyx_pf_10fast_tiles_8TileGrid_8is_passable(struct __pyx_obj_10fast_tiles_TileGrid *__pyx_v_self, int __pyx_v_from_x, int __pyx_v_from_y, int __pyx_v_to_x, int __pyx_v_to_y); /* proto */
 static PyObject *__pyx_pf_10fast_tiles_8TileGrid_10spatial_walls(struct __pyx_obj_10fast_tiles_TileGrid *__pyx_v_self, int __pyx_v_cx, int __pyx_v_cy, int __pyx_v_sight); /* proto */
-static PyObject *__pyx_pf_10fast_tiles_8TileGrid_12__reduce_cython__(CYTHON_UNUSED struct __pyx_obj_10fast_tiles_TileGrid *__pyx_v_self); /* proto */
-static PyObject *__pyx_pf_10fast_tiles_8TileGrid_14__setstate_cython__(CYTHON_UNUSED struct __pyx_obj_10fast_tiles_TileGrid *__pyx_v_self, CYTHON_UNUSED PyObject *__pyx_v___pyx_state); /* proto */
+static PyObject *__pyx_pf_10fast_tiles_8TileGrid_12cast_rays(struct __pyx_obj_10fast_tiles_TileGrid *__pyx_v_self, double __pyx_v_player_x, double __pyx_v_player_y, double __pyx_v_angle, int __pyx_v_screen_w, int __pyx_v_max_depth, PyObject *__pyx_v_wall_structures); /* proto */
+static PyObject *__pyx_pf_10fast_tiles_8TileGrid_14__reduce_cython__(CYTHON_UNUSED struct __pyx_obj_10fast_tiles_TileGrid *__pyx_v_self); /* proto */
+static PyObject *__pyx_pf_10fast_tiles_8TileGrid_16__setstate_cython__(CYTHON_UNUSED struct __pyx_obj_10fast_tiles_TileGrid *__pyx_v_self, CYTHON_UNUSED PyObject *__pyx_v___pyx_state); /* proto */
 static PyObject *__pyx_tp_new_10fast_tiles_TileGrid(PyTypeObject *t, PyObject *a, PyObject *k); /*proto*/
 /* #### Code section: late_includes ### */
 /* #### Code section: module_state ### */
@@ -2909,9 +2924,10 @@ typedef struct {
   __Pyx_CachedCFunction __pyx_umethod_PyDict_Type_items;
   __Pyx_CachedCFunction __pyx_umethod_PyDict_Type_pop;
   __Pyx_CachedCFunction __pyx_umethod_PyDict_Type_values;
-  PyObject *__pyx_codeobj_tab[6];
-  PyObject *__pyx_string_tab[109];
-  PyObject *__pyx_number_tab[4];
+  PyObject *__pyx_tuple[1];
+  PyObject *__pyx_codeobj_tab[7];
+  PyObject *__pyx_string_tab[149];
+  PyObject *__pyx_number_tab[5];
 /* #### Code section: module_state_contents ### */
 /* CommonTypesMetaclass.module_state_decls */
 PyTypeObject *__pyx_CommonTypesMetaclassType;
@@ -2953,118 +2969,159 @@ static __pyx_mstatetype * const __pyx_mstate_global = &__pyx_mstate_global_stati
 #endif
 /* #### Code section: constant_name_defines ### */
 #define __pyx_kp_u_ __pyx_string_tab[0]
-#define __pyx_kp_u_disable __pyx_string_tab[1]
-#define __pyx_kp_u_enable __pyx_string_tab[2]
-#define __pyx_kp_u_fast_tiles_pyx __pyx_string_tab[3]
-#define __pyx_kp_u_gc __pyx_string_tab[4]
-#define __pyx_kp_u_isenabled __pyx_string_tab[5]
-#define __pyx_kp_u_no_default___reduce___due_to_non __pyx_string_tab[6]
-#define __pyx_kp_u_numpy__core_multiarray_failed_to __pyx_string_tab[7]
-#define __pyx_kp_u_numpy__core_umath_failed_to_impo __pyx_string_tab[8]
-#define __pyx_kp_u_stringsource __pyx_string_tab[9]
-#define __pyx_n_u_Pyx_PyDict_NextRef __pyx_string_tab[10]
-#define __pyx_n_u_TileGrid __pyx_string_tab[11]
-#define __pyx_n_u_TileGrid___reduce_cython __pyx_string_tab[12]
-#define __pyx_n_u_TileGrid___setstate_cython __pyx_string_tab[13]
-#define __pyx_n_u_TileGrid_is_passable __pyx_string_tab[14]
-#define __pyx_n_u_TileGrid_is_walkable __pyx_string_tab[15]
-#define __pyx_n_u_TileGrid_spatial_walls __pyx_string_tab[16]
-#define __pyx_n_u_TileGrid_sync __pyx_string_tab[17]
-#define __pyx_n_u_adj_walk __pyx_string_tab[18]
-#define __pyx_n_u_asyncio_coroutines __pyx_string_tab[19]
-#define __pyx_n_u_b __pyx_string_tab[20]
-#define __pyx_n_u_bounds __pyx_string_tab[21]
-#define __pyx_n_u_cline_in_traceback __pyx_string_tab[22]
-#define __pyx_n_u_covered __pyx_string_tab[23]
-#define __pyx_n_u_cx __pyx_string_tab[24]
-#define __pyx_n_u_cy __pyx_string_tab[25]
-#define __pyx_n_u_d __pyx_string_tab[26]
-#define __pyx_n_u_ddx __pyx_string_tab[27]
-#define __pyx_n_u_ddy __pyx_string_tab[28]
-#define __pyx_n_u_dirs __pyx_string_tab[29]
-#define __pyx_n_u_dx __pyx_string_tab[30]
-#define __pyx_n_u_dy __pyx_string_tab[31]
-#define __pyx_n_u_e __pyx_string_tab[32]
-#define __pyx_n_u_entry_bit __pyx_string_tab[33]
-#define __pyx_n_u_exit_bit __pyx_string_tab[34]
-#define __pyx_n_u_fast_tiles __pyx_string_tab[35]
-#define __pyx_n_u_from_x __pyx_string_tab[36]
-#define __pyx_n_u_from_y __pyx_string_tab[37]
-#define __pyx_n_u_func __pyx_string_tab[38]
-#define __pyx_n_u_game_map __pyx_string_tab[39]
-#define __pyx_n_u_getstate __pyx_string_tab[40]
-#define __pyx_n_u_h __pyx_string_tab[41]
-#define __pyx_n_u_i __pyx_string_tab[42]
-#define __pyx_n_u_idx __pyx_string_tab[43]
-#define __pyx_n_u_is_coroutine __pyx_string_tab[44]
-#define __pyx_n_u_is_passable __pyx_string_tab[45]
-#define __pyx_n_u_is_walkable __pyx_string_tab[46]
-#define __pyx_n_u_items __pyx_string_tab[47]
-#define __pyx_n_u_key __pyx_string_tab[48]
-#define __pyx_n_u_liquid __pyx_string_tab[49]
-#define __pyx_n_u_main __pyx_string_tab[50]
-#define __pyx_n_u_module __pyx_string_tab[51]
-#define __pyx_n_u_n __pyx_string_tab[52]
-#define __pyx_n_u_name __pyx_string_tab[53]
-#define __pyx_n_u_ne __pyx_string_tab[54]
-#define __pyx_n_u_np __pyx_string_tab[55]
-#define __pyx_n_u_numpy __pyx_string_tab[56]
-#define __pyx_n_u_nw __pyx_string_tab[57]
-#define __pyx_n_u_packed __pyx_string_tab[58]
-#define __pyx_n_u_passable __pyx_string_tab[59]
-#define __pyx_n_u_pop __pyx_string_tab[60]
-#define __pyx_n_u_ppx __pyx_string_tab[61]
-#define __pyx_n_u_ppy __pyx_string_tab[62]
-#define __pyx_n_u_px __pyx_string_tab[63]
-#define __pyx_n_u_py __pyx_string_tab[64]
-#define __pyx_n_u_pyx_state __pyx_string_tab[65]
-#define __pyx_n_u_pyx_vtable __pyx_string_tab[66]
-#define __pyx_n_u_qualname __pyx_string_tab[67]
-#define __pyx_n_u_reduce __pyx_string_tab[68]
-#define __pyx_n_u_reduce_cython __pyx_string_tab[69]
-#define __pyx_n_u_reduce_ex __pyx_string_tab[70]
-#define __pyx_n_u_result __pyx_string_tab[71]
-#define __pyx_n_u_ring __pyx_string_tab[72]
-#define __pyx_n_u_ring_tiles __pyx_string_tab[73]
-#define __pyx_n_u_ring_walk __pyx_string_tab[74]
-#define __pyx_n_u_s __pyx_string_tab[75]
-#define __pyx_n_u_se __pyx_string_tab[76]
-#define __pyx_n_u_self __pyx_string_tab[77]
-#define __pyx_n_u_set_name __pyx_string_tab[78]
-#define __pyx_n_u_setdefault __pyx_string_tab[79]
-#define __pyx_n_u_setstate __pyx_string_tab[80]
-#define __pyx_n_u_setstate_cython __pyx_string_tab[81]
-#define __pyx_n_u_sight __pyx_string_tab[82]
-#define __pyx_n_u_sight_f __pyx_string_tab[83]
-#define __pyx_n_u_spatial_walls __pyx_string_tab[84]
-#define __pyx_n_u_step __pyx_string_tab[85]
-#define __pyx_n_u_sw __pyx_string_tab[86]
-#define __pyx_n_u_sync __pyx_string_tab[87]
-#define __pyx_n_u_test __pyx_string_tab[88]
-#define __pyx_n_u_tile __pyx_string_tab[89]
-#define __pyx_n_u_tiles __pyx_string_tab[90]
-#define __pyx_n_u_to_x __pyx_string_tab[91]
-#define __pyx_n_u_to_y __pyx_string_tab[92]
-#define __pyx_n_u_tx __pyx_string_tab[93]
-#define __pyx_n_u_ty __pyx_string_tab[94]
-#define __pyx_n_u_values __pyx_string_tab[95]
-#define __pyx_n_u_w __pyx_string_tab[96]
-#define __pyx_n_u_walkable __pyx_string_tab[97]
-#define __pyx_n_u_x __pyx_string_tab[98]
-#define __pyx_n_u_x_max __pyx_string_tab[99]
-#define __pyx_n_u_x_min __pyx_string_tab[100]
-#define __pyx_n_u_y __pyx_string_tab[101]
-#define __pyx_n_u_y_max __pyx_string_tab[102]
-#define __pyx_n_u_y_min __pyx_string_tab[103]
-#define __pyx_kp_b_iso88591_A_1_ARq_T_Qb_q_ARq_T_Qb_a_ARq_T __pyx_string_tab[104]
-#define __pyx_kp_b_iso88591_A_4t_q_1_e2Q_e2Q_3c_4s_Q_uL_Bd_S __pyx_string_tab[105]
-#define __pyx_kp_b_iso88591_A_XWBhgRq_XWBhgRq_IXQ_IXQ_IQ_Ja __pyx_string_tab[106]
-#define __pyx_kp_b_iso88591_A_t1D_Qc __pyx_string_tab[107]
-#define __pyx_kp_b_iso88591_Q __pyx_string_tab[108]
+#define __pyx_kp_u_Note_that_Cython_is_deliberately __pyx_string_tab[1]
+#define __pyx_kp_u_add_note __pyx_string_tab[2]
+#define __pyx_kp_u_disable __pyx_string_tab[3]
+#define __pyx_kp_u_enable __pyx_string_tab[4]
+#define __pyx_kp_u_fast_tiles_pyx __pyx_string_tab[5]
+#define __pyx_kp_u_gc __pyx_string_tab[6]
+#define __pyx_kp_u_isenabled __pyx_string_tab[7]
+#define __pyx_kp_u_no_default___reduce___due_to_non __pyx_string_tab[8]
+#define __pyx_kp_u_numpy__core_multiarray_failed_to __pyx_string_tab[9]
+#define __pyx_kp_u_numpy__core_umath_failed_to_impo __pyx_string_tab[10]
+#define __pyx_kp_u_stringsource __pyx_string_tab[11]
+#define __pyx_n_u_E __pyx_string_tab[12]
+#define __pyx_n_u_N __pyx_string_tab[13]
+#define __pyx_n_u_Pyx_PyDict_NextRef __pyx_string_tab[14]
+#define __pyx_n_u_S __pyx_string_tab[15]
+#define __pyx_n_u_TileGrid __pyx_string_tab[16]
+#define __pyx_n_u_TileGrid___reduce_cython __pyx_string_tab[17]
+#define __pyx_n_u_TileGrid___setstate_cython __pyx_string_tab[18]
+#define __pyx_n_u_TileGrid_cast_rays __pyx_string_tab[19]
+#define __pyx_n_u_TileGrid_is_passable __pyx_string_tab[20]
+#define __pyx_n_u_TileGrid_is_walkable __pyx_string_tab[21]
+#define __pyx_n_u_TileGrid_spatial_walls __pyx_string_tab[22]
+#define __pyx_n_u_TileGrid_sync __pyx_string_tab[23]
+#define __pyx_n_u_W __pyx_string_tab[24]
+#define __pyx_n_u_adj_walk __pyx_string_tab[25]
+#define __pyx_n_u_angle __pyx_string_tab[26]
+#define __pyx_n_u_asyncio_coroutines __pyx_string_tab[27]
+#define __pyx_n_u_b __pyx_string_tab[28]
+#define __pyx_n_u_bounds __pyx_string_tab[29]
+#define __pyx_n_u_cast_rays __pyx_string_tab[30]
+#define __pyx_n_u_cline_in_traceback __pyx_string_tab[31]
+#define __pyx_n_u_col __pyx_string_tab[32]
+#define __pyx_n_u_cos_a __pyx_string_tab[33]
+#define __pyx_n_u_cos_corr __pyx_string_tab[34]
+#define __pyx_n_u_covered __pyx_string_tab[35]
+#define __pyx_n_u_cx __pyx_string_tab[36]
+#define __pyx_n_u_cy __pyx_string_tab[37]
+#define __pyx_n_u_d __pyx_string_tab[38]
+#define __pyx_n_u_ddx __pyx_string_tab[39]
+#define __pyx_n_u_ddy __pyx_string_tab[40]
+#define __pyx_n_u_delta_dist_x __pyx_string_tab[41]
+#define __pyx_n_u_delta_dist_y __pyx_string_tab[42]
+#define __pyx_n_u_depth __pyx_string_tab[43]
+#define __pyx_n_u_dirs __pyx_string_tab[44]
+#define __pyx_n_u_dx __pyx_string_tab[45]
+#define __pyx_n_u_dy __pyx_string_tab[46]
+#define __pyx_n_u_e __pyx_string_tab[47]
+#define __pyx_n_u_entry_bit __pyx_string_tab[48]
+#define __pyx_n_u_exit_bit __pyx_string_tab[49]
+#define __pyx_n_u_face __pyx_string_tab[50]
+#define __pyx_n_u_fast_tiles __pyx_string_tab[51]
+#define __pyx_n_u_fov __pyx_string_tab[52]
+#define __pyx_n_u_from_x __pyx_string_tab[53]
+#define __pyx_n_u_from_y __pyx_string_tab[54]
+#define __pyx_n_u_func __pyx_string_tab[55]
+#define __pyx_n_u_game_map __pyx_string_tab[56]
+#define __pyx_n_u_getstate __pyx_string_tab[57]
+#define __pyx_n_u_h __pyx_string_tab[58]
+#define __pyx_n_u_half_fov __pyx_string_tab[59]
+#define __pyx_n_u_hit __pyx_string_tab[60]
+#define __pyx_n_u_i __pyx_string_tab[61]
+#define __pyx_n_u_idx __pyx_string_tab[62]
+#define __pyx_n_u_is_coroutine __pyx_string_tab[63]
+#define __pyx_n_u_is_passable __pyx_string_tab[64]
+#define __pyx_n_u_is_walkable __pyx_string_tab[65]
+#define __pyx_n_u_items __pyx_string_tab[66]
+#define __pyx_n_u_key __pyx_string_tab[67]
+#define __pyx_n_u_liquid __pyx_string_tab[68]
+#define __pyx_n_u_main __pyx_string_tab[69]
+#define __pyx_n_u_map_x __pyx_string_tab[70]
+#define __pyx_n_u_map_y __pyx_string_tab[71]
+#define __pyx_n_u_max_depth __pyx_string_tab[72]
+#define __pyx_n_u_module __pyx_string_tab[73]
+#define __pyx_n_u_n __pyx_string_tab[74]
+#define __pyx_n_u_name __pyx_string_tab[75]
+#define __pyx_n_u_ne __pyx_string_tab[76]
+#define __pyx_n_u_np __pyx_string_tab[77]
+#define __pyx_n_u_numpy __pyx_string_tab[78]
+#define __pyx_n_u_nw __pyx_string_tab[79]
+#define __pyx_n_u_packed __pyx_string_tab[80]
+#define __pyx_n_u_passable __pyx_string_tab[81]
+#define __pyx_n_u_perp_dist __pyx_string_tab[82]
+#define __pyx_n_u_player_x __pyx_string_tab[83]
+#define __pyx_n_u_player_y __pyx_string_tab[84]
+#define __pyx_n_u_pop __pyx_string_tab[85]
+#define __pyx_n_u_ppx __pyx_string_tab[86]
+#define __pyx_n_u_ppy __pyx_string_tab[87]
+#define __pyx_n_u_prev_x __pyx_string_tab[88]
+#define __pyx_n_u_prev_y __pyx_string_tab[89]
+#define __pyx_n_u_px __pyx_string_tab[90]
+#define __pyx_n_u_py __pyx_string_tab[91]
+#define __pyx_n_u_pyx_state __pyx_string_tab[92]
+#define __pyx_n_u_pyx_vtable __pyx_string_tab[93]
+#define __pyx_n_u_qualname __pyx_string_tab[94]
+#define __pyx_n_u_ray_angle __pyx_string_tab[95]
+#define __pyx_n_u_reduce __pyx_string_tab[96]
+#define __pyx_n_u_reduce_cython __pyx_string_tab[97]
+#define __pyx_n_u_reduce_ex __pyx_string_tab[98]
+#define __pyx_n_u_result __pyx_string_tab[99]
+#define __pyx_n_u_results __pyx_string_tab[100]
+#define __pyx_n_u_ring __pyx_string_tab[101]
+#define __pyx_n_u_ring_tiles __pyx_string_tab[102]
+#define __pyx_n_u_ring_walk __pyx_string_tab[103]
+#define __pyx_n_u_s __pyx_string_tab[104]
+#define __pyx_n_u_screen_w __pyx_string_tab[105]
+#define __pyx_n_u_se __pyx_string_tab[106]
+#define __pyx_n_u_self __pyx_string_tab[107]
+#define __pyx_n_u_set_name __pyx_string_tab[108]
+#define __pyx_n_u_setdefault __pyx_string_tab[109]
+#define __pyx_n_u_setstate __pyx_string_tab[110]
+#define __pyx_n_u_setstate_cython __pyx_string_tab[111]
+#define __pyx_n_u_side __pyx_string_tab[112]
+#define __pyx_n_u_side_dist_x __pyx_string_tab[113]
+#define __pyx_n_u_side_dist_y __pyx_string_tab[114]
+#define __pyx_n_u_sight __pyx_string_tab[115]
+#define __pyx_n_u_sight_f __pyx_string_tab[116]
+#define __pyx_n_u_sin_a __pyx_string_tab[117]
+#define __pyx_n_u_spatial_walls __pyx_string_tab[118]
+#define __pyx_n_u_step __pyx_string_tab[119]
+#define __pyx_n_u_step_x __pyx_string_tab[120]
+#define __pyx_n_u_step_y __pyx_string_tab[121]
+#define __pyx_n_u_sw __pyx_string_tab[122]
+#define __pyx_n_u_sync __pyx_string_tab[123]
+#define __pyx_n_u_test __pyx_string_tab[124]
+#define __pyx_n_u_tile __pyx_string_tab[125]
+#define __pyx_n_u_tiles __pyx_string_tab[126]
+#define __pyx_n_u_to_x __pyx_string_tab[127]
+#define __pyx_n_u_to_y __pyx_string_tab[128]
+#define __pyx_n_u_tx __pyx_string_tab[129]
+#define __pyx_n_u_ty __pyx_string_tab[130]
+#define __pyx_n_u_values __pyx_string_tab[131]
+#define __pyx_n_u_w __pyx_string_tab[132]
+#define __pyx_n_u_walkable __pyx_string_tab[133]
+#define __pyx_n_u_wall_structures __pyx_string_tab[134]
+#define __pyx_n_u_wall_x __pyx_string_tab[135]
+#define __pyx_n_u_ws_key __pyx_string_tab[136]
+#define __pyx_n_u_x __pyx_string_tab[137]
+#define __pyx_n_u_x_max __pyx_string_tab[138]
+#define __pyx_n_u_x_min __pyx_string_tab[139]
+#define __pyx_n_u_y __pyx_string_tab[140]
+#define __pyx_n_u_y_max __pyx_string_tab[141]
+#define __pyx_n_u_y_min __pyx_string_tab[142]
+#define __pyx_kp_b_iso88591_A_1_ARq_T_Qb_q_ARq_T_Qb_a_ARq_T __pyx_string_tab[143]
+#define __pyx_kp_b_iso88591_A_4t_q_1_e2Q_e2Q_3c_4s_Q_uL_Bd_S __pyx_string_tab[144]
+#define __pyx_kp_b_iso88591_A_Gq_uBa_r_G5_b_HD_Ba_Cq_Cq_vS_X __pyx_string_tab[145]
+#define __pyx_kp_b_iso88591_A_XWBhgRq_XWBhgRq_IXQ_IXQ_IQ_Ja __pyx_string_tab[146]
+#define __pyx_kp_b_iso88591_A_t1D_Qc __pyx_string_tab[147]
+#define __pyx_kp_b_iso88591_Q __pyx_string_tab[148]
 #define __pyx_float_0_0 __pyx_number_tab[0]
 #define __pyx_float_1_0 __pyx_number_tab[1]
 #define __pyx_int_0 __pyx_number_tab[2]
 #define __pyx_int_1 __pyx_number_tab[3]
+#define __pyx_int_40 __pyx_number_tab[4]
 /* #### Code section: module_state_clear ### */
 #if CYTHON_USE_MODULE_STATE
 static CYTHON_SMALL_CODE int __pyx_m_clear(PyObject *m) {
@@ -3097,9 +3154,10 @@ static CYTHON_SMALL_CODE int __pyx_m_clear(PyObject *m) {
   Py_CLEAR(clear_module_state->__pyx_ptype_5numpy_ufunc);
   Py_CLEAR(clear_module_state->__pyx_ptype_10fast_tiles_TileGrid);
   Py_CLEAR(clear_module_state->__pyx_type_10fast_tiles_TileGrid);
-  for (int i=0; i<6; ++i) { Py_CLEAR(clear_module_state->__pyx_codeobj_tab[i]); }
-  for (int i=0; i<109; ++i) { Py_CLEAR(clear_module_state->__pyx_string_tab[i]); }
-  for (int i=0; i<4; ++i) { Py_CLEAR(clear_module_state->__pyx_number_tab[i]); }
+  for (int i=0; i<1; ++i) { Py_CLEAR(clear_module_state->__pyx_tuple[i]); }
+  for (int i=0; i<7; ++i) { Py_CLEAR(clear_module_state->__pyx_codeobj_tab[i]); }
+  for (int i=0; i<149; ++i) { Py_CLEAR(clear_module_state->__pyx_string_tab[i]); }
+  for (int i=0; i<5; ++i) { Py_CLEAR(clear_module_state->__pyx_number_tab[i]); }
 /* #### Code section: module_state_clear_contents ### */
 /* CommonTypesMetaclass.module_state_clear */
 Py_CLEAR(clear_module_state->__pyx_CommonTypesMetaclassType);
@@ -3140,9 +3198,10 @@ static CYTHON_SMALL_CODE int __pyx_m_traverse(PyObject *m, visitproc visit, void
   Py_VISIT(traverse_module_state->__pyx_ptype_5numpy_ufunc);
   Py_VISIT(traverse_module_state->__pyx_ptype_10fast_tiles_TileGrid);
   Py_VISIT(traverse_module_state->__pyx_type_10fast_tiles_TileGrid);
-  for (int i=0; i<6; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_codeobj_tab[i]); }
-  for (int i=0; i<109; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_string_tab[i]); }
-  for (int i=0; i<4; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_number_tab[i]); }
+  for (int i=0; i<1; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_tuple[i]); }
+  for (int i=0; i<7; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_codeobj_tab[i]); }
+  for (int i=0; i<149; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_string_tab[i]); }
+  for (int i=0; i<5; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_number_tab[i]); }
 /* #### Code section: module_state_traverse_contents ### */
 /* CommonTypesMetaclass.module_state_traverse */
 Py_VISIT(traverse_module_state->__pyx_CommonTypesMetaclassType);
@@ -7614,6 +7673,8 @@ static PyObject *__pyx_pf_10fast_tiles_8TileGrid_10spatial_walls(struct __pyx_ob
  *         result.append(0.0)
  * 
  *         return result             # <<<<<<<<<<<<<<
+ * 
+ *     def cast_rays(self, double player_x, double player_y, double angle,
 */
   __Pyx_XDECREF(__pyx_r);
   __Pyx_INCREF(__pyx_v_result);
@@ -7645,6 +7706,1701 @@ static PyObject *__pyx_pf_10fast_tiles_8TileGrid_10spatial_walls(struct __pyx_ob
   return __pyx_r;
 }
 
+/* "fast_tiles.pyx":236
+ *         return result
+ * 
+ *     def cast_rays(self, double player_x, double player_y, double angle,             # <<<<<<<<<<<<<<
+ *                   int screen_w, int max_depth=40, dict wall_structures=None):
+ *         """DDA raycasting using C tile arrays  zero Python object access in inner loop.
+*/
+
+/* Python wrapper */
+static PyObject *__pyx_pw_10fast_tiles_8TileGrid_13cast_rays(PyObject *__pyx_v_self, 
+#if CYTHON_METH_FASTCALL
+PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
+#else
+PyObject *__pyx_args, PyObject *__pyx_kwds
+#endif
+); /*proto*/
+PyDoc_STRVAR(__pyx_doc_10fast_tiles_8TileGrid_12cast_rays, "DDA raycasting using C tile arrays \342\200\224 zero Python object access in inner loop.\n\n        Returns list of (dist, side, wall_frac, hx, hy, is_wall_struct).\n        ");
+static PyMethodDef __pyx_mdef_10fast_tiles_8TileGrid_13cast_rays = {"cast_rays", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_10fast_tiles_8TileGrid_13cast_rays, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_10fast_tiles_8TileGrid_12cast_rays};
+static PyObject *__pyx_pw_10fast_tiles_8TileGrid_13cast_rays(PyObject *__pyx_v_self, 
+#if CYTHON_METH_FASTCALL
+PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
+#else
+PyObject *__pyx_args, PyObject *__pyx_kwds
+#endif
+) {
+  double __pyx_v_player_x;
+  double __pyx_v_player_y;
+  double __pyx_v_angle;
+  int __pyx_v_screen_w;
+  int __pyx_v_max_depth;
+  PyObject *__pyx_v_wall_structures = 0;
+  #if !CYTHON_METH_FASTCALL
+  CYTHON_UNUSED Py_ssize_t __pyx_nargs;
+  #endif
+  CYTHON_UNUSED PyObject *const *__pyx_kwvalues;
+  PyObject* values[6] = {0,0,0,0,0,0};
+  int __pyx_lineno = 0;
+  const char *__pyx_filename = NULL;
+  int __pyx_clineno = 0;
+  PyObject *__pyx_r = 0;
+  __Pyx_RefNannyDeclarations
+  __Pyx_RefNannySetupContext("cast_rays (wrapper)", 0);
+  #if !CYTHON_METH_FASTCALL
+  #if CYTHON_ASSUME_SAFE_SIZE
+  __pyx_nargs = PyTuple_GET_SIZE(__pyx_args);
+  #else
+  __pyx_nargs = PyTuple_Size(__pyx_args); if (unlikely(__pyx_nargs < 0)) return NULL;
+  #endif
+  #endif
+  __pyx_kwvalues = __Pyx_KwValues_FASTCALL(__pyx_args, __pyx_nargs);
+  {
+    PyObject ** const __pyx_pyargnames[] = {&__pyx_mstate_global->__pyx_n_u_player_x,&__pyx_mstate_global->__pyx_n_u_player_y,&__pyx_mstate_global->__pyx_n_u_angle,&__pyx_mstate_global->__pyx_n_u_screen_w,&__pyx_mstate_global->__pyx_n_u_max_depth,&__pyx_mstate_global->__pyx_n_u_wall_structures,0};
+    const Py_ssize_t __pyx_kwds_len = (__pyx_kwds) ? __Pyx_NumKwargs_FASTCALL(__pyx_kwds) : 0;
+    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 236, __pyx_L3_error)
+    if (__pyx_kwds_len > 0) {
+      switch (__pyx_nargs) {
+        case  6:
+        values[5] = __Pyx_ArgRef_FASTCALL(__pyx_args, 5);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[5])) __PYX_ERR(0, 236, __pyx_L3_error)
+        CYTHON_FALLTHROUGH;
+        case  5:
+        values[4] = __Pyx_ArgRef_FASTCALL(__pyx_args, 4);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[4])) __PYX_ERR(0, 236, __pyx_L3_error)
+        CYTHON_FALLTHROUGH;
+        case  4:
+        values[3] = __Pyx_ArgRef_FASTCALL(__pyx_args, 3);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[3])) __PYX_ERR(0, 236, __pyx_L3_error)
+        CYTHON_FALLTHROUGH;
+        case  3:
+        values[2] = __Pyx_ArgRef_FASTCALL(__pyx_args, 2);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 236, __pyx_L3_error)
+        CYTHON_FALLTHROUGH;
+        case  2:
+        values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 236, __pyx_L3_error)
+        CYTHON_FALLTHROUGH;
+        case  1:
+        values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 236, __pyx_L3_error)
+        CYTHON_FALLTHROUGH;
+        case  0: break;
+        default: goto __pyx_L5_argtuple_error;
+      }
+      const Py_ssize_t kwd_pos_args = __pyx_nargs;
+      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "cast_rays", 0) < (0)) __PYX_ERR(0, 236, __pyx_L3_error)
+
+      /* "fast_tiles.pyx":237
+ * 
+ *     def cast_rays(self, double player_x, double player_y, double angle,
+ *                   int screen_w, int max_depth=40, dict wall_structures=None):             # <<<<<<<<<<<<<<
+ *         """DDA raycasting using C tile arrays  zero Python object access in inner loop.
+ * 
+*/
+      if (!values[5]) values[5] = __Pyx_NewRef(((PyObject*)Py_None));
+      for (Py_ssize_t i = __pyx_nargs; i < 4; i++) {
+        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("cast_rays", 0, 4, 6, i); __PYX_ERR(0, 236, __pyx_L3_error) }
+      }
+    } else {
+      switch (__pyx_nargs) {
+        case  6:
+        values[5] = __Pyx_ArgRef_FASTCALL(__pyx_args, 5);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[5])) __PYX_ERR(0, 236, __pyx_L3_error)
+        CYTHON_FALLTHROUGH;
+        case  5:
+        values[4] = __Pyx_ArgRef_FASTCALL(__pyx_args, 4);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[4])) __PYX_ERR(0, 236, __pyx_L3_error)
+        CYTHON_FALLTHROUGH;
+        case  4:
+        values[3] = __Pyx_ArgRef_FASTCALL(__pyx_args, 3);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[3])) __PYX_ERR(0, 236, __pyx_L3_error)
+        values[2] = __Pyx_ArgRef_FASTCALL(__pyx_args, 2);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 236, __pyx_L3_error)
+        values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 236, __pyx_L3_error)
+        values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 236, __pyx_L3_error)
+        break;
+        default: goto __pyx_L5_argtuple_error;
+      }
+      if (!values[5]) values[5] = __Pyx_NewRef(((PyObject*)Py_None));
+    }
+    __pyx_v_player_x = __Pyx_PyFloat_AsDouble(values[0]); if (unlikely((__pyx_v_player_x == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 236, __pyx_L3_error)
+    __pyx_v_player_y = __Pyx_PyFloat_AsDouble(values[1]); if (unlikely((__pyx_v_player_y == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 236, __pyx_L3_error)
+    __pyx_v_angle = __Pyx_PyFloat_AsDouble(values[2]); if (unlikely((__pyx_v_angle == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 236, __pyx_L3_error)
+    __pyx_v_screen_w = __Pyx_PyLong_As_int(values[3]); if (unlikely((__pyx_v_screen_w == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 237, __pyx_L3_error)
+    if (values[4]) {
+      __pyx_v_max_depth = __Pyx_PyLong_As_int(values[4]); if (unlikely((__pyx_v_max_depth == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 237, __pyx_L3_error)
+    } else {
+      __pyx_v_max_depth = ((int)40);
+    }
+    __pyx_v_wall_structures = ((PyObject*)values[5]);
+  }
+  goto __pyx_L6_skip;
+  __pyx_L5_argtuple_error:;
+  __Pyx_RaiseArgtupleInvalid("cast_rays", 0, 4, 6, __pyx_nargs); __PYX_ERR(0, 236, __pyx_L3_error)
+  __pyx_L6_skip:;
+  goto __pyx_L4_argument_unpacking_done;
+  __pyx_L3_error:;
+  for (Py_ssize_t __pyx_temp=0; __pyx_temp < (Py_ssize_t)(sizeof(values)/sizeof(values[0])); ++__pyx_temp) {
+    Py_XDECREF(values[__pyx_temp]);
+  }
+  __Pyx_AddTraceback("fast_tiles.TileGrid.cast_rays", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __Pyx_RefNannyFinishContext();
+  return NULL;
+  __pyx_L4_argument_unpacking_done:;
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_wall_structures), (&PyDict_Type), 1, "wall_structures", 1))) __PYX_ERR(0, 237, __pyx_L1_error)
+  __pyx_r = __pyx_pf_10fast_tiles_8TileGrid_12cast_rays(((struct __pyx_obj_10fast_tiles_TileGrid *)__pyx_v_self), __pyx_v_player_x, __pyx_v_player_y, __pyx_v_angle, __pyx_v_screen_w, __pyx_v_max_depth, __pyx_v_wall_structures);
+
+  /* "fast_tiles.pyx":236
+ *         return result
+ * 
+ *     def cast_rays(self, double player_x, double player_y, double angle,             # <<<<<<<<<<<<<<
+ *                   int screen_w, int max_depth=40, dict wall_structures=None):
+ *         """DDA raycasting using C tile arrays  zero Python object access in inner loop.
+*/
+
+  /* function exit code */
+  goto __pyx_L0;
+  __pyx_L1_error:;
+  __pyx_r = NULL;
+  for (Py_ssize_t __pyx_temp=0; __pyx_temp < (Py_ssize_t)(sizeof(values)/sizeof(values[0])); ++__pyx_temp) {
+    Py_XDECREF(values[__pyx_temp]);
+  }
+  goto __pyx_L7_cleaned_up;
+  __pyx_L0:;
+  for (Py_ssize_t __pyx_temp=0; __pyx_temp < (Py_ssize_t)(sizeof(values)/sizeof(values[0])); ++__pyx_temp) {
+    Py_XDECREF(values[__pyx_temp]);
+  }
+  __pyx_L7_cleaned_up:;
+  __Pyx_RefNannyFinishContext();
+  return __pyx_r;
+}
+
+static PyObject *__pyx_pf_10fast_tiles_8TileGrid_12cast_rays(struct __pyx_obj_10fast_tiles_TileGrid *__pyx_v_self, double __pyx_v_player_x, double __pyx_v_player_y, double __pyx_v_angle, int __pyx_v_screen_w, int __pyx_v_max_depth, PyObject *__pyx_v_wall_structures) {
+  double __pyx_v_half_fov;
+  double __pyx_v_fov;
+  double __pyx_v_ray_angle;
+  double __pyx_v_sin_a;
+  double __pyx_v_cos_a;
+  double __pyx_v_delta_dist_x;
+  double __pyx_v_delta_dist_y;
+  double __pyx_v_side_dist_x;
+  double __pyx_v_side_dist_y;
+  int __pyx_v_step_x;
+  int __pyx_v_step_y;
+  int __pyx_v_map_x;
+  int __pyx_v_map_y;
+  int __pyx_v_side;
+  int __pyx_v_depth;
+  int __pyx_v_col;
+  double __pyx_v_perp_dist;
+  double __pyx_v_wall_x;
+  double __pyx_v_cos_corr;
+  int __pyx_v_exit_bit;
+  int __pyx_v_entry_bit;
+  int __pyx_v_prev_x;
+  int __pyx_v_prev_y;
+  PyObject *__pyx_v_results = NULL;
+  int __pyx_v_hit;
+  PyObject *__pyx_v_face = NULL;
+  PyObject *__pyx_v_ws_key = NULL;
+  PyObject *__pyx_r = NULL;
+  __Pyx_RefNannyDeclarations
+  PyObject *__pyx_t_1 = NULL;
+  int __pyx_t_2;
+  int __pyx_t_3;
+  int __pyx_t_4;
+  int __pyx_t_5;
+  PyObject *__pyx_t_6 = NULL;
+  PyObject *__pyx_t_7 = NULL;
+  PyObject *__pyx_t_8 = NULL;
+  PyObject *__pyx_t_9 = NULL;
+  PyObject *__pyx_t_10 = NULL;
+  int __pyx_t_11;
+  int __pyx_t_12;
+  int __pyx_t_13;
+  int __pyx_t_14;
+  int __pyx_lineno = 0;
+  const char *__pyx_filename = NULL;
+  int __pyx_clineno = 0;
+  __Pyx_RefNannySetupContext("cast_rays", 0);
+
+  /* "fast_tiles.pyx":242
+ *         Returns list of (dist, side, wall_frac, hx, hy, is_wall_struct).
+ *         """
+ *         cdef double half_fov = M_PI / 6.0             # <<<<<<<<<<<<<<
+ *         cdef double fov = M_PI / 3.0
+ *         cdef double ray_angle, sin_a, cos_a
+*/
+  __pyx_v_half_fov = (((double)M_PI) / 6.0);
+
+  /* "fast_tiles.pyx":243
+ *         """
+ *         cdef double half_fov = M_PI / 6.0
+ *         cdef double fov = M_PI / 3.0             # <<<<<<<<<<<<<<
+ *         cdef double ray_angle, sin_a, cos_a
+ *         cdef double delta_dist_x, delta_dist_y
+*/
+  __pyx_v_fov = (((double)M_PI) / 3.0);
+
+  /* "fast_tiles.pyx":252
+ *         cdef int exit_bit, entry_bit, prev_x, prev_y
+ * 
+ *         results = []             # <<<<<<<<<<<<<<
+ * 
+ *         for col in range(screen_w):
+*/
+  __pyx_t_1 = PyList_New(0); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 252, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_1);
+  __pyx_v_results = ((PyObject*)__pyx_t_1);
+  __pyx_t_1 = 0;
+
+  /* "fast_tiles.pyx":254
+ *         results = []
+ * 
+ *         for col in range(screen_w):             # <<<<<<<<<<<<<<
+ *             ray_angle = angle - half_fov + (<double>col / <double>screen_w) * fov
+ *             sin_a = sin(ray_angle)
+*/
+  __pyx_t_2 = __pyx_v_screen_w;
+  __pyx_t_3 = __pyx_t_2;
+  for (__pyx_t_4 = 0; __pyx_t_4 < __pyx_t_3; __pyx_t_4+=1) {
+    __pyx_v_col = __pyx_t_4;
+
+    /* "fast_tiles.pyx":255
+ * 
+ *         for col in range(screen_w):
+ *             ray_angle = angle - half_fov + (<double>col / <double>screen_w) * fov             # <<<<<<<<<<<<<<
+ *             sin_a = sin(ray_angle)
+ *             cos_a = cos(ray_angle)
+*/
+    __pyx_v_ray_angle = ((__pyx_v_angle - __pyx_v_half_fov) + ((((double)__pyx_v_col) / ((double)__pyx_v_screen_w)) * __pyx_v_fov));
+
+    /* "fast_tiles.pyx":256
+ *         for col in range(screen_w):
+ *             ray_angle = angle - half_fov + (<double>col / <double>screen_w) * fov
+ *             sin_a = sin(ray_angle)             # <<<<<<<<<<<<<<
+ *             cos_a = cos(ray_angle)
+ *             if cos_a == 0.0: cos_a = 1e-8
+*/
+    __pyx_v_sin_a = sin(__pyx_v_ray_angle);
+
+    /* "fast_tiles.pyx":257
+ *             ray_angle = angle - half_fov + (<double>col / <double>screen_w) * fov
+ *             sin_a = sin(ray_angle)
+ *             cos_a = cos(ray_angle)             # <<<<<<<<<<<<<<
+ *             if cos_a == 0.0: cos_a = 1e-8
+ *             if sin_a == 0.0: sin_a = 1e-8
+*/
+    __pyx_v_cos_a = cos(__pyx_v_ray_angle);
+
+    /* "fast_tiles.pyx":258
+ *             sin_a = sin(ray_angle)
+ *             cos_a = cos(ray_angle)
+ *             if cos_a == 0.0: cos_a = 1e-8             # <<<<<<<<<<<<<<
+ *             if sin_a == 0.0: sin_a = 1e-8
+ * 
+*/
+    __pyx_t_5 = (__pyx_v_cos_a == 0.0);
+    if (__pyx_t_5) {
+      __pyx_v_cos_a = 1e-8;
+    }
+
+    /* "fast_tiles.pyx":259
+ *             cos_a = cos(ray_angle)
+ *             if cos_a == 0.0: cos_a = 1e-8
+ *             if sin_a == 0.0: sin_a = 1e-8             # <<<<<<<<<<<<<<
+ * 
+ *             map_x = <int>player_x
+*/
+    __pyx_t_5 = (__pyx_v_sin_a == 0.0);
+    if (__pyx_t_5) {
+      __pyx_v_sin_a = 1e-8;
+    }
+
+    /* "fast_tiles.pyx":261
+ *             if sin_a == 0.0: sin_a = 1e-8
+ * 
+ *             map_x = <int>player_x             # <<<<<<<<<<<<<<
+ *             map_y = <int>player_y
+ *             delta_dist_x = fabs(1.0 / cos_a)
+*/
+    __pyx_v_map_x = ((int)__pyx_v_player_x);
+
+    /* "fast_tiles.pyx":262
+ * 
+ *             map_x = <int>player_x
+ *             map_y = <int>player_y             # <<<<<<<<<<<<<<
+ *             delta_dist_x = fabs(1.0 / cos_a)
+ *             delta_dist_y = fabs(1.0 / sin_a)
+*/
+    __pyx_v_map_y = ((int)__pyx_v_player_y);
+
+    /* "fast_tiles.pyx":263
+ *             map_x = <int>player_x
+ *             map_y = <int>player_y
+ *             delta_dist_x = fabs(1.0 / cos_a)             # <<<<<<<<<<<<<<
+ *             delta_dist_y = fabs(1.0 / sin_a)
+ * 
+*/
+    __pyx_v_delta_dist_x = fabs((1.0 / __pyx_v_cos_a));
+
+    /* "fast_tiles.pyx":264
+ *             map_y = <int>player_y
+ *             delta_dist_x = fabs(1.0 / cos_a)
+ *             delta_dist_y = fabs(1.0 / sin_a)             # <<<<<<<<<<<<<<
+ * 
+ *             if cos_a < 0:
+*/
+    __pyx_v_delta_dist_y = fabs((1.0 / __pyx_v_sin_a));
+
+    /* "fast_tiles.pyx":266
+ *             delta_dist_y = fabs(1.0 / sin_a)
+ * 
+ *             if cos_a < 0:             # <<<<<<<<<<<<<<
+ *                 step_x = -1
+ *                 side_dist_x = (player_x - map_x) * delta_dist_x
+*/
+    __pyx_t_5 = (__pyx_v_cos_a < 0.0);
+    if (__pyx_t_5) {
+
+      /* "fast_tiles.pyx":267
+ * 
+ *             if cos_a < 0:
+ *                 step_x = -1             # <<<<<<<<<<<<<<
+ *                 side_dist_x = (player_x - map_x) * delta_dist_x
+ *             else:
+*/
+      __pyx_v_step_x = -1;
+
+      /* "fast_tiles.pyx":268
+ *             if cos_a < 0:
+ *                 step_x = -1
+ *                 side_dist_x = (player_x - map_x) * delta_dist_x             # <<<<<<<<<<<<<<
+ *             else:
+ *                 step_x = 1
+*/
+      __pyx_v_side_dist_x = ((__pyx_v_player_x - __pyx_v_map_x) * __pyx_v_delta_dist_x);
+
+      /* "fast_tiles.pyx":266
+ *             delta_dist_y = fabs(1.0 / sin_a)
+ * 
+ *             if cos_a < 0:             # <<<<<<<<<<<<<<
+ *                 step_x = -1
+ *                 side_dist_x = (player_x - map_x) * delta_dist_x
+*/
+      goto __pyx_L7;
+    }
+
+    /* "fast_tiles.pyx":270
+ *                 side_dist_x = (player_x - map_x) * delta_dist_x
+ *             else:
+ *                 step_x = 1             # <<<<<<<<<<<<<<
+ *                 side_dist_x = (map_x + 1.0 - player_x) * delta_dist_x
+ *             if sin_a < 0:
+*/
+    /*else*/ {
+      __pyx_v_step_x = 1;
+
+      /* "fast_tiles.pyx":271
+ *             else:
+ *                 step_x = 1
+ *                 side_dist_x = (map_x + 1.0 - player_x) * delta_dist_x             # <<<<<<<<<<<<<<
+ *             if sin_a < 0:
+ *                 step_y = -1
+*/
+      __pyx_v_side_dist_x = (((__pyx_v_map_x + 1.0) - __pyx_v_player_x) * __pyx_v_delta_dist_x);
+    }
+    __pyx_L7:;
+
+    /* "fast_tiles.pyx":272
+ *                 step_x = 1
+ *                 side_dist_x = (map_x + 1.0 - player_x) * delta_dist_x
+ *             if sin_a < 0:             # <<<<<<<<<<<<<<
+ *                 step_y = -1
+ *                 side_dist_y = (player_y - map_y) * delta_dist_y
+*/
+    __pyx_t_5 = (__pyx_v_sin_a < 0.0);
+    if (__pyx_t_5) {
+
+      /* "fast_tiles.pyx":273
+ *                 side_dist_x = (map_x + 1.0 - player_x) * delta_dist_x
+ *             if sin_a < 0:
+ *                 step_y = -1             # <<<<<<<<<<<<<<
+ *                 side_dist_y = (player_y - map_y) * delta_dist_y
+ *             else:
+*/
+      __pyx_v_step_y = -1;
+
+      /* "fast_tiles.pyx":274
+ *             if sin_a < 0:
+ *                 step_y = -1
+ *                 side_dist_y = (player_y - map_y) * delta_dist_y             # <<<<<<<<<<<<<<
+ *             else:
+ *                 step_y = 1
+*/
+      __pyx_v_side_dist_y = ((__pyx_v_player_y - __pyx_v_map_y) * __pyx_v_delta_dist_y);
+
+      /* "fast_tiles.pyx":272
+ *                 step_x = 1
+ *                 side_dist_x = (map_x + 1.0 - player_x) * delta_dist_x
+ *             if sin_a < 0:             # <<<<<<<<<<<<<<
+ *                 step_y = -1
+ *                 side_dist_y = (player_y - map_y) * delta_dist_y
+*/
+      goto __pyx_L8;
+    }
+
+    /* "fast_tiles.pyx":276
+ *                 side_dist_y = (player_y - map_y) * delta_dist_y
+ *             else:
+ *                 step_y = 1             # <<<<<<<<<<<<<<
+ *                 side_dist_y = (map_y + 1.0 - player_y) * delta_dist_y
+ * 
+*/
+    /*else*/ {
+      __pyx_v_step_y = 1;
+
+      /* "fast_tiles.pyx":277
+ *             else:
+ *                 step_y = 1
+ *                 side_dist_y = (map_y + 1.0 - player_y) * delta_dist_y             # <<<<<<<<<<<<<<
+ * 
+ *             hit = False
+*/
+      __pyx_v_side_dist_y = (((__pyx_v_map_y + 1.0) - __pyx_v_player_y) * __pyx_v_delta_dist_y);
+    }
+    __pyx_L8:;
+
+    /* "fast_tiles.pyx":279
+ *                 side_dist_y = (map_y + 1.0 - player_y) * delta_dist_y
+ * 
+ *             hit = False             # <<<<<<<<<<<<<<
+ *             side = 0
+ *             depth = 0
+*/
+    __pyx_v_hit = 0;
+
+    /* "fast_tiles.pyx":280
+ * 
+ *             hit = False
+ *             side = 0             # <<<<<<<<<<<<<<
+ *             depth = 0
+ *             cos_corr = cos(ray_angle - angle)
+*/
+    __pyx_v_side = 0;
+
+    /* "fast_tiles.pyx":281
+ *             hit = False
+ *             side = 0
+ *             depth = 0             # <<<<<<<<<<<<<<
+ *             cos_corr = cos(ray_angle - angle)
+ * 
+*/
+    __pyx_v_depth = 0;
+
+    /* "fast_tiles.pyx":282
+ *             side = 0
+ *             depth = 0
+ *             cos_corr = cos(ray_angle - angle)             # <<<<<<<<<<<<<<
+ * 
+ *             while depth < max_depth:
+*/
+    __pyx_v_cos_corr = cos((__pyx_v_ray_angle - __pyx_v_angle));
+
+    /* "fast_tiles.pyx":284
+ *             cos_corr = cos(ray_angle - angle)
+ * 
+ *             while depth < max_depth:             # <<<<<<<<<<<<<<
+ *                 if side_dist_x < side_dist_y:
+ *                     side_dist_x += delta_dist_x
+*/
+    while (1) {
+      __pyx_t_5 = (__pyx_v_depth < __pyx_v_max_depth);
+      if (!__pyx_t_5) break;
+
+      /* "fast_tiles.pyx":285
+ * 
+ *             while depth < max_depth:
+ *                 if side_dist_x < side_dist_y:             # <<<<<<<<<<<<<<
+ *                     side_dist_x += delta_dist_x
+ *                     map_x += step_x
+*/
+      __pyx_t_5 = (__pyx_v_side_dist_x < __pyx_v_side_dist_y);
+      if (__pyx_t_5) {
+
+        /* "fast_tiles.pyx":286
+ *             while depth < max_depth:
+ *                 if side_dist_x < side_dist_y:
+ *                     side_dist_x += delta_dist_x             # <<<<<<<<<<<<<<
+ *                     map_x += step_x
+ *                     side = 0
+*/
+        __pyx_v_side_dist_x = (__pyx_v_side_dist_x + __pyx_v_delta_dist_x);
+
+        /* "fast_tiles.pyx":287
+ *                 if side_dist_x < side_dist_y:
+ *                     side_dist_x += delta_dist_x
+ *                     map_x += step_x             # <<<<<<<<<<<<<<
+ *                     side = 0
+ *                 else:
+*/
+        __pyx_v_map_x = (__pyx_v_map_x + __pyx_v_step_x);
+
+        /* "fast_tiles.pyx":288
+ *                     side_dist_x += delta_dist_x
+ *                     map_x += step_x
+ *                     side = 0             # <<<<<<<<<<<<<<
+ *                 else:
+ *                     side_dist_y += delta_dist_y
+*/
+        __pyx_v_side = 0;
+
+        /* "fast_tiles.pyx":285
+ * 
+ *             while depth < max_depth:
+ *                 if side_dist_x < side_dist_y:             # <<<<<<<<<<<<<<
+ *                     side_dist_x += delta_dist_x
+ *                     map_x += step_x
+*/
+        goto __pyx_L11;
+      }
+
+      /* "fast_tiles.pyx":290
+ *                     side = 0
+ *                 else:
+ *                     side_dist_y += delta_dist_y             # <<<<<<<<<<<<<<
+ *                     map_y += step_y
+ *                     side = 1
+*/
+      /*else*/ {
+        __pyx_v_side_dist_y = (__pyx_v_side_dist_y + __pyx_v_delta_dist_y);
+
+        /* "fast_tiles.pyx":291
+ *                 else:
+ *                     side_dist_y += delta_dist_y
+ *                     map_y += step_y             # <<<<<<<<<<<<<<
+ *                     side = 1
+ *                 depth += 1
+*/
+        __pyx_v_map_y = (__pyx_v_map_y + __pyx_v_step_y);
+
+        /* "fast_tiles.pyx":292
+ *                     side_dist_y += delta_dist_y
+ *                     map_y += step_y
+ *                     side = 1             # <<<<<<<<<<<<<<
+ *                 depth += 1
+ * 
+*/
+        __pyx_v_side = 1;
+      }
+      __pyx_L11:;
+
+      /* "fast_tiles.pyx":293
+ *                     map_y += step_y
+ *                     side = 1
+ *                 depth += 1             # <<<<<<<<<<<<<<
+ * 
+ *                 # Wall structure check
+*/
+      __pyx_v_depth = (__pyx_v_depth + 1);
+
+      /* "fast_tiles.pyx":296
+ * 
+ *                 # Wall structure check
+ *                 if wall_structures is not None:             # <<<<<<<<<<<<<<
+ *                     if side == 0:
+ *                         face = 'W' if step_x > 0 else 'E'
+*/
+      __pyx_t_5 = (__pyx_v_wall_structures != ((PyObject*)Py_None));
+      if (__pyx_t_5) {
+
+        /* "fast_tiles.pyx":297
+ *                 # Wall structure check
+ *                 if wall_structures is not None:
+ *                     if side == 0:             # <<<<<<<<<<<<<<
+ *                         face = 'W' if step_x > 0 else 'E'
+ *                     else:
+*/
+        __pyx_t_5 = (__pyx_v_side == 0);
+        if (__pyx_t_5) {
+
+          /* "fast_tiles.pyx":298
+ *                 if wall_structures is not None:
+ *                     if side == 0:
+ *                         face = 'W' if step_x > 0 else 'E'             # <<<<<<<<<<<<<<
+ *                     else:
+ *                         face = 'N' if step_y > 0 else 'S'
+*/
+          __pyx_t_5 = (__pyx_v_step_x > 0);
+          if (__pyx_t_5) {
+            __Pyx_INCREF(__pyx_mstate_global->__pyx_n_u_W);
+            __pyx_t_1 = __pyx_mstate_global->__pyx_n_u_W;
+          } else {
+            __Pyx_INCREF(__pyx_mstate_global->__pyx_n_u_E);
+            __pyx_t_1 = __pyx_mstate_global->__pyx_n_u_E;
+          }
+          __Pyx_XDECREF_SET(__pyx_v_face, ((PyObject*)__pyx_t_1));
+          __pyx_t_1 = 0;
+
+          /* "fast_tiles.pyx":297
+ *                 # Wall structure check
+ *                 if wall_structures is not None:
+ *                     if side == 0:             # <<<<<<<<<<<<<<
+ *                         face = 'W' if step_x > 0 else 'E'
+ *                     else:
+*/
+          goto __pyx_L13;
+        }
+
+        /* "fast_tiles.pyx":300
+ *                         face = 'W' if step_x > 0 else 'E'
+ *                     else:
+ *                         face = 'N' if step_y > 0 else 'S'             # <<<<<<<<<<<<<<
+ *                     ws_key = (map_x, map_y, face)
+ *                     if ws_key in wall_structures:
+*/
+        /*else*/ {
+          __pyx_t_5 = (__pyx_v_step_y > 0);
+          if (__pyx_t_5) {
+            __Pyx_INCREF(__pyx_mstate_global->__pyx_n_u_N);
+            __pyx_t_1 = __pyx_mstate_global->__pyx_n_u_N;
+          } else {
+            __Pyx_INCREF(__pyx_mstate_global->__pyx_n_u_S);
+            __pyx_t_1 = __pyx_mstate_global->__pyx_n_u_S;
+          }
+          __Pyx_XDECREF_SET(__pyx_v_face, ((PyObject*)__pyx_t_1));
+          __pyx_t_1 = 0;
+        }
+        __pyx_L13:;
+
+        /* "fast_tiles.pyx":301
+ *                     else:
+ *                         face = 'N' if step_y > 0 else 'S'
+ *                     ws_key = (map_x, map_y, face)             # <<<<<<<<<<<<<<
+ *                     if ws_key in wall_structures:
+ *                         if side == 0:
+*/
+        __pyx_t_1 = __Pyx_PyLong_From_int(__pyx_v_map_x); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 301, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_1);
+        __pyx_t_6 = __Pyx_PyLong_From_int(__pyx_v_map_y); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 301, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_6);
+        __pyx_t_7 = PyTuple_New(3); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 301, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_7);
+        __Pyx_GIVEREF(__pyx_t_1);
+        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_7, 0, __pyx_t_1) != (0)) __PYX_ERR(0, 301, __pyx_L1_error);
+        __Pyx_GIVEREF(__pyx_t_6);
+        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_7, 1, __pyx_t_6) != (0)) __PYX_ERR(0, 301, __pyx_L1_error);
+        __Pyx_INCREF(__pyx_v_face);
+        __Pyx_GIVEREF(__pyx_v_face);
+        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_7, 2, __pyx_v_face) != (0)) __PYX_ERR(0, 301, __pyx_L1_error);
+        __pyx_t_1 = 0;
+        __pyx_t_6 = 0;
+        __Pyx_XDECREF_SET(__pyx_v_ws_key, ((PyObject*)__pyx_t_7));
+        __pyx_t_7 = 0;
+
+        /* "fast_tiles.pyx":302
+ *                         face = 'N' if step_y > 0 else 'S'
+ *                     ws_key = (map_x, map_y, face)
+ *                     if ws_key in wall_structures:             # <<<<<<<<<<<<<<
+ *                         if side == 0:
+ *                             perp_dist = side_dist_x - delta_dist_x
+*/
+        if (unlikely(__pyx_v_wall_structures == Py_None)) {
+          PyErr_SetString(PyExc_TypeError, "'NoneType' object is not iterable");
+          __PYX_ERR(0, 302, __pyx_L1_error)
+        }
+        __pyx_t_5 = (__Pyx_PyDict_ContainsTF(__pyx_v_ws_key, __pyx_v_wall_structures, Py_EQ)); if (unlikely((__pyx_t_5 < 0))) __PYX_ERR(0, 302, __pyx_L1_error)
+        if (__pyx_t_5) {
+
+          /* "fast_tiles.pyx":303
+ *                     ws_key = (map_x, map_y, face)
+ *                     if ws_key in wall_structures:
+ *                         if side == 0:             # <<<<<<<<<<<<<<
+ *                             perp_dist = side_dist_x - delta_dist_x
+ *                         else:
+*/
+          __pyx_t_5 = (__pyx_v_side == 0);
+          if (__pyx_t_5) {
+
+            /* "fast_tiles.pyx":304
+ *                     if ws_key in wall_structures:
+ *                         if side == 0:
+ *                             perp_dist = side_dist_x - delta_dist_x             # <<<<<<<<<<<<<<
+ *                         else:
+ *                             perp_dist = side_dist_y - delta_dist_y
+*/
+            __pyx_v_perp_dist = (__pyx_v_side_dist_x - __pyx_v_delta_dist_x);
+
+            /* "fast_tiles.pyx":303
+ *                     ws_key = (map_x, map_y, face)
+ *                     if ws_key in wall_structures:
+ *                         if side == 0:             # <<<<<<<<<<<<<<
+ *                             perp_dist = side_dist_x - delta_dist_x
+ *                         else:
+*/
+            goto __pyx_L15;
+          }
+
+          /* "fast_tiles.pyx":306
+ *                             perp_dist = side_dist_x - delta_dist_x
+ *                         else:
+ *                             perp_dist = side_dist_y - delta_dist_y             # <<<<<<<<<<<<<<
+ *                         if perp_dist < 0.001: perp_dist = 0.001
+ *                         perp_dist *= cos_corr
+*/
+          /*else*/ {
+            __pyx_v_perp_dist = (__pyx_v_side_dist_y - __pyx_v_delta_dist_y);
+          }
+          __pyx_L15:;
+
+          /* "fast_tiles.pyx":307
+ *                         else:
+ *                             perp_dist = side_dist_y - delta_dist_y
+ *                         if perp_dist < 0.001: perp_dist = 0.001             # <<<<<<<<<<<<<<
+ *                         perp_dist *= cos_corr
+ *                         if side == 0:
+*/
+          __pyx_t_5 = (__pyx_v_perp_dist < 0.001);
+          if (__pyx_t_5) {
+            __pyx_v_perp_dist = 0.001;
+          }
+
+          /* "fast_tiles.pyx":308
+ *                             perp_dist = side_dist_y - delta_dist_y
+ *                         if perp_dist < 0.001: perp_dist = 0.001
+ *                         perp_dist *= cos_corr             # <<<<<<<<<<<<<<
+ *                         if side == 0:
+ *                             wall_x = player_y + perp_dist * sin_a / cos_corr
+*/
+          __pyx_v_perp_dist = (__pyx_v_perp_dist * __pyx_v_cos_corr);
+
+          /* "fast_tiles.pyx":309
+ *                         if perp_dist < 0.001: perp_dist = 0.001
+ *                         perp_dist *= cos_corr
+ *                         if side == 0:             # <<<<<<<<<<<<<<
+ *                             wall_x = player_y + perp_dist * sin_a / cos_corr
+ *                         else:
+*/
+          __pyx_t_5 = (__pyx_v_side == 0);
+          if (__pyx_t_5) {
+
+            /* "fast_tiles.pyx":310
+ *                         perp_dist *= cos_corr
+ *                         if side == 0:
+ *                             wall_x = player_y + perp_dist * sin_a / cos_corr             # <<<<<<<<<<<<<<
+ *                         else:
+ *                             wall_x = player_x + perp_dist * cos_a / cos_corr
+*/
+            __pyx_v_wall_x = (__pyx_v_player_y + ((__pyx_v_perp_dist * __pyx_v_sin_a) / __pyx_v_cos_corr));
+
+            /* "fast_tiles.pyx":309
+ *                         if perp_dist < 0.001: perp_dist = 0.001
+ *                         perp_dist *= cos_corr
+ *                         if side == 0:             # <<<<<<<<<<<<<<
+ *                             wall_x = player_y + perp_dist * sin_a / cos_corr
+ *                         else:
+*/
+            goto __pyx_L17;
+          }
+
+          /* "fast_tiles.pyx":312
+ *                             wall_x = player_y + perp_dist * sin_a / cos_corr
+ *                         else:
+ *                             wall_x = player_x + perp_dist * cos_a / cos_corr             # <<<<<<<<<<<<<<
+ *                         wall_x -= floor(wall_x)
+ *                         results.append((perp_dist, side, wall_x, map_x, map_y, True))
+*/
+          /*else*/ {
+            __pyx_v_wall_x = (__pyx_v_player_x + ((__pyx_v_perp_dist * __pyx_v_cos_a) / __pyx_v_cos_corr));
+          }
+          __pyx_L17:;
+
+          /* "fast_tiles.pyx":313
+ *                         else:
+ *                             wall_x = player_x + perp_dist * cos_a / cos_corr
+ *                         wall_x -= floor(wall_x)             # <<<<<<<<<<<<<<
+ *                         results.append((perp_dist, side, wall_x, map_x, map_y, True))
+ *                         hit = True
+*/
+          __pyx_v_wall_x = (__pyx_v_wall_x - floor(__pyx_v_wall_x));
+
+          /* "fast_tiles.pyx":314
+ *                             wall_x = player_x + perp_dist * cos_a / cos_corr
+ *                         wall_x -= floor(wall_x)
+ *                         results.append((perp_dist, side, wall_x, map_x, map_y, True))             # <<<<<<<<<<<<<<
+ *                         hit = True
+ *                         break
+*/
+          __pyx_t_7 = PyFloat_FromDouble(__pyx_v_perp_dist); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 314, __pyx_L1_error)
+          __Pyx_GOTREF(__pyx_t_7);
+          __pyx_t_6 = __Pyx_PyLong_From_int(__pyx_v_side); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 314, __pyx_L1_error)
+          __Pyx_GOTREF(__pyx_t_6);
+          __pyx_t_1 = PyFloat_FromDouble(__pyx_v_wall_x); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 314, __pyx_L1_error)
+          __Pyx_GOTREF(__pyx_t_1);
+          __pyx_t_8 = __Pyx_PyLong_From_int(__pyx_v_map_x); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 314, __pyx_L1_error)
+          __Pyx_GOTREF(__pyx_t_8);
+          __pyx_t_9 = __Pyx_PyLong_From_int(__pyx_v_map_y); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 314, __pyx_L1_error)
+          __Pyx_GOTREF(__pyx_t_9);
+          __pyx_t_10 = PyTuple_New(6); if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 314, __pyx_L1_error)
+          __Pyx_GOTREF(__pyx_t_10);
+          __Pyx_GIVEREF(__pyx_t_7);
+          if (__Pyx_PyTuple_SET_ITEM(__pyx_t_10, 0, __pyx_t_7) != (0)) __PYX_ERR(0, 314, __pyx_L1_error);
+          __Pyx_GIVEREF(__pyx_t_6);
+          if (__Pyx_PyTuple_SET_ITEM(__pyx_t_10, 1, __pyx_t_6) != (0)) __PYX_ERR(0, 314, __pyx_L1_error);
+          __Pyx_GIVEREF(__pyx_t_1);
+          if (__Pyx_PyTuple_SET_ITEM(__pyx_t_10, 2, __pyx_t_1) != (0)) __PYX_ERR(0, 314, __pyx_L1_error);
+          __Pyx_GIVEREF(__pyx_t_8);
+          if (__Pyx_PyTuple_SET_ITEM(__pyx_t_10, 3, __pyx_t_8) != (0)) __PYX_ERR(0, 314, __pyx_L1_error);
+          __Pyx_GIVEREF(__pyx_t_9);
+          if (__Pyx_PyTuple_SET_ITEM(__pyx_t_10, 4, __pyx_t_9) != (0)) __PYX_ERR(0, 314, __pyx_L1_error);
+          __Pyx_INCREF(Py_True);
+          __Pyx_GIVEREF(Py_True);
+          if (__Pyx_PyTuple_SET_ITEM(__pyx_t_10, 5, Py_True) != (0)) __PYX_ERR(0, 314, __pyx_L1_error);
+          __pyx_t_7 = 0;
+          __pyx_t_6 = 0;
+          __pyx_t_1 = 0;
+          __pyx_t_8 = 0;
+          __pyx_t_9 = 0;
+          __pyx_t_11 = __Pyx_PyList_Append(__pyx_v_results, __pyx_t_10); if (unlikely(__pyx_t_11 == ((int)-1))) __PYX_ERR(0, 314, __pyx_L1_error)
+          __Pyx_DECREF(__pyx_t_10); __pyx_t_10 = 0;
+
+          /* "fast_tiles.pyx":315
+ *                         wall_x -= floor(wall_x)
+ *                         results.append((perp_dist, side, wall_x, map_x, map_y, True))
+ *                         hit = True             # <<<<<<<<<<<<<<
+ *                         break
+ * 
+*/
+          __pyx_v_hit = 1;
+
+          /* "fast_tiles.pyx":316
+ *                         results.append((perp_dist, side, wall_x, map_x, map_y, True))
+ *                         hit = True
+ *                         break             # <<<<<<<<<<<<<<
+ * 
+ *                 # C tile array check  no Python dict lookup
+*/
+          goto __pyx_L10_break;
+
+          /* "fast_tiles.pyx":302
+ *                         face = 'N' if step_y > 0 else 'S'
+ *                     ws_key = (map_x, map_y, face)
+ *                     if ws_key in wall_structures:             # <<<<<<<<<<<<<<
+ *                         if side == 0:
+ *                             perp_dist = side_dist_x - delta_dist_x
+*/
+        }
+
+        /* "fast_tiles.pyx":296
+ * 
+ *                 # Wall structure check
+ *                 if wall_structures is not None:             # <<<<<<<<<<<<<<
+ *                     if side == 0:
+ *                         face = 'W' if step_x > 0 else 'E'
+*/
+      }
+
+      /* "fast_tiles.pyx":319
+ * 
+ *                 # C tile array check  no Python dict lookup
+ *                 if not self._in_bounds(map_x, map_y) or not self._is_walkable(map_x, map_y):             # <<<<<<<<<<<<<<
+ *                     if side == 0:
+ *                         perp_dist = side_dist_x - delta_dist_x
+*/
+      __pyx_t_12 = __pyx_f_10fast_tiles_8TileGrid__in_bounds(__pyx_v_self, __pyx_v_map_x, __pyx_v_map_y); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 319, __pyx_L1_error)
+      __pyx_t_13 = (!__pyx_t_12);
+      if (!__pyx_t_13) {
+      } else {
+        __pyx_t_5 = __pyx_t_13;
+        goto __pyx_L19_bool_binop_done;
+      }
+      __pyx_t_13 = __pyx_f_10fast_tiles_8TileGrid__is_walkable(__pyx_v_self, __pyx_v_map_x, __pyx_v_map_y); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 319, __pyx_L1_error)
+      __pyx_t_12 = (!__pyx_t_13);
+      __pyx_t_5 = __pyx_t_12;
+      __pyx_L19_bool_binop_done:;
+      if (__pyx_t_5) {
+
+        /* "fast_tiles.pyx":320
+ *                 # C tile array check  no Python dict lookup
+ *                 if not self._in_bounds(map_x, map_y) or not self._is_walkable(map_x, map_y):
+ *                     if side == 0:             # <<<<<<<<<<<<<<
+ *                         perp_dist = side_dist_x - delta_dist_x
+ *                     else:
+*/
+        __pyx_t_5 = (__pyx_v_side == 0);
+        if (__pyx_t_5) {
+
+          /* "fast_tiles.pyx":321
+ *                 if not self._in_bounds(map_x, map_y) or not self._is_walkable(map_x, map_y):
+ *                     if side == 0:
+ *                         perp_dist = side_dist_x - delta_dist_x             # <<<<<<<<<<<<<<
+ *                     else:
+ *                         perp_dist = side_dist_y - delta_dist_y
+*/
+          __pyx_v_perp_dist = (__pyx_v_side_dist_x - __pyx_v_delta_dist_x);
+
+          /* "fast_tiles.pyx":320
+ *                 # C tile array check  no Python dict lookup
+ *                 if not self._in_bounds(map_x, map_y) or not self._is_walkable(map_x, map_y):
+ *                     if side == 0:             # <<<<<<<<<<<<<<
+ *                         perp_dist = side_dist_x - delta_dist_x
+ *                     else:
+*/
+          goto __pyx_L21;
+        }
+
+        /* "fast_tiles.pyx":323
+ *                         perp_dist = side_dist_x - delta_dist_x
+ *                     else:
+ *                         perp_dist = side_dist_y - delta_dist_y             # <<<<<<<<<<<<<<
+ *                     if perp_dist < 0.001: perp_dist = 0.001
+ *                     perp_dist *= cos_corr
+*/
+        /*else*/ {
+          __pyx_v_perp_dist = (__pyx_v_side_dist_y - __pyx_v_delta_dist_y);
+        }
+        __pyx_L21:;
+
+        /* "fast_tiles.pyx":324
+ *                     else:
+ *                         perp_dist = side_dist_y - delta_dist_y
+ *                     if perp_dist < 0.001: perp_dist = 0.001             # <<<<<<<<<<<<<<
+ *                     perp_dist *= cos_corr
+ *                     if side == 0:
+*/
+        __pyx_t_5 = (__pyx_v_perp_dist < 0.001);
+        if (__pyx_t_5) {
+          __pyx_v_perp_dist = 0.001;
+        }
+
+        /* "fast_tiles.pyx":325
+ *                         perp_dist = side_dist_y - delta_dist_y
+ *                     if perp_dist < 0.001: perp_dist = 0.001
+ *                     perp_dist *= cos_corr             # <<<<<<<<<<<<<<
+ *                     if side == 0:
+ *                         wall_x = player_y + perp_dist * sin_a / cos_corr
+*/
+        __pyx_v_perp_dist = (__pyx_v_perp_dist * __pyx_v_cos_corr);
+
+        /* "fast_tiles.pyx":326
+ *                     if perp_dist < 0.001: perp_dist = 0.001
+ *                     perp_dist *= cos_corr
+ *                     if side == 0:             # <<<<<<<<<<<<<<
+ *                         wall_x = player_y + perp_dist * sin_a / cos_corr
+ *                     else:
+*/
+        __pyx_t_5 = (__pyx_v_side == 0);
+        if (__pyx_t_5) {
+
+          /* "fast_tiles.pyx":327
+ *                     perp_dist *= cos_corr
+ *                     if side == 0:
+ *                         wall_x = player_y + perp_dist * sin_a / cos_corr             # <<<<<<<<<<<<<<
+ *                     else:
+ *                         wall_x = player_x + perp_dist * cos_a / cos_corr
+*/
+          __pyx_v_wall_x = (__pyx_v_player_y + ((__pyx_v_perp_dist * __pyx_v_sin_a) / __pyx_v_cos_corr));
+
+          /* "fast_tiles.pyx":326
+ *                     if perp_dist < 0.001: perp_dist = 0.001
+ *                     perp_dist *= cos_corr
+ *                     if side == 0:             # <<<<<<<<<<<<<<
+ *                         wall_x = player_y + perp_dist * sin_a / cos_corr
+ *                     else:
+*/
+          goto __pyx_L23;
+        }
+
+        /* "fast_tiles.pyx":329
+ *                         wall_x = player_y + perp_dist * sin_a / cos_corr
+ *                     else:
+ *                         wall_x = player_x + perp_dist * cos_a / cos_corr             # <<<<<<<<<<<<<<
+ *                     wall_x -= floor(wall_x)
+ *                     results.append((perp_dist, side, wall_x, map_x, map_y, False))
+*/
+        /*else*/ {
+          __pyx_v_wall_x = (__pyx_v_player_x + ((__pyx_v_perp_dist * __pyx_v_cos_a) / __pyx_v_cos_corr));
+        }
+        __pyx_L23:;
+
+        /* "fast_tiles.pyx":330
+ *                     else:
+ *                         wall_x = player_x + perp_dist * cos_a / cos_corr
+ *                     wall_x -= floor(wall_x)             # <<<<<<<<<<<<<<
+ *                     results.append((perp_dist, side, wall_x, map_x, map_y, False))
+ *                     hit = True
+*/
+        __pyx_v_wall_x = (__pyx_v_wall_x - floor(__pyx_v_wall_x));
+
+        /* "fast_tiles.pyx":331
+ *                         wall_x = player_x + perp_dist * cos_a / cos_corr
+ *                     wall_x -= floor(wall_x)
+ *                     results.append((perp_dist, side, wall_x, map_x, map_y, False))             # <<<<<<<<<<<<<<
+ *                     hit = True
+ *                     break
+*/
+        __pyx_t_10 = PyFloat_FromDouble(__pyx_v_perp_dist); if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 331, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_10);
+        __pyx_t_9 = __Pyx_PyLong_From_int(__pyx_v_side); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 331, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_9);
+        __pyx_t_8 = PyFloat_FromDouble(__pyx_v_wall_x); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 331, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_8);
+        __pyx_t_1 = __Pyx_PyLong_From_int(__pyx_v_map_x); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 331, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_1);
+        __pyx_t_6 = __Pyx_PyLong_From_int(__pyx_v_map_y); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 331, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_6);
+        __pyx_t_7 = PyTuple_New(6); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 331, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_7);
+        __Pyx_GIVEREF(__pyx_t_10);
+        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_7, 0, __pyx_t_10) != (0)) __PYX_ERR(0, 331, __pyx_L1_error);
+        __Pyx_GIVEREF(__pyx_t_9);
+        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_7, 1, __pyx_t_9) != (0)) __PYX_ERR(0, 331, __pyx_L1_error);
+        __Pyx_GIVEREF(__pyx_t_8);
+        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_7, 2, __pyx_t_8) != (0)) __PYX_ERR(0, 331, __pyx_L1_error);
+        __Pyx_GIVEREF(__pyx_t_1);
+        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_7, 3, __pyx_t_1) != (0)) __PYX_ERR(0, 331, __pyx_L1_error);
+        __Pyx_GIVEREF(__pyx_t_6);
+        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_7, 4, __pyx_t_6) != (0)) __PYX_ERR(0, 331, __pyx_L1_error);
+        __Pyx_INCREF(Py_False);
+        __Pyx_GIVEREF(Py_False);
+        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_7, 5, Py_False) != (0)) __PYX_ERR(0, 331, __pyx_L1_error);
+        __pyx_t_10 = 0;
+        __pyx_t_9 = 0;
+        __pyx_t_8 = 0;
+        __pyx_t_1 = 0;
+        __pyx_t_6 = 0;
+        __pyx_t_11 = __Pyx_PyList_Append(__pyx_v_results, __pyx_t_7); if (unlikely(__pyx_t_11 == ((int)-1))) __PYX_ERR(0, 331, __pyx_L1_error)
+        __Pyx_DECREF(__pyx_t_7); __pyx_t_7 = 0;
+
+        /* "fast_tiles.pyx":332
+ *                     wall_x -= floor(wall_x)
+ *                     results.append((perp_dist, side, wall_x, map_x, map_y, False))
+ *                     hit = True             # <<<<<<<<<<<<<<
+ *                     break
+ * 
+*/
+        __pyx_v_hit = 1;
+
+        /* "fast_tiles.pyx":333
+ *                     results.append((perp_dist, side, wall_x, map_x, map_y, False))
+ *                     hit = True
+ *                     break             # <<<<<<<<<<<<<<
+ * 
+ *                 # Bounds check via packed bytes
+*/
+        goto __pyx_L10_break;
+
+        /* "fast_tiles.pyx":319
+ * 
+ *                 # C tile array check  no Python dict lookup
+ *                 if not self._in_bounds(map_x, map_y) or not self._is_walkable(map_x, map_y):             # <<<<<<<<<<<<<<
+ *                     if side == 0:
+ *                         perp_dist = side_dist_x - delta_dist_x
+*/
+      }
+
+      /* "fast_tiles.pyx":336
+ * 
+ *                 # Bounds check via packed bytes
+ *                 if side == 0:             # <<<<<<<<<<<<<<
+ *                     exit_bit = B_E if step_x > 0 else B_W
+ *                     entry_bit = B_W if step_x > 0 else B_E
+*/
+      __pyx_t_5 = (__pyx_v_side == 0);
+      if (__pyx_t_5) {
+
+        /* "fast_tiles.pyx":337
+ *                 # Bounds check via packed bytes
+ *                 if side == 0:
+ *                     exit_bit = B_E if step_x > 0 else B_W             # <<<<<<<<<<<<<<
+ *                     entry_bit = B_W if step_x > 0 else B_E
+ *                     prev_x = map_x - step_x
+*/
+        __pyx_t_5 = (__pyx_v_step_x > 0);
+        if (__pyx_t_5) {
+          __pyx_t_14 = 2;
+        } else {
+          __pyx_t_14 = 3;
+        }
+        __pyx_v_exit_bit = __pyx_t_14;
+
+        /* "fast_tiles.pyx":338
+ *                 if side == 0:
+ *                     exit_bit = B_E if step_x > 0 else B_W
+ *                     entry_bit = B_W if step_x > 0 else B_E             # <<<<<<<<<<<<<<
+ *                     prev_x = map_x - step_x
+ *                     prev_y = map_y
+*/
+        __pyx_t_5 = (__pyx_v_step_x > 0);
+        if (__pyx_t_5) {
+          __pyx_t_14 = 3;
+        } else {
+          __pyx_t_14 = 2;
+        }
+        __pyx_v_entry_bit = __pyx_t_14;
+
+        /* "fast_tiles.pyx":339
+ *                     exit_bit = B_E if step_x > 0 else B_W
+ *                     entry_bit = B_W if step_x > 0 else B_E
+ *                     prev_x = map_x - step_x             # <<<<<<<<<<<<<<
+ *                     prev_y = map_y
+ *                 else:
+*/
+        __pyx_v_prev_x = (__pyx_v_map_x - __pyx_v_step_x);
+
+        /* "fast_tiles.pyx":340
+ *                     entry_bit = B_W if step_x > 0 else B_E
+ *                     prev_x = map_x - step_x
+ *                     prev_y = map_y             # <<<<<<<<<<<<<<
+ *                 else:
+ *                     exit_bit = B_S if step_y > 0 else B_N
+*/
+        __pyx_v_prev_y = __pyx_v_map_y;
+
+        /* "fast_tiles.pyx":336
+ * 
+ *                 # Bounds check via packed bytes
+ *                 if side == 0:             # <<<<<<<<<<<<<<
+ *                     exit_bit = B_E if step_x > 0 else B_W
+ *                     entry_bit = B_W if step_x > 0 else B_E
+*/
+        goto __pyx_L24;
+      }
+
+      /* "fast_tiles.pyx":342
+ *                     prev_y = map_y
+ *                 else:
+ *                     exit_bit = B_S if step_y > 0 else B_N             # <<<<<<<<<<<<<<
+ *                     entry_bit = B_N if step_y > 0 else B_S
+ *                     prev_x = map_x
+*/
+      /*else*/ {
+        __pyx_t_5 = (__pyx_v_step_y > 0);
+        if (__pyx_t_5) {
+          __pyx_t_14 = 1;
+        } else {
+          __pyx_t_14 = 0;
+        }
+        __pyx_v_exit_bit = __pyx_t_14;
+
+        /* "fast_tiles.pyx":343
+ *                 else:
+ *                     exit_bit = B_S if step_y > 0 else B_N
+ *                     entry_bit = B_N if step_y > 0 else B_S             # <<<<<<<<<<<<<<
+ *                     prev_x = map_x
+ *                     prev_y = map_y - step_y
+*/
+        __pyx_t_5 = (__pyx_v_step_y > 0);
+        if (__pyx_t_5) {
+          __pyx_t_14 = 0;
+        } else {
+          __pyx_t_14 = 1;
+        }
+        __pyx_v_entry_bit = __pyx_t_14;
+
+        /* "fast_tiles.pyx":344
+ *                     exit_bit = B_S if step_y > 0 else B_N
+ *                     entry_bit = B_N if step_y > 0 else B_S
+ *                     prev_x = map_x             # <<<<<<<<<<<<<<
+ *                     prev_y = map_y - step_y
+ * 
+*/
+        __pyx_v_prev_x = __pyx_v_map_x;
+
+        /* "fast_tiles.pyx":345
+ *                     entry_bit = B_N if step_y > 0 else B_S
+ *                     prev_x = map_x
+ *                     prev_y = map_y - step_y             # <<<<<<<<<<<<<<
+ * 
+ *                 if self._in_bounds(prev_x, prev_y) and not self._check_exit(prev_x, prev_y, exit_bit):
+*/
+        __pyx_v_prev_y = (__pyx_v_map_y - __pyx_v_step_y);
+      }
+      __pyx_L24:;
+
+      /* "fast_tiles.pyx":347
+ *                     prev_y = map_y - step_y
+ * 
+ *                 if self._in_bounds(prev_x, prev_y) and not self._check_exit(prev_x, prev_y, exit_bit):             # <<<<<<<<<<<<<<
+ *                     if side == 0:
+ *                         perp_dist = side_dist_x - delta_dist_x
+*/
+      __pyx_t_12 = __pyx_f_10fast_tiles_8TileGrid__in_bounds(__pyx_v_self, __pyx_v_prev_x, __pyx_v_prev_y); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 347, __pyx_L1_error)
+      if (__pyx_t_12) {
+      } else {
+        __pyx_t_5 = __pyx_t_12;
+        goto __pyx_L26_bool_binop_done;
+      }
+      __pyx_t_12 = __pyx_f_10fast_tiles_8TileGrid__check_exit(__pyx_v_self, __pyx_v_prev_x, __pyx_v_prev_y, __pyx_v_exit_bit); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 347, __pyx_L1_error)
+      __pyx_t_13 = (!__pyx_t_12);
+      __pyx_t_5 = __pyx_t_13;
+      __pyx_L26_bool_binop_done:;
+      if (__pyx_t_5) {
+
+        /* "fast_tiles.pyx":348
+ * 
+ *                 if self._in_bounds(prev_x, prev_y) and not self._check_exit(prev_x, prev_y, exit_bit):
+ *                     if side == 0:             # <<<<<<<<<<<<<<
+ *                         perp_dist = side_dist_x - delta_dist_x
+ *                     else:
+*/
+        __pyx_t_5 = (__pyx_v_side == 0);
+        if (__pyx_t_5) {
+
+          /* "fast_tiles.pyx":349
+ *                 if self._in_bounds(prev_x, prev_y) and not self._check_exit(prev_x, prev_y, exit_bit):
+ *                     if side == 0:
+ *                         perp_dist = side_dist_x - delta_dist_x             # <<<<<<<<<<<<<<
+ *                     else:
+ *                         perp_dist = side_dist_y - delta_dist_y
+*/
+          __pyx_v_perp_dist = (__pyx_v_side_dist_x - __pyx_v_delta_dist_x);
+
+          /* "fast_tiles.pyx":348
+ * 
+ *                 if self._in_bounds(prev_x, prev_y) and not self._check_exit(prev_x, prev_y, exit_bit):
+ *                     if side == 0:             # <<<<<<<<<<<<<<
+ *                         perp_dist = side_dist_x - delta_dist_x
+ *                     else:
+*/
+          goto __pyx_L28;
+        }
+
+        /* "fast_tiles.pyx":351
+ *                         perp_dist = side_dist_x - delta_dist_x
+ *                     else:
+ *                         perp_dist = side_dist_y - delta_dist_y             # <<<<<<<<<<<<<<
+ *                     if perp_dist < 0.001: perp_dist = 0.001
+ *                     perp_dist *= cos_corr
+*/
+        /*else*/ {
+          __pyx_v_perp_dist = (__pyx_v_side_dist_y - __pyx_v_delta_dist_y);
+        }
+        __pyx_L28:;
+
+        /* "fast_tiles.pyx":352
+ *                     else:
+ *                         perp_dist = side_dist_y - delta_dist_y
+ *                     if perp_dist < 0.001: perp_dist = 0.001             # <<<<<<<<<<<<<<
+ *                     perp_dist *= cos_corr
+ *                     if side == 0:
+*/
+        __pyx_t_5 = (__pyx_v_perp_dist < 0.001);
+        if (__pyx_t_5) {
+          __pyx_v_perp_dist = 0.001;
+        }
+
+        /* "fast_tiles.pyx":353
+ *                         perp_dist = side_dist_y - delta_dist_y
+ *                     if perp_dist < 0.001: perp_dist = 0.001
+ *                     perp_dist *= cos_corr             # <<<<<<<<<<<<<<
+ *                     if side == 0:
+ *                         wall_x = player_y + perp_dist * sin_a / cos_corr
+*/
+        __pyx_v_perp_dist = (__pyx_v_perp_dist * __pyx_v_cos_corr);
+
+        /* "fast_tiles.pyx":354
+ *                     if perp_dist < 0.001: perp_dist = 0.001
+ *                     perp_dist *= cos_corr
+ *                     if side == 0:             # <<<<<<<<<<<<<<
+ *                         wall_x = player_y + perp_dist * sin_a / cos_corr
+ *                     else:
+*/
+        __pyx_t_5 = (__pyx_v_side == 0);
+        if (__pyx_t_5) {
+
+          /* "fast_tiles.pyx":355
+ *                     perp_dist *= cos_corr
+ *                     if side == 0:
+ *                         wall_x = player_y + perp_dist * sin_a / cos_corr             # <<<<<<<<<<<<<<
+ *                     else:
+ *                         wall_x = player_x + perp_dist * cos_a / cos_corr
+*/
+          __pyx_v_wall_x = (__pyx_v_player_y + ((__pyx_v_perp_dist * __pyx_v_sin_a) / __pyx_v_cos_corr));
+
+          /* "fast_tiles.pyx":354
+ *                     if perp_dist < 0.001: perp_dist = 0.001
+ *                     perp_dist *= cos_corr
+ *                     if side == 0:             # <<<<<<<<<<<<<<
+ *                         wall_x = player_y + perp_dist * sin_a / cos_corr
+ *                     else:
+*/
+          goto __pyx_L30;
+        }
+
+        /* "fast_tiles.pyx":357
+ *                         wall_x = player_y + perp_dist * sin_a / cos_corr
+ *                     else:
+ *                         wall_x = player_x + perp_dist * cos_a / cos_corr             # <<<<<<<<<<<<<<
+ *                     wall_x -= floor(wall_x)
+ *                     results.append((perp_dist, side, wall_x, map_x, map_y, False))
+*/
+        /*else*/ {
+          __pyx_v_wall_x = (__pyx_v_player_x + ((__pyx_v_perp_dist * __pyx_v_cos_a) / __pyx_v_cos_corr));
+        }
+        __pyx_L30:;
+
+        /* "fast_tiles.pyx":358
+ *                     else:
+ *                         wall_x = player_x + perp_dist * cos_a / cos_corr
+ *                     wall_x -= floor(wall_x)             # <<<<<<<<<<<<<<
+ *                     results.append((perp_dist, side, wall_x, map_x, map_y, False))
+ *                     hit = True
+*/
+        __pyx_v_wall_x = (__pyx_v_wall_x - floor(__pyx_v_wall_x));
+
+        /* "fast_tiles.pyx":359
+ *                         wall_x = player_x + perp_dist * cos_a / cos_corr
+ *                     wall_x -= floor(wall_x)
+ *                     results.append((perp_dist, side, wall_x, map_x, map_y, False))             # <<<<<<<<<<<<<<
+ *                     hit = True
+ *                     break
+*/
+        __pyx_t_7 = PyFloat_FromDouble(__pyx_v_perp_dist); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 359, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_7);
+        __pyx_t_6 = __Pyx_PyLong_From_int(__pyx_v_side); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 359, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_6);
+        __pyx_t_1 = PyFloat_FromDouble(__pyx_v_wall_x); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 359, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_1);
+        __pyx_t_8 = __Pyx_PyLong_From_int(__pyx_v_map_x); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 359, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_8);
+        __pyx_t_9 = __Pyx_PyLong_From_int(__pyx_v_map_y); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 359, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_9);
+        __pyx_t_10 = PyTuple_New(6); if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 359, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_10);
+        __Pyx_GIVEREF(__pyx_t_7);
+        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_10, 0, __pyx_t_7) != (0)) __PYX_ERR(0, 359, __pyx_L1_error);
+        __Pyx_GIVEREF(__pyx_t_6);
+        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_10, 1, __pyx_t_6) != (0)) __PYX_ERR(0, 359, __pyx_L1_error);
+        __Pyx_GIVEREF(__pyx_t_1);
+        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_10, 2, __pyx_t_1) != (0)) __PYX_ERR(0, 359, __pyx_L1_error);
+        __Pyx_GIVEREF(__pyx_t_8);
+        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_10, 3, __pyx_t_8) != (0)) __PYX_ERR(0, 359, __pyx_L1_error);
+        __Pyx_GIVEREF(__pyx_t_9);
+        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_10, 4, __pyx_t_9) != (0)) __PYX_ERR(0, 359, __pyx_L1_error);
+        __Pyx_INCREF(Py_False);
+        __Pyx_GIVEREF(Py_False);
+        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_10, 5, Py_False) != (0)) __PYX_ERR(0, 359, __pyx_L1_error);
+        __pyx_t_7 = 0;
+        __pyx_t_6 = 0;
+        __pyx_t_1 = 0;
+        __pyx_t_8 = 0;
+        __pyx_t_9 = 0;
+        __pyx_t_11 = __Pyx_PyList_Append(__pyx_v_results, __pyx_t_10); if (unlikely(__pyx_t_11 == ((int)-1))) __PYX_ERR(0, 359, __pyx_L1_error)
+        __Pyx_DECREF(__pyx_t_10); __pyx_t_10 = 0;
+
+        /* "fast_tiles.pyx":360
+ *                     wall_x -= floor(wall_x)
+ *                     results.append((perp_dist, side, wall_x, map_x, map_y, False))
+ *                     hit = True             # <<<<<<<<<<<<<<
+ *                     break
+ * 
+*/
+        __pyx_v_hit = 1;
+
+        /* "fast_tiles.pyx":361
+ *                     results.append((perp_dist, side, wall_x, map_x, map_y, False))
+ *                     hit = True
+ *                     break             # <<<<<<<<<<<<<<
+ * 
+ *                 if not self._check_exit(map_x, map_y, entry_bit):
+*/
+        goto __pyx_L10_break;
+
+        /* "fast_tiles.pyx":347
+ *                     prev_y = map_y - step_y
+ * 
+ *                 if self._in_bounds(prev_x, prev_y) and not self._check_exit(prev_x, prev_y, exit_bit):             # <<<<<<<<<<<<<<
+ *                     if side == 0:
+ *                         perp_dist = side_dist_x - delta_dist_x
+*/
+      }
+
+      /* "fast_tiles.pyx":363
+ *                     break
+ * 
+ *                 if not self._check_exit(map_x, map_y, entry_bit):             # <<<<<<<<<<<<<<
+ *                     if side == 0:
+ *                         perp_dist = side_dist_x - delta_dist_x
+*/
+      __pyx_t_5 = __pyx_f_10fast_tiles_8TileGrid__check_exit(__pyx_v_self, __pyx_v_map_x, __pyx_v_map_y, __pyx_v_entry_bit); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 363, __pyx_L1_error)
+      __pyx_t_13 = (!__pyx_t_5);
+      if (__pyx_t_13) {
+
+        /* "fast_tiles.pyx":364
+ * 
+ *                 if not self._check_exit(map_x, map_y, entry_bit):
+ *                     if side == 0:             # <<<<<<<<<<<<<<
+ *                         perp_dist = side_dist_x - delta_dist_x
+ *                     else:
+*/
+        __pyx_t_13 = (__pyx_v_side == 0);
+        if (__pyx_t_13) {
+
+          /* "fast_tiles.pyx":365
+ *                 if not self._check_exit(map_x, map_y, entry_bit):
+ *                     if side == 0:
+ *                         perp_dist = side_dist_x - delta_dist_x             # <<<<<<<<<<<<<<
+ *                     else:
+ *                         perp_dist = side_dist_y - delta_dist_y
+*/
+          __pyx_v_perp_dist = (__pyx_v_side_dist_x - __pyx_v_delta_dist_x);
+
+          /* "fast_tiles.pyx":364
+ * 
+ *                 if not self._check_exit(map_x, map_y, entry_bit):
+ *                     if side == 0:             # <<<<<<<<<<<<<<
+ *                         perp_dist = side_dist_x - delta_dist_x
+ *                     else:
+*/
+          goto __pyx_L32;
+        }
+
+        /* "fast_tiles.pyx":367
+ *                         perp_dist = side_dist_x - delta_dist_x
+ *                     else:
+ *                         perp_dist = side_dist_y - delta_dist_y             # <<<<<<<<<<<<<<
+ *                     if perp_dist < 0.001: perp_dist = 0.001
+ *                     perp_dist *= cos_corr
+*/
+        /*else*/ {
+          __pyx_v_perp_dist = (__pyx_v_side_dist_y - __pyx_v_delta_dist_y);
+        }
+        __pyx_L32:;
+
+        /* "fast_tiles.pyx":368
+ *                     else:
+ *                         perp_dist = side_dist_y - delta_dist_y
+ *                     if perp_dist < 0.001: perp_dist = 0.001             # <<<<<<<<<<<<<<
+ *                     perp_dist *= cos_corr
+ *                     if side == 0:
+*/
+        __pyx_t_13 = (__pyx_v_perp_dist < 0.001);
+        if (__pyx_t_13) {
+          __pyx_v_perp_dist = 0.001;
+        }
+
+        /* "fast_tiles.pyx":369
+ *                         perp_dist = side_dist_y - delta_dist_y
+ *                     if perp_dist < 0.001: perp_dist = 0.001
+ *                     perp_dist *= cos_corr             # <<<<<<<<<<<<<<
+ *                     if side == 0:
+ *                         wall_x = player_y + perp_dist * sin_a / cos_corr
+*/
+        __pyx_v_perp_dist = (__pyx_v_perp_dist * __pyx_v_cos_corr);
+
+        /* "fast_tiles.pyx":370
+ *                     if perp_dist < 0.001: perp_dist = 0.001
+ *                     perp_dist *= cos_corr
+ *                     if side == 0:             # <<<<<<<<<<<<<<
+ *                         wall_x = player_y + perp_dist * sin_a / cos_corr
+ *                     else:
+*/
+        __pyx_t_13 = (__pyx_v_side == 0);
+        if (__pyx_t_13) {
+
+          /* "fast_tiles.pyx":371
+ *                     perp_dist *= cos_corr
+ *                     if side == 0:
+ *                         wall_x = player_y + perp_dist * sin_a / cos_corr             # <<<<<<<<<<<<<<
+ *                     else:
+ *                         wall_x = player_x + perp_dist * cos_a / cos_corr
+*/
+          __pyx_v_wall_x = (__pyx_v_player_y + ((__pyx_v_perp_dist * __pyx_v_sin_a) / __pyx_v_cos_corr));
+
+          /* "fast_tiles.pyx":370
+ *                     if perp_dist < 0.001: perp_dist = 0.001
+ *                     perp_dist *= cos_corr
+ *                     if side == 0:             # <<<<<<<<<<<<<<
+ *                         wall_x = player_y + perp_dist * sin_a / cos_corr
+ *                     else:
+*/
+          goto __pyx_L34;
+        }
+
+        /* "fast_tiles.pyx":373
+ *                         wall_x = player_y + perp_dist * sin_a / cos_corr
+ *                     else:
+ *                         wall_x = player_x + perp_dist * cos_a / cos_corr             # <<<<<<<<<<<<<<
+ *                     wall_x -= floor(wall_x)
+ *                     results.append((perp_dist, side, wall_x, map_x, map_y, False))
+*/
+        /*else*/ {
+          __pyx_v_wall_x = (__pyx_v_player_x + ((__pyx_v_perp_dist * __pyx_v_cos_a) / __pyx_v_cos_corr));
+        }
+        __pyx_L34:;
+
+        /* "fast_tiles.pyx":374
+ *                     else:
+ *                         wall_x = player_x + perp_dist * cos_a / cos_corr
+ *                     wall_x -= floor(wall_x)             # <<<<<<<<<<<<<<
+ *                     results.append((perp_dist, side, wall_x, map_x, map_y, False))
+ *                     hit = True
+*/
+        __pyx_v_wall_x = (__pyx_v_wall_x - floor(__pyx_v_wall_x));
+
+        /* "fast_tiles.pyx":375
+ *                         wall_x = player_x + perp_dist * cos_a / cos_corr
+ *                     wall_x -= floor(wall_x)
+ *                     results.append((perp_dist, side, wall_x, map_x, map_y, False))             # <<<<<<<<<<<<<<
+ *                     hit = True
+ *                     break
+*/
+        __pyx_t_10 = PyFloat_FromDouble(__pyx_v_perp_dist); if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 375, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_10);
+        __pyx_t_9 = __Pyx_PyLong_From_int(__pyx_v_side); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 375, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_9);
+        __pyx_t_8 = PyFloat_FromDouble(__pyx_v_wall_x); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 375, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_8);
+        __pyx_t_1 = __Pyx_PyLong_From_int(__pyx_v_map_x); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 375, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_1);
+        __pyx_t_6 = __Pyx_PyLong_From_int(__pyx_v_map_y); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 375, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_6);
+        __pyx_t_7 = PyTuple_New(6); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 375, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_7);
+        __Pyx_GIVEREF(__pyx_t_10);
+        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_7, 0, __pyx_t_10) != (0)) __PYX_ERR(0, 375, __pyx_L1_error);
+        __Pyx_GIVEREF(__pyx_t_9);
+        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_7, 1, __pyx_t_9) != (0)) __PYX_ERR(0, 375, __pyx_L1_error);
+        __Pyx_GIVEREF(__pyx_t_8);
+        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_7, 2, __pyx_t_8) != (0)) __PYX_ERR(0, 375, __pyx_L1_error);
+        __Pyx_GIVEREF(__pyx_t_1);
+        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_7, 3, __pyx_t_1) != (0)) __PYX_ERR(0, 375, __pyx_L1_error);
+        __Pyx_GIVEREF(__pyx_t_6);
+        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_7, 4, __pyx_t_6) != (0)) __PYX_ERR(0, 375, __pyx_L1_error);
+        __Pyx_INCREF(Py_False);
+        __Pyx_GIVEREF(Py_False);
+        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_7, 5, Py_False) != (0)) __PYX_ERR(0, 375, __pyx_L1_error);
+        __pyx_t_10 = 0;
+        __pyx_t_9 = 0;
+        __pyx_t_8 = 0;
+        __pyx_t_1 = 0;
+        __pyx_t_6 = 0;
+        __pyx_t_11 = __Pyx_PyList_Append(__pyx_v_results, __pyx_t_7); if (unlikely(__pyx_t_11 == ((int)-1))) __PYX_ERR(0, 375, __pyx_L1_error)
+        __Pyx_DECREF(__pyx_t_7); __pyx_t_7 = 0;
+
+        /* "fast_tiles.pyx":376
+ *                     wall_x -= floor(wall_x)
+ *                     results.append((perp_dist, side, wall_x, map_x, map_y, False))
+ *                     hit = True             # <<<<<<<<<<<<<<
+ *                     break
+ * 
+*/
+        __pyx_v_hit = 1;
+
+        /* "fast_tiles.pyx":377
+ *                     results.append((perp_dist, side, wall_x, map_x, map_y, False))
+ *                     hit = True
+ *                     break             # <<<<<<<<<<<<<<
+ * 
+ *             if not hit:
+*/
+        goto __pyx_L10_break;
+
+        /* "fast_tiles.pyx":363
+ *                     break
+ * 
+ *                 if not self._check_exit(map_x, map_y, entry_bit):             # <<<<<<<<<<<<<<
+ *                     if side == 0:
+ *                         perp_dist = side_dist_x - delta_dist_x
+*/
+      }
+    }
+    __pyx_L10_break:;
+
+    /* "fast_tiles.pyx":379
+ *                     break
+ * 
+ *             if not hit:             # <<<<<<<<<<<<<<
+ *                 results.append((<double>max_depth, 0, 0.0, 0, 0, False))
+ * 
+*/
+    __pyx_t_13 = (!__pyx_v_hit);
+    if (__pyx_t_13) {
+
+      /* "fast_tiles.pyx":380
+ * 
+ *             if not hit:
+ *                 results.append((<double>max_depth, 0, 0.0, 0, 0, False))             # <<<<<<<<<<<<<<
+ * 
+ *         return results
+*/
+      __pyx_t_7 = PyFloat_FromDouble(((double)__pyx_v_max_depth)); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 380, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_7);
+      __pyx_t_6 = PyTuple_New(6); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 380, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_6);
+      __Pyx_GIVEREF(__pyx_t_7);
+      if (__Pyx_PyTuple_SET_ITEM(__pyx_t_6, 0, __pyx_t_7) != (0)) __PYX_ERR(0, 380, __pyx_L1_error);
+      __Pyx_INCREF(__pyx_mstate_global->__pyx_int_0);
+      __Pyx_GIVEREF(__pyx_mstate_global->__pyx_int_0);
+      if (__Pyx_PyTuple_SET_ITEM(__pyx_t_6, 1, __pyx_mstate_global->__pyx_int_0) != (0)) __PYX_ERR(0, 380, __pyx_L1_error);
+      __Pyx_INCREF(__pyx_mstate_global->__pyx_float_0_0);
+      __Pyx_GIVEREF(__pyx_mstate_global->__pyx_float_0_0);
+      if (__Pyx_PyTuple_SET_ITEM(__pyx_t_6, 2, __pyx_mstate_global->__pyx_float_0_0) != (0)) __PYX_ERR(0, 380, __pyx_L1_error);
+      __Pyx_INCREF(__pyx_mstate_global->__pyx_int_0);
+      __Pyx_GIVEREF(__pyx_mstate_global->__pyx_int_0);
+      if (__Pyx_PyTuple_SET_ITEM(__pyx_t_6, 3, __pyx_mstate_global->__pyx_int_0) != (0)) __PYX_ERR(0, 380, __pyx_L1_error);
+      __Pyx_INCREF(__pyx_mstate_global->__pyx_int_0);
+      __Pyx_GIVEREF(__pyx_mstate_global->__pyx_int_0);
+      if (__Pyx_PyTuple_SET_ITEM(__pyx_t_6, 4, __pyx_mstate_global->__pyx_int_0) != (0)) __PYX_ERR(0, 380, __pyx_L1_error);
+      __Pyx_INCREF(Py_False);
+      __Pyx_GIVEREF(Py_False);
+      if (__Pyx_PyTuple_SET_ITEM(__pyx_t_6, 5, Py_False) != (0)) __PYX_ERR(0, 380, __pyx_L1_error);
+      __pyx_t_7 = 0;
+      __pyx_t_11 = __Pyx_PyList_Append(__pyx_v_results, __pyx_t_6); if (unlikely(__pyx_t_11 == ((int)-1))) __PYX_ERR(0, 380, __pyx_L1_error)
+      __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
+
+      /* "fast_tiles.pyx":379
+ *                     break
+ * 
+ *             if not hit:             # <<<<<<<<<<<<<<
+ *                 results.append((<double>max_depth, 0, 0.0, 0, 0, False))
+ * 
+*/
+    }
+  }
+
+  /* "fast_tiles.pyx":382
+ *                 results.append((<double>max_depth, 0, 0.0, 0, 0, False))
+ * 
+ *         return results             # <<<<<<<<<<<<<<
+*/
+  __Pyx_XDECREF(__pyx_r);
+  __Pyx_INCREF(__pyx_v_results);
+  __pyx_r = __pyx_v_results;
+  goto __pyx_L0;
+
+  /* "fast_tiles.pyx":236
+ *         return result
+ * 
+ *     def cast_rays(self, double player_x, double player_y, double angle,             # <<<<<<<<<<<<<<
+ *                   int screen_w, int max_depth=40, dict wall_structures=None):
+ *         """DDA raycasting using C tile arrays  zero Python object access in inner loop.
+*/
+
+  /* function exit code */
+  __pyx_L1_error:;
+  __Pyx_XDECREF(__pyx_t_1);
+  __Pyx_XDECREF(__pyx_t_6);
+  __Pyx_XDECREF(__pyx_t_7);
+  __Pyx_XDECREF(__pyx_t_8);
+  __Pyx_XDECREF(__pyx_t_9);
+  __Pyx_XDECREF(__pyx_t_10);
+  __Pyx_AddTraceback("fast_tiles.TileGrid.cast_rays", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __pyx_r = NULL;
+  __pyx_L0:;
+  __Pyx_XDECREF(__pyx_v_results);
+  __Pyx_XDECREF(__pyx_v_face);
+  __Pyx_XDECREF(__pyx_v_ws_key);
+  __Pyx_XGIVEREF(__pyx_r);
+  __Pyx_RefNannyFinishContext();
+  return __pyx_r;
+}
+
 /* "(tree fragment)":1
  * def __reduce_cython__(self):             # <<<<<<<<<<<<<<
  *     raise TypeError, "no default __reduce__ due to non-trivial __cinit__"
@@ -7652,15 +9408,15 @@ static PyObject *__pyx_pf_10fast_tiles_8TileGrid_10spatial_walls(struct __pyx_ob
 */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_10fast_tiles_8TileGrid_13__reduce_cython__(PyObject *__pyx_v_self, 
+static PyObject *__pyx_pw_10fast_tiles_8TileGrid_15__reduce_cython__(PyObject *__pyx_v_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
 PyObject *__pyx_args, PyObject *__pyx_kwds
 #endif
 ); /*proto*/
-static PyMethodDef __pyx_mdef_10fast_tiles_8TileGrid_13__reduce_cython__ = {"__reduce_cython__", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_10fast_tiles_8TileGrid_13__reduce_cython__, __Pyx_METH_FASTCALL|METH_KEYWORDS, 0};
-static PyObject *__pyx_pw_10fast_tiles_8TileGrid_13__reduce_cython__(PyObject *__pyx_v_self, 
+static PyMethodDef __pyx_mdef_10fast_tiles_8TileGrid_15__reduce_cython__ = {"__reduce_cython__", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_10fast_tiles_8TileGrid_15__reduce_cython__, __Pyx_METH_FASTCALL|METH_KEYWORDS, 0};
+static PyObject *__pyx_pw_10fast_tiles_8TileGrid_15__reduce_cython__(PyObject *__pyx_v_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -7686,14 +9442,14 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   const Py_ssize_t __pyx_kwds_len = unlikely(__pyx_kwds) ? __Pyx_NumKwargs_FASTCALL(__pyx_kwds) : 0;
   if (unlikely(__pyx_kwds_len < 0)) return NULL;
   if (unlikely(__pyx_kwds_len > 0)) {__Pyx_RejectKeywords("__reduce_cython__", __pyx_kwds); return NULL;}
-  __pyx_r = __pyx_pf_10fast_tiles_8TileGrid_12__reduce_cython__(((struct __pyx_obj_10fast_tiles_TileGrid *)__pyx_v_self));
+  __pyx_r = __pyx_pf_10fast_tiles_8TileGrid_14__reduce_cython__(((struct __pyx_obj_10fast_tiles_TileGrid *)__pyx_v_self));
 
   /* function exit code */
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
 
-static PyObject *__pyx_pf_10fast_tiles_8TileGrid_12__reduce_cython__(CYTHON_UNUSED struct __pyx_obj_10fast_tiles_TileGrid *__pyx_v_self) {
+static PyObject *__pyx_pf_10fast_tiles_8TileGrid_14__reduce_cython__(CYTHON_UNUSED struct __pyx_obj_10fast_tiles_TileGrid *__pyx_v_self) {
   PyObject *__pyx_r = NULL;
   __Pyx_RefNannyDeclarations
   int __pyx_lineno = 0;
@@ -7733,15 +9489,15 @@ static PyObject *__pyx_pf_10fast_tiles_8TileGrid_12__reduce_cython__(CYTHON_UNUS
 */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_10fast_tiles_8TileGrid_15__setstate_cython__(PyObject *__pyx_v_self, 
+static PyObject *__pyx_pw_10fast_tiles_8TileGrid_17__setstate_cython__(PyObject *__pyx_v_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
 PyObject *__pyx_args, PyObject *__pyx_kwds
 #endif
 ); /*proto*/
-static PyMethodDef __pyx_mdef_10fast_tiles_8TileGrid_15__setstate_cython__ = {"__setstate_cython__", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_10fast_tiles_8TileGrid_15__setstate_cython__, __Pyx_METH_FASTCALL|METH_KEYWORDS, 0};
-static PyObject *__pyx_pw_10fast_tiles_8TileGrid_15__setstate_cython__(PyObject *__pyx_v_self, 
+static PyMethodDef __pyx_mdef_10fast_tiles_8TileGrid_17__setstate_cython__ = {"__setstate_cython__", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_10fast_tiles_8TileGrid_17__setstate_cython__, __Pyx_METH_FASTCALL|METH_KEYWORDS, 0};
+static PyObject *__pyx_pw_10fast_tiles_8TileGrid_17__setstate_cython__(PyObject *__pyx_v_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -7807,7 +9563,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   __Pyx_RefNannyFinishContext();
   return NULL;
   __pyx_L4_argument_unpacking_done:;
-  __pyx_r = __pyx_pf_10fast_tiles_8TileGrid_14__setstate_cython__(((struct __pyx_obj_10fast_tiles_TileGrid *)__pyx_v_self), __pyx_v___pyx_state);
+  __pyx_r = __pyx_pf_10fast_tiles_8TileGrid_16__setstate_cython__(((struct __pyx_obj_10fast_tiles_TileGrid *)__pyx_v_self), __pyx_v___pyx_state);
 
   /* function exit code */
   for (Py_ssize_t __pyx_temp=0; __pyx_temp < (Py_ssize_t)(sizeof(values)/sizeof(values[0])); ++__pyx_temp) {
@@ -7817,7 +9573,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   return __pyx_r;
 }
 
-static PyObject *__pyx_pf_10fast_tiles_8TileGrid_14__setstate_cython__(CYTHON_UNUSED struct __pyx_obj_10fast_tiles_TileGrid *__pyx_v_self, CYTHON_UNUSED PyObject *__pyx_v___pyx_state) {
+static PyObject *__pyx_pf_10fast_tiles_8TileGrid_16__setstate_cython__(CYTHON_UNUSED struct __pyx_obj_10fast_tiles_TileGrid *__pyx_v_self, CYTHON_UNUSED PyObject *__pyx_v___pyx_state) {
   PyObject *__pyx_r = NULL;
   __Pyx_RefNannyDeclarations
   int __pyx_lineno = 0;
@@ -7900,8 +9656,9 @@ static PyMethodDef __pyx_methods_10fast_tiles_TileGrid[] = {
   {"is_walkable", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_10fast_tiles_8TileGrid_7is_walkable, __Pyx_METH_FASTCALL|METH_KEYWORDS, 0},
   {"is_passable", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_10fast_tiles_8TileGrid_9is_passable, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_10fast_tiles_8TileGrid_8is_passable},
   {"spatial_walls", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_10fast_tiles_8TileGrid_11spatial_walls, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_10fast_tiles_8TileGrid_10spatial_walls},
-  {"__reduce_cython__", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_10fast_tiles_8TileGrid_13__reduce_cython__, __Pyx_METH_FASTCALL|METH_KEYWORDS, 0},
-  {"__setstate_cython__", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_10fast_tiles_8TileGrid_15__setstate_cython__, __Pyx_METH_FASTCALL|METH_KEYWORDS, 0},
+  {"cast_rays", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_10fast_tiles_8TileGrid_13cast_rays, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_10fast_tiles_8TileGrid_12cast_rays},
+  {"__reduce_cython__", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_10fast_tiles_8TileGrid_15__reduce_cython__, __Pyx_METH_FASTCALL|METH_KEYWORDS, 0},
+  {"__setstate_cython__", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_10fast_tiles_8TileGrid_17__setstate_cython__, __Pyx_METH_FASTCALL|METH_KEYWORDS, 0},
   {0, 0, 0, 0}
 };
 #if CYTHON_USE_TYPE_SPECS
@@ -8616,12 +10373,28 @@ __Pyx_RefNannySetupContext("PyInit_fast_tiles", 0);
   if (__Pyx_SetItemOnTypeDict(__pyx_mstate_global->__pyx_ptype_10fast_tiles_TileGrid, __pyx_mstate_global->__pyx_n_u_spatial_walls, __pyx_t_2) < (0)) __PYX_ERR(0, 160, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
 
+  /* "fast_tiles.pyx":236
+ *         return result
+ * 
+ *     def cast_rays(self, double player_x, double player_y, double angle,             # <<<<<<<<<<<<<<
+ *                   int screen_w, int max_depth=40, dict wall_structures=None):
+ *         """DDA raycasting using C tile arrays  zero Python object access in inner loop.
+*/
+  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_10fast_tiles_8TileGrid_13cast_rays, __Pyx_CYFUNCTION_CCLASS, __pyx_mstate_global->__pyx_n_u_TileGrid_cast_rays, NULL, __pyx_mstate_global->__pyx_n_u_fast_tiles, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[4])); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 236, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_2);
+  #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
+  PyUnstable_Object_EnableDeferredRefcount(__pyx_t_2);
+  #endif
+  __Pyx_CyFunction_SetDefaultsTuple(__pyx_t_2, __pyx_mstate_global->__pyx_tuple[0]);
+  if (__Pyx_SetItemOnTypeDict(__pyx_mstate_global->__pyx_ptype_10fast_tiles_TileGrid, __pyx_mstate_global->__pyx_n_u_cast_rays, __pyx_t_2) < (0)) __PYX_ERR(0, 236, __pyx_L1_error)
+  __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
+
   /* "(tree fragment)":1
  * def __reduce_cython__(self):             # <<<<<<<<<<<<<<
  *     raise TypeError, "no default __reduce__ due to non-trivial __cinit__"
  * def __setstate_cython__(self, __pyx_state):
 */
-  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_10fast_tiles_8TileGrid_13__reduce_cython__, __Pyx_CYFUNCTION_CCLASS, __pyx_mstate_global->__pyx_n_u_TileGrid___reduce_cython, NULL, __pyx_mstate_global->__pyx_n_u_fast_tiles, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[4])); if (unlikely(!__pyx_t_2)) __PYX_ERR(2, 1, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_10fast_tiles_8TileGrid_15__reduce_cython__, __Pyx_CYFUNCTION_CCLASS, __pyx_mstate_global->__pyx_n_u_TileGrid___reduce_cython, NULL, __pyx_mstate_global->__pyx_n_u_fast_tiles, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[5])); if (unlikely(!__pyx_t_2)) __PYX_ERR(2, 1, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
   PyUnstable_Object_EnableDeferredRefcount(__pyx_t_2);
@@ -8635,7 +10408,7 @@ __Pyx_RefNannySetupContext("PyInit_fast_tiles", 0);
  * def __setstate_cython__(self, __pyx_state):             # <<<<<<<<<<<<<<
  *     raise TypeError, "no default __reduce__ due to non-trivial __cinit__"
 */
-  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_10fast_tiles_8TileGrid_15__setstate_cython__, __Pyx_CYFUNCTION_CCLASS, __pyx_mstate_global->__pyx_n_u_TileGrid___setstate_cython, NULL, __pyx_mstate_global->__pyx_n_u_fast_tiles, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[5])); if (unlikely(!__pyx_t_2)) __PYX_ERR(2, 3, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_10fast_tiles_8TileGrid_17__setstate_cython__, __Pyx_CYFUNCTION_CCLASS, __pyx_mstate_global->__pyx_n_u_TileGrid___setstate_cython, NULL, __pyx_mstate_global->__pyx_n_u_fast_tiles, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[6])); if (unlikely(!__pyx_t_2)) __PYX_ERR(2, 3, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
   PyUnstable_Object_EnableDeferredRefcount(__pyx_t_2);
@@ -8705,42 +10478,75 @@ static int __Pyx_InitCachedConstants(__pyx_mstatetype *__pyx_mstate) {
   __Pyx_RefNannyDeclarations
   CYTHON_UNUSED_VAR(__pyx_mstate);
   __Pyx_RefNannySetupContext("__Pyx_InitCachedConstants", 0);
+
+  /* "fast_tiles.pyx":236
+ *         return result
+ * 
+ *     def cast_rays(self, double player_x, double player_y, double angle,             # <<<<<<<<<<<<<<
+ *                   int screen_w, int max_depth=40, dict wall_structures=None):
+ *         """DDA raycasting using C tile arrays  zero Python object access in inner loop.
+*/
+  __pyx_mstate_global->__pyx_tuple[0] = PyTuple_Pack(2, __pyx_mstate_global->__pyx_int_40, Py_None); if (unlikely(!__pyx_mstate_global->__pyx_tuple[0])) __PYX_ERR(0, 236, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_mstate_global->__pyx_tuple[0]);
+  __Pyx_GIVEREF(__pyx_mstate_global->__pyx_tuple[0]);
+  #if CYTHON_IMMORTAL_CONSTANTS
+  {
+    PyObject **table = __pyx_mstate->__pyx_tuple;
+    for (Py_ssize_t i=0; i<1; ++i) {
+      #if CYTHON_COMPILING_IN_CPYTHON_FREETHREADING
+      #if PY_VERSION_HEX < 0x030E0000
+      if (_Py_IsOwnedByCurrentThread(table[i]) && Py_REFCNT(table[i]) == 1)
+      #else
+      if (PyUnstable_Object_IsUniquelyReferenced(table[i]))
+      #endif
+      {
+        Py_SET_REFCNT(table[i], _Py_IMMORTAL_REFCNT_LOCAL);
+      }
+      #else
+      Py_SET_REFCNT(table[i], _Py_IMMORTAL_INITIAL_REFCNT);
+      #endif
+    }
+  }
+  #endif
   __Pyx_RefNannyFinishContext();
   return 0;
+  __pyx_L1_error:;
+  __Pyx_RefNannyFinishContext();
+  return -1;
 }
 /* #### Code section: init_constants ### */
 
 static int __Pyx_InitConstants(__pyx_mstatetype *__pyx_mstate) {
   CYTHON_UNUSED_VAR(__pyx_mstate);
   {
-    const struct { const unsigned int length: 10; } index[] = {{1},{7},{6},{14},{2},{9},{50},{39},{34},{14},{20},{8},{26},{28},{20},{20},{22},{13},{8},{18},{1},{6},{18},{7},{2},{2},{1},{3},{3},{4},{2},{2},{1},{9},{8},{10},{6},{6},{8},{8},{12},{1},{1},{3},{13},{11},{11},{5},{3},{6},{8},{10},{1},{8},{2},{2},{5},{2},{6},{8},{3},{3},{3},{2},{2},{11},{14},{12},{10},{17},{13},{6},{4},{10},{9},{1},{2},{4},{12},{10},{12},{19},{5},{7},{13},{4},{2},{4},{8},{4},{5},{4},{4},{2},{2},{6},{1},{8},{1},{5},{5},{1},{5},{5},{748},{290},{597},{19},{9}};
-    #if (CYTHON_COMPRESS_STRINGS) == 2 /* compression: bz2 (1341 bytes) */
-const char* const cstring = "BZh91AY&SY\277W\256\300\000\001.\377\377\377\377\377\377\177\373\276\317\277\365\177\354\277\377\377\362@@@@@@@@\000@@@@\000@\000P\005\036`\000\000\010\030w\004\252z\221\000\r\000\007\250\030\3122d\301=\002h\311\351\006\200\000\000\001\240d44d\022\201\0054\323A\246\243S\311\246H\236\240\000\006\200\000\000\000\000\000\r\0314dm@\251\223H#L\023F\000L\230\010\300\004\310\300\230#\004\300F\214\000\230\000\004c\200\000\000\000\000\000\0002\032\000\000\000\000\000\000\000\000H\243IP\032\0004\000\0004\032?T\362\200i\240\032z\215\017SG\251\220\320z\217P\036\221\352\017P\322\255.\236R\031\254v\305\200_\204\217\316\017\321(\303\373\212\202\210\302\003\252\030\350\022\244\021O\355J\032*UL\321D(\210\t\242p\251\2424\332m\000\330\305U!'<\310\016ONdJ\010%U\020\341t\001\221(\350Y\000\312s\205Z\315\000\242\217\255\021P1\264\334J\211j\344R\3724+\"\252\255\323\005tq\302B\020@\2222\322\304\232L&!\\P)\001\025\003y\"C\210\366 NtJ\237\360JRlU\345\243\346#\245\375u5~\275\207O\314\375.@\317\263;\340\314\211\301p+.\207\204\204\034;\331\177\335[K\213\230\273\256\303e\311\223#\334\354\n;2\273\003\216[k\2108\310\220\216\223`\031\202Z \201E\230\025\372\252\004@\247$\336\266B@J\304\201\307G\225\321\005*\203\316\"\304H\036\020\222\014\025`\322\222\020\201\tQ\207T\031E[f\004\016E\210\343\217\222\245\205\337\275\020)Z\214c\200`u\n\242c\346d\013=\353\307\021]\025|l\375>\264gY\255\223jz\270\363\304\342\226=W\034\215\024B \033\0233MU\310RB\210B\271\3746(\221\374\313\214\353lU\227Z\314N\252\352\277\337[N}\005\235t\346D\354sZ\231\247<IR\333\220\224\0201\223\2106\206\3247\260;nwU\334l\303Y\330\020\341\230L\n\027\245\270!J\306\227,\204\333\247\r\333d\034\231D\312\231CN\203\020\013\272\3137\353\217\263=\013\325\t\356\262\313\327\036T\270\273\016\003v\364\005^&\274wevU\\\316\320IxY\006\323\324k\212\261\226\305\276\026#{D\230\205\305\222\007]\212k\237NW^k\014\221\250j)\213\202\302\210pe\036\027\204sb\026\246\243\034\3243\030\213\335?-(\232m\312w\035TM\245P\3226L \2606q\013\032\347\273\234\252\362\341\325\033""\313'\256\300\251\235\256M\010\225K\330a\025\005\262\234s\002\205\001\271\373\314\344)\000\247G\031\tf\212$,\325\240\305\004\354E\220\352&\\(F\034\265\241\204#)\301\201\032\202\227\202\232p\231\032{<\206i\226e\264\276\335P\331\344B\276#\016\013\367\210o\rg\032\034\274\210\261\n\220\301\266RS^\256+\313\362\334\252/I\023\237\303\211;B\246\313\330\213\357\r\027\227o\252\030\325G\331\241\2423\006x\265\365g\341\321=\t\331\\\356b1)\216?\005\326\274x\353\206\001\256\333\370\267a\0277&G9U\006\265\t>\206\037x)XI\257\031oA1d\225\037\347\350]`[]\010hN0\277\233p\231\031\264\034yxr\246\336@\265\016N\206x\347pL3\261\304\241e\245p\315\200\347\023\224ym\025\3676\223P\262:\263m\265\307\217\031e\251B\002\266\331\013\023\020\330w=[R\231<\376\332M\007Q\014\017\210\036\333V\201\225\200\325\321\264d\001\251\001\232\246\223\330\261}\003n\361r\303\027\300\035\360\234\204L;Y\266\224\033K\364.\363\211\003Z\031\236\226^\017\" \230\262\217\263\0171\177\312\232\2215\232\030\341\2734\017>\363\226JER\003(.\0369\340,\307\0102\357p.\022=\001\236q\0161ll\37791\266\346P\325\337\003\217\310o\326uT\202fg+$g\274\013\261*\353V\375\331\366l\n\305\002\2601\372XJ\342\007\315&\321\005\205z\340Wf\2602\006\301\260\213\306y2E\0231\232?1\200HqQ\033\306d\177\001 \"\204\022\"\240\254&\305*\004HO\337A\007\224\304\342z\2019\355\000t\024QG\177\2520\331uE\306\224\035\264\n\271\237\370\013\237\316\3358E\202n=*\212.\232J\261X\246\200\3478&;\227\364\253jaZ\025r\027\333\231\237&[\311\210\215\330\tC\331\343\nJL\364\220b\244\234\325\226\251:J\325c\307h\321\274\221r35V@\207Q\255g\316%-=\375\004\037\352|\362\204\000t`\000~PB@X\257\000\2021\0201\224\001\210b(a&8D\"D\021\341\310qI,\346\361\0164\235\234gfTR\032\035\221<\345\244C\215J3-&\263hGzN)>\215ai_\374]\311\024\341BB\375^\273\000";
-    PyObject *data = __Pyx_DecompressString(cstring, 1341, 2);
+    const struct { const unsigned int length: 11; } index[] = {{1},{179},{8},{7},{6},{14},{2},{9},{50},{39},{34},{14},{1},{1},{20},{1},{8},{26},{28},{18},{20},{20},{22},{13},{1},{8},{5},{18},{1},{6},{9},{18},{3},{5},{8},{7},{2},{2},{1},{3},{3},{12},{12},{5},{4},{2},{2},{1},{9},{8},{4},{10},{3},{6},{6},{8},{8},{12},{1},{8},{3},{1},{3},{13},{11},{11},{5},{3},{6},{8},{5},{5},{9},{10},{1},{8},{2},{2},{5},{2},{6},{8},{9},{8},{8},{3},{3},{3},{6},{6},{2},{2},{11},{14},{12},{9},{10},{17},{13},{6},{7},{4},{10},{9},{1},{8},{2},{4},{12},{10},{12},{19},{4},{11},{11},{5},{7},{5},{13},{4},{6},{6},{2},{4},{8},{4},{5},{4},{4},{2},{2},{6},{1},{8},{15},{6},{6},{1},{5},{5},{1},{5},{5},{748},{290},{1098},{597},{19},{9}};
+    #if (CYTHON_COMPRESS_STRINGS) == 2 /* compression: bz2 (2077 bytes) */
+const char* const cstring = "BZh91AY&SY*R\251\315\000\002\003\377\377\377\377\377\377\377\377\277\337\277\375\177\376\277\377\377\376@@@@@@@@@@@@@\000@\000`\010\037\007\247i\212\261h\320\333\0003\212\0009\241(DJ2\000h4\320\036\246M\032\006l\236\204\220\320h\304\330\221\246@\323jh\0324=@\r\032\032d\320J \232h\00125O\006\221\246\241\032\003@hh\000\000\000\000\000\000\003@4\320\020i\211\211\211\200\230\t\200\000\000\000L\000\0010\000\t\200\000\000\000\232\006\232\010Hje6\243\312h4\006\200\003@\000\000\000\000\000\000\000\r44\311\240\321\006\230\230\230\230\t\200\230\000\000\000\004\300\000\023\000\000\230\000\000\000\t\240H\246D\321\024m&\325=G\250\365\006G\251\243!\240\006\206 \031\006@\310z\200\000\320\003\004\304a\r-|\251A\356\236\254\3206\303\246\227\364\221\375\364\372\205$\353\365f,\025GX\007\035uF\253\n\n%6\t,\252V\277\355\225J\314\"\310\231;\000J\222d*)D\3118\030\340\257\330\032m6\206\320\230\330\333WX\030n\222 \213\032\370\232\311`\\\305\266\2206\332M\246\3006$A$%\224\243>\346\301\rv\303b\315\201\213m$\330\306\004l\244\320b\262\214$%\200\225\334RFrj\034\242\241$*\003\\;\\\212\350\021\235\035 [\031\227&\214\310W.+\227\276Z\211\001\241\211\276\350\307$3 \310F5\324\250\312\205s\001\274EJ\220(\270\322`M\002\326\272\321\222Y\233L\032hV\021!\n[0N'-\205\tK\230<z1\026y\325HX\361\025\354\01080`T{21\370\030\377W\343\374e\221\277\322}2\340X\311Y\234g\207\0316\353e\220&V\263wFxAR\3610\333\255\3423rls\023\203\037\010$\004\202n$\221\022'>h\211\020c\306\364\007:\016oK\273rA(\024\220%(X\321\377A>K\260\343\300\345\032\031\245F=\203%\326\325\325\242\215\032\365\200e]\035!T\243\"t\023i\n\025*\025\324\221\020E\271<{%q`\255h /0\004\004\006\355\243\030U\331\262\204\307 g\345\344\004\310\316\005\241\336\230\255|\366Tv\014*,\013\032\233\026\013\010\265\264\313\211\235/\257\215(A#4c)X\020\200\370!\313\255\037-S4\032$\211\000Q2\220\3726\276J^\014\342.\"\370\345\004\262Z\2266Q\264\3159\001Ph\340z\026\246\367\203\307;\255\3239\2530\277<P#,\261h\277O\346\322\222\364\224\032(\205\034L)\242\201\356\306\300A\203\373TK""\236\374@\3000S\177\0175\224\367\245\261e6f\242\207\016\326\023I\347e\260\252r\325\310@\230\025}\324\234\003f\224\001\2456b\325\022\251\007\000\310\024`P\010\305V\032\345\254D\207\346&\"yU\342\345\273k\347'yI\232J,t\331\026\252\265V\026\3772\327\177\350\362\236\232r\272\210\035\017\276\353\022\3715\323osBP\353\0039\260\260\331\315\331\243_+\221b\024\227\031\336\206\3226\221\275\240C\246\376\235\360\033\332R\264n\203J\266\3513f9\0042\306p\210\204\351PP%BiL\252\266\264)*\223SJ\310j\221\"\267\3114\227\031\2127\357\210s\260\023\000\3000\276\371\322\204\t\331_\006\322\363F\245{\253c\335\262/B,&T\037\311\t\363,\366\245\205\224\327\305|p7h\020UY\006mR\245\230\232\302\340\2744\261\030]j6}\220P\265\377\302\325dI\204\255:T-\331s5q\005\220Y\215\226q\304XE\254\225eY\322\327\243W%\0347T\234\313\215\006\324N-}+\346#\264hSFm\214'Ce\350\327.\321\241\304\205\211\010\006I\276\243Z\2415\014CA\001\255K\177\034P9W%\252I\316\003x\304\037\234c_L\3166L\033\267\212\347\344M/\rJ\256\202\241\247S\270\215\023\323\007\351\244&,\245\266\252\212\342\323n\000T\227\354\020@\232\036|]\367\220#&\356Tx2cgk1\270Zp\312\013\203X\207J\257E\032\024\003%PY\032\311\245\010\232\316\371\202\003\202\206\353\337\212\201\275vh\215\221A\212c-\332\014`\241\010\275\005\024v\365\233>1$\345\226\265lU\352\252\264\272#\347.\321Ss\031\356{\226\010\326\274r\266cG\207\206\364Cx\233C\215\023\206H\256r\243\230\0142{\316G\2422G\034\373R\365\323Znf\005ozXl\322\330\306\361\237\220\033\365\r2)(\311\225(\363\034C:`g!\030N\304\327\276y\027s\002ERM\320n2\276G\020\317\2341\220\311\264\317~Y\362\321\03009\252X\346\005\200\362u4\323l$\263\356\225\203\222\305\246\3524\351C\026\331\014\365\354\255\3663\204\032\003\216k\020\324\345\231\005X9%\271\243\257\314*\231\220i;\344I\225\271\017\215qBz\326YXw\013\302[_@6\251\2435\342^\206B`_\324\254\334\205\313[\271\215\274\312\006\254\023t\346\325+\004\3438bh\327\".\214\341(Jg\212<\311I\253aV,i\022(D\"\2051\2734\303\215-\235U\2620\332\252\243\026\345t\245\202\343\003\266\221\216\323\n(\242\013!Cm""H\353\250sV\303:\030\205+\270\262\307N\215a\351\016\3768\337\237r\260\344z\334\244\232\01686\300\347\201\373m\355\203^X\014=Q\266\0149\000g\001\233\226\223\355\030\275 \335\276M~+!x\340U\357\003\254\270'f\002!Tc\317\230\214<\273\373\270=\330c\002\247Z\261\343\321Q\217\200g\241\020\3612\3155\r\003N\322*0\344\301<\241P)\203\2171N\002\262\244l\0107T>z\007&\322\307o\302G\322\245\030\362\223\031y\234\255\001\217:C\373\235(\274\026\370\007\3006\177\216\214m\270,f\350\001\342\034\277\301\036<88\312\222\250\362\244\232UW\024ql\007$J2\244L\323!\336\366\351V\240z\"\205\014\023\001&'\354\203\336,\345\310=\220b\"\"\204\267X\026\024@\014\272\027\254:4`e\006|\246q\361\240\254*#\234\335\312\337\004\nS\376z ,'UzNtV\340ZF\024\227\351$\253U\"eA\304\354\r\010\304y\2572h\375\006\347BJ\251\200J\177\005h&\326 \250\2251\311t\205\264\365\r\262}D\355\313\016[6\244\242\302\021\233 \375@&1\231\224\236}T{\346\210\034l\340\231!:\317\222\016\035@\347MoT$%\256kP\353\245\347\202\330)8\227S\344\223\255\226\312\255\032X\233(L\241\221\323\327\010O3\214\247?M\010\303bj\253=\024N$!b\020\013,\261%@\261!Th[\036`\246\n\331]d\221\341\222sV\240\225\354t\003 \345\362\204\277\373\266E\361\311\265~\271\024\355\030\371\324\314\225\343\337&7\0205S\262\313\342\022\367\210qN\306\271\216\374\334`8\335\212t\304\351\353.n\277\273?\320_b^\346\265\025\257p\334k\346\247\014\254'\0172n\016\370K\272\236\034\"\306\330\352\246,\364^l=7\233\357\005\327S\003\026\344%\222\315{\200\355\335\252\242\366nFW\262=\340:\272\304B\277m\231YU\224\206\206\016\300\211\031I\237\2357\211H\260\224\331X(c\014\245\010\205\206TI\366\226\221\014\304\2620\2012(\\\272>g\006\305U\325\310T/\r\342\257-\030\262iJ\325\205\232\301\340@\335\2516\206=\205i\03293\nb\211D\243Ax\216\224\351T\312\232\227\376.\344\212p\241 T\245S\232";
+    PyObject *data = __Pyx_DecompressString(cstring, 2077, 2);
     if (unlikely(!data)) __PYX_ERR(0, 1, __pyx_L1_error)
     const char* const bytes = __Pyx_PyBytes_AsString(data);
     #if !CYTHON_ASSUME_SAFE_MACROS
     if (likely(bytes)); else { Py_DECREF(data); __PYX_ERR(0, 1, __pyx_L1_error) }
     #endif
-    #elif (CYTHON_COMPRESS_STRINGS) != 0 /* compression: zlib (1239 bytes) */
-const char* const cstring = "x\332\245TKo\333F\020\216\342G\344T\256%K\212\3356\r\2348\257\266\250\013\331\tR\240I\013\331N\234\026AQ\331n\323\"\005\026\024\271\222\231P|\355\322&\013\024\360\221\307=\356q\217{\344\221?!\307\036y\364O\360O\350,%\331\262\2346FK\200\313\331ow^\337\314\360;\303$Z\333\302\330VkG#\024Q\323\302d\305\215\302\256n\222>n\330\316\222\001\247\201E\227\020\362\261\021\350\030\241%#\300K\324Y\262\035\373K\352\233\373\246f\301\251n\332&E\310\016zn\264\202t\307\307+=\32035\337\327\242\245\216\006\326\r\245e\366\\\307\247\243\327\202\236F\367\316\335xL\300\266\335%N\340\353\370[\204~\212Bx7M\235\242\037qH\267qg\027\024\266|\323\030~WNB\324#\272\347\330\010\215\234\020L\t\325\350;\316L\202\\\215\344l\214b\007\232\365\346\014F\\\r\262\261\324\201EN\321\310\3265\343u\377\272\332\230\316\nd\345\004\324\2641i\267\235\3006\210n\301\006\2316\242\276\246\343\266\246\277\321\235}\014\301\352\241\036\031\206\021\032Fd\230>\001!\202\222P?Bm\223\342\020\010\205\357iu:\276\323Ca\276F\010u\002[G\250\253\3650\352i.H\303\024\321\236i\032!\202$N\"\031Ir$7\360\321#opd\231^`\032\010\314@\214\360\364\034#\260\300\016lle\036\331\330v\363\222\331\007.D\217\215\2411\327q]7t\335\010\026\010\t\272\007\rbP\342>Uw\224E/\320\254\276\251\323>:W\256\023\000\207J$\320>\252\005\324\333\317?\227T\360\204`\202\255N^\326A\210 \rZu\244\330\350\035\205'fw\217\346\013\352\234\251)\241\330%\007\252\206\010Q\014\234\347Ns\307\324A!\274\021\ri\264\257Y\001&\007C\016\303\020hS\213iG\221\022#%\0366\217\313\227fn\360WrB6\216\212\245\270\031o\307\036\233b\273\274\306[\274-\n\342\232\360\262w\036\324\205v\201\203i\246\277_\343\214\217Q\215\2139\037\363qT\254\260\312\361\325K3\263\361SVg\032\363\262R\205\325X\213\265y\201W\3066eVPK\221O\201\005\035<\372\262\222\225\353l\207_\346\313|\233{c\233*{\300(\177\"\013\262&[Y\255~T\276\006\356\347\371\032(\327E[\026\262\363@_\347\261\360\344\224\3749\271\235h\240\227\225k\254\231\225\346\331=^\341\267\370:\327\216\247/\030\362\302\300\330\244\334L&\222\325d7\255\246\353\25164vO""\334\220\336qQ\031{\316\236\002\260\314[Y\351#\245\271\310\363d\257\260\2007!\335\216x*\347eC\205\262\305\037\002{\025q\027B\334\226^V[`\204\337\004pB<\204\346X\223\232\014\222\215\304\313\026\357\002\365\213\237\360\007\374O\331\224;\311\345\344NB\322[i3\273\376\0310w\022\303\307rU\276J'\322\206J\353S\336T\345:\311m.\246\354\t\370\253\212ua\310\233p\265%\215d9\331Nh\332P\271\244\300\364u\245\364a\334\205\304\273\3747\241\313\205\244\360~@\271\233\313!mx\006\0351\027{\207\315\243\342\007\361\203\201g\325Y\245*kd\305k\014\363U`h((\003\245x-\326\331<\224\215\364\331[\000\306^@)g\313l\222\2553\003\320\035Q8\203O\260Uh\320*\337\374\007|\003\272\347_\356\357\363\337\201\276\021\373\273\242r\006\037\263s\356\376\316\210\235#\225\3320\335\307\334\023EY\004\256\372\t\237\242\323\242#\233\003t\300P\235\375\312_BU\366d\027\252\001\323w\016(\305\337\003\324\032\023\362\317\017\212\352:\333f>\257\364\275\377\001\001?\023\267\205&\250\034\270\016\201\323\373\357\205\">\301\037\235B\245\370\305_\213\367\3454\264\241w\361]\177\010N\272\256\314f\2405\357p\257?\003\236\032\3711\261\010\023V\207Q\034(.\362E\350\224}\030t\230\300*\333\200\304j||3\027\023v\013\212\240\347\305\361\241\2517\340'2\0173\243'\325\244\231\225\363\251X\316i\231\347\215a\034\367\340\357`\310\257\322\3120\204+<\020[\262!\237%\237\247/\336\026\206\341,\210)\361\022F\355\227\344\233\324z{\023\332s\266\222\337\237\346\257\241\223\300\275\317\026`\256\313j\302\341W\363\010\306v\215c\361\265|\222\026\376\027\320\201p\376+\240\376(\r\276%\032\207M\325[\2245\330&\237\025-\030\322\312a!\233\274\032\177\301Z\177\003H\274\352*";
-    PyObject *data = __Pyx_DecompressString(cstring, 1239, 1);
+    #elif (CYTHON_COMPRESS_STRINGS) != 0 /* compression: zlib (1983 bytes) */
+const char* const cstring = "x\332\305VKs\333\310\0216\255\027mK1)R\026\355\365zA\311\262\234MV)Jr\354\312\332IQ\017\313\273q\271L\311k{\263NM\r\201!\005\033\002@`@\021\233\244\312G\036q\234\343\034\347\210#\216:\362\250#\216\374\t\372\t\351\001\037\242dg\355$\207e\025\007\203\236\356\351\356\257\277\351\301_\236Y\224(t\037Se\323\247\373\226\251\350\256\242\021C\257\022\007Sb\370\212K\035]\245\304\221J\246\362|\373\3717\353\017\326\025lj\212C\336\022\225\272\212\353UU\003\273.q\025\253\246T=\335\240\272\251P\337&\356\212\362]M\361-O1\t\321\024j)6\350\215\032\320}b*.\241r\242,c\323\264(\246\272e\"0\327\315\372\262\242\351\0168\321\233DZ?\306\206KV\260\246!\320#\232\356\342\252A\210)\307\032v)\242\272\001>m\277UWu\267'\327L\013\362\251a\317\240\nB\016\321<\225 \244h^\262\241i\231\337@~M\035\033\260\252\352\246N\0212\275\003\333_A\252\345\220\225\003\260\323\261\343`_\251a\330=IB?\260-\207\216\252y\007\230\356\177\240\361Pbg\326]\313sT\362\347\355g\010=\367[\360\337\002@\3213\322\242\273\244\266\367\002lv\034]\033<W\206Q\252IA\020\032Y\001\244\\\000\350#k\252\314\037\302t\207\022\335E\022m\t\302\250\354\020\033\357\316\310\\\033\020\307\206\\0N\255]\337T_a\355mO\337\254\033\004K\221n\255@\302\226\007\025&n\265jy\246\346\016]\253\006H\221\016\305s\260J\252X}\247Z\206j\271\010\313\001\354\034\325j\022\310Nm\251\276\246i-M\363\201k\024#(%E\255\2219\310m\272\017\305wA\313\207\032S\307GU\235\222\026T\010\2365ppZ\362\232\325\2549\326\001j%\243\217P\3153U\204\352\370\200\240\003l\303l\200\033\332\337\307F\r\201\301\276Nu]k!=\211\254\227\321\010d#H\201\327\003\367\035\361\r\275\341\351\032\202\035!\305d\337\226\034\374\003\334BI\270 \2644\317\000/\260nJ\347\310$\246\235\020\305<\264\001\017\242\r\366\267\211c'\251\332\006\366\211\203Z\375\247o[\266m\267l\333\267\035\322\004\261\034}\020@V@l\324OCN\233Tn\204\340\327\360\260\321\363\007e@I\265N\271\376\001\237\206\002\322\222S\027(\336\033]\311V\371\357\241\232\314$\010\256\253:P\002t\010'\226\000z\222\206\375\374`\326?]#\344D\037!\252\253kD\376\373\245>""\235\372\256^\337\247\311\200j. \213\317\020\322\245\304\226\1770\221\243\357\036J\032\"D\t\330&q&\261R\013\265\340\357\323\026\365\233\330\360\210{8(\237\334\006`s<\225z\220g\362\332:t\021T\264\325\2022\312A7}_N}9}_>\311\\\270t\213\375$\306D\251\233\236n\227\333\273\355F0\021\274`yVaU\236\342\327x#\376\350\302\034\307\237\2610\031\250\237\2668\343c\324\342\363\234\237\363\321Mg\203\354\311\345\013\227f\332\333\301\\\200\203F<\235\r\362A%\250\262\024\313\236{\311\004)9\244\331\004\354\240\202GGd\343\314\\\260\307.\262E\266\313\032\347^r\301z@\331#\221\022yQ\211\363s\335\3145p?\313\326\300x\216WE*\376P\320\263y\310\033bB\374\020\336\0161\330\305\231|P\216\247g\203e\226e\013l\203\341\223\311\317\014y\276\277\331\270\330\n\307\302\325\360E\224\2136\"<\330l\231\337\022\215\223\264\334\354I\260\r\202EV\211\247\257K\313\002K\222\235\n<V\206tk|[\314\212\222\014e\207\335\003\364\262\374\016\204\270+\032q~>pY\021\204c\374\036\220cM`\341\205\233a#.\334\001\350\013_\260u\366/Q\026{\341\305p)t\243\205\250\034\337\374- 7\214\341\206X\025?EcQI\246\365%+\313r\rs\273\332\246\301#\360\227\343\033\\\023EP\255\010-\\\014wC\032\225d.\021 }S\032\375\246]\207\304\353\354G\256\212\3710\365i\201tw5\021\341\301\0320\342j\273\361\276\334M_i\257\367=KfM\347\202R\234\276\026\020\266\n\010\r&r\203\351\366Z[\rf\241ln\017\275y@\354)\224r&\023\214\007\033\201\006\322=\236:#\037\013V\201\2409\266\365\037\344\233\300\236_\320o\2627\000\337\310\376/x\366\214\374\334>\037\350\357\215\354\323\225\251\r\322}\310\032<-\322\200U/\341S\351$\257\211r_\232 \024\257\354\0345\344\321Q\230\007\245\001\004o\260%\346\360\354\311\354\205K\271\240([\304Np\257G\303\002\233\204#wI\344\304\223p+\272\030\335=\372\272\263\321\001\032\346\203\315\240!\2316\234\\m7\341\014M\260\327\274r\346\245\013*\333r\257\376C\322\252\301\307\023\327\243/\335\304h\027\250\223\271\301\212q\346+\346\213\213b9\234\rK\335\214d6H\232|\227S`\322\337B'\312\306\377\255A\027\210[\354A1\235\034\314\036\377\377\004:\r\271v\007:@Q\236\344\207\022""\2168\277\310Kq\376K\240F\376\013V\352\236}\215\245\007\240Q6\177\234[\344\367EQ\236&/)\\\341+v\310\353p\302\016C\334\035}\211\363\267X\235\277\202r\200\356!\264\216\254<d\362\370\225\342\233w\305t\270\001\006\203\211\\\222\221\035\n#*\306\205%@\365Ty\211\377(\252\341e8\222\217\217\026\216\312\335\363\202\270\260\300\227\240{\244z\301T\305\225\360\217Q\341h\2763\325\201\370n1\330\375z\022|\322\264\276\345\030\334\324\303\275h<\332:\232\351T:\365\343\037^\216$t\233?\205\036P\354\016&r\351g>\013i\377^fU\224`\r\225\213\374\272X\020\337\207\325h2\252\036\245\272\347\005\022\005\302K\274,q\274\317\027\370_E3|\035\275:\332\351\000\276\262\222\371\271^l\367\330\030\000\235?\203\240\302\247 \326j8\005m\n\212\361\222\257\0020\262*\335_\324\253\014\225\273I\247\376\007/\362\007\342A\270\016\315h=\372g\247\324yr\374\342\315\361\233\277\377\232YwG.\221\251^\032\277b0I\003\007\236K\252V\241\271\\\t\327B\022\255E\352Qv\330k\347\202\327\354\025\034\336}`\317. \375\241`\272\375\035\210*\347&\311\343{\331\264\347\340\000;,\333\353c?C\353{\314o\003\035\251\3507\261\026\034\321\273\237\024\371\300\224\373\247\242\351\366\323\343\302]1\t\027Z\343\363\337z\327\351\360\376\312\004\227\340\222[b\215\336m\332\220\037\017\347\246ih\222sp\251\367\r\013\254\000wN\023>\031\340.\317A_t\344'\313\271\227\253m7X\200v\256&m\336\201\353q\023>Gf\341\366U\303\\X\2163\311\375\272\230\3002\013\364\357\307\261\014\337\031\232\370C\224\035\2040\005\335{G\224\304\343\360\353\350i'5\010g\236O\310\016#^\206\337FF\247\010\007i&\233\350O\262\267\"\351\322N0\017\355\272\327 s\301}h\200k@\206\007\342Q\224\372\277\0045\010\347\177\025\310o\223\022\333\341%\270\236\322\t\357\202-6\303+p\335g\337\247\342\361\313\355\337\005\225\177\003\261\226]\014";
+    PyObject *data = __Pyx_DecompressString(cstring, 1983, 1);
     if (unlikely(!data)) __PYX_ERR(0, 1, __pyx_L1_error)
     const char* const bytes = __Pyx_PyBytes_AsString(data);
     #if !CYTHON_ASSUME_SAFE_MACROS
     if (likely(bytes)); else { Py_DECREF(data); __PYX_ERR(0, 1, __pyx_L1_error) }
     #endif
-    #else /* compression: none (2527 bytes) */
-const char* const bytes = "?disableenablefast_tiles.pyxgcisenabledno default __reduce__ due to non-trivial __cinit__numpy._core.multiarray failed to importnumpy._core.umath failed to import<stringsource>__Pyx_PyDict_NextRefTileGridTileGrid.__reduce_cython__TileGrid.__setstate_cython__TileGrid.is_passableTileGrid.is_walkableTileGrid.spatial_wallsTileGrid.syncadj_walkasyncio.coroutinesbboundscline_in_tracebackcoveredcxcydddxddydirsdxdyeentry_bitexit_bitfast_tilesfrom_xfrom_y__func__game_map__getstate__hiidx_is_coroutineis_passableis_walkableitemskeyliquid__main____module__n__name__nenpnumpynwpackedpassablepopppxppypxpy__pyx_state__pyx_vtable____qualname____reduce____reduce_cython____reduce_ex__resultringring_tilesring_walksseself__set_name__setdefault__setstate____setstate_cython__sightsight_fspatial_wallsstepswsync__test__tiletilesto_xto_ytxtyvalueswwalkablexx_maxx_minyy_maxy_min\200A\360\020\000\t\036\230[\250\003\2501\340\010\014\210A\210R\210q\220\005\220T\230\024\230Q\230b\240\001\240\026\240q\330\010\014\210A\210R\210q\220\005\220T\230\024\230Q\230b\240\001\240\025\240a\330\010\014\210A\210R\210q\220\005\220T\230\024\230Q\230b\240\001\240\025\240a\330\010\014\210A\210R\210q\220\006\220c\230\024\230Q\230b\240\001\240\025\240a\330\010\014\210A\210R\210q\220\005\220T\230\024\230Q\230b\240\001\240\026\240q\330\010\014\210A\210R\210q\220\006\220c\230\024\230Q\230b\240\001\240\026\240q\330\010\014\210A\210R\210q\220\005\220T\230\024\230Q\230b\240\001\240\025\240a\330\010\014\210A\210R\210q\220\006\220c\230\024\230Q\230b\240\001\240\025\240a\340\010\021\220\021\360\n\000\t\r\210E\220\025\220a\220q\330\014\021\220\024\220Q\220b\230\001\230\021\330\014\021\220\024\220Q\220b\230\001\230\021\330\014\020\220\001\330\014\020\220\010\230\005\230Q\230c\240\026\240r\250\021\330\020\025\220S\230\002\230#\230R\230q\330\020\025\220S\230\002\230#\230R\230q\330\020\023\2204\220t\230=\250\001\250\024\250Q\330\024\025\340\020\026\220c\230\022\2303\230c\240\025\240b\250\001\330\020\026\220c\230\022\2303\230c""\240\025\240b\250\001\330\020\023\2204\220t\230<\240q\250\005\250U\260$\260a\330\024\025\330\020\024\220A\330\014\022\220'\230\021\230\"\230B\230a\360\006\000\t\r\210E\220\025\220a\220q\330\014\021\220\024\220Q\220b\230\001\230\021\330\014\021\220\024\220Q\220b\230\001\230\021\330\014\027\220t\230<\240q\250\004\250D\260\003\2602\260T\270\023\270B\270a\330\014\022\220'\230\021\230'\240\036\250q\360\010\000\t\r\210H\220E\230\021\230#\230Q\330\014\031\230\021\330\014\030\230\001\330\014\020\220\007\220u\230A\230Q\230f\240E\250\022\2501\330\020\024\220G\2305\240\001\240\021\240&\250\005\250R\250q\330\024\027\220s\230!\2305\240\003\2405\250\003\2503\250a\250u\260C\260q\330\030&\240a\330\030\033\2304\230}\250A\250S\260\002\260%\260s\270\"\270A\330\034)\250\021\330\014\022\220'\230\021\230'\240\032\2502\250[\270\003\2701\360\006\000\t\035\230A\330\010\014\210E\220\025\220a\220q\330\014\017\210t\220=\240\001\240\023\240B\240d\250!\2502\250Q\250d\260#\260R\260t\2701\270B\270a\270q\330\020\034\230A\330\010\016\210g\220Q\220g\230Y\240c\250\027\260\001\330\010\016\210g\220Q\220g\230Y\240c\250\027\260\001\330\010\016\210g\220Q\220g\230Y\240c\250\027\260\001\360\006\000\t\017\210g\220Q\220a\330\010\016\210g\220Q\220a\340\010\017\210q\200A\340\010\013\2104\210t\220=\240\001\240\026\240q\330\014\023\2201\330\010\026\220e\2302\230Q\330\010\026\220e\2302\230Q\360\006\000\t\014\2103\210c\220\022\2204\220s\230#\230Q\330\014\027\220u\230L\250\001\330\r\020\220\004\220B\220d\230#\230S\240\001\330\014\027\220u\230L\250\001\330\r\020\220\003\2202\220T\230\023\230D\240\001\330\014\027\220u\230L\250\001\330\r\020\220\003\2202\220T\230\023\230C\230q\330\014\027\220u\230L\250\001\330\r\020\220\003\2202\220T\230\023\230D\240\001\330\014\027\220v\230\\\250\021\330\r\020\220\004\220B\220d\230#\230T\240\021\330\014\027\220v\230\\\250\021\330\r\020\220\003\2202\220T\230\023\230C\230q\330\014\027\220v\230\\\250\021\330\r\020\220\004\220B\220d\230#\230S\240\001\330\014\027\220v\230\\\250\021\340\014""\023\2201\340\010\013\2104\210t\220<\230q\240\010\250\010\260\001\330\014\023\2201\330\010\013\2104\210t\220<\230q\240\006\240f\250A\330\014\023\2201\330\010\017\210q\200A\340\010\025\220X\230W\240B\240h\250g\260R\260q\330\010\025\220X\230W\240B\240h\250g\260R\260q\330\010\014\210I\220X\230Q\330\010\014\210I\220X\230Q\330\010\014\210I\220Q\330\010\014\210J\220a\340\010\025\220R\220r\230\021\340\010\013\2104\210z\230\023\230F\240$\240a\240t\2501\330\010\013\2104\210x\220s\230(\240$\240a\240t\2501\330\010\013\2104\210x\220s\230(\240$\240a\240t\2501\330\010\013\2104\210y\230\003\2307\240$\240a\240t\2501\330\010\014\210L\320\030(\250\006\250a\250q\330\010\014\210L\320\030(\250\006\250a\250q\330\010\014\210L\320\030(\250\006\250a\250q\330\010\014\210L\320\030(\250\006\250a\250q\360\010\000\t\r\210E\220\025\220a\220q\330\014\020\220\t\230\021\230%\230q\330\014\020\220\007\220q\230\005\230Q\330\014\020\220\007\220q\230\005\230Q\330\014\020\220\010\230\001\230\025\230a\360\010\000\t\r\210E\220\030\230\030\240\026\240v\250Q\330\014\021\220\023\220C\220r\230\024\230Q\330\014\021\220\023\220C\220r\230\024\230Q\330\014\017\210s\220\"\220B\220c\230\023\230C\230r\240\023\240C\240r\250\022\2503\250c\260\023\260A\330\020\021\330\014\022\220#\220R\220r\230\022\2301\330\014\020\220\t\230\021\230'\240\025\240d\250/\270\021\330\014\020\220\007\220q\230\007\230u\240G\2501\250F\260*\270L\310\001\330\014\020\220\010\230\001\230\027\240\005\240W\250A\250V\260;\270l\310!\360\006\000\r\021\220\007\220q\230\006\230j\250\001\330\014\017\210r\220\027\230\001\330\020\031\230\021\330\020\023\2207\230!\2303\230e\2408\250=\270\001\330\020\023\2207\230!\2303\230e\2408\250=\270\001\330\020\023\2207\230!\2303\230e\2408\250=\270\001\330\020\023\2207\230!\2303\230e\2408\250=\270\001\330\020\023\2207\230!\2303\230f\240G\250=\270\001\330\020\023\2207\230!\2303\230f\240G\250=\270\001\330\020\023\2207\230!\2303\230f\240G\250=\270\001\330\020\023\2207\230!\2303\230f\240G\250=\270\001\330\020\024\220G\2301""\230G\2401\200A\330\010\017\210t\2201\220D\230\r\240Q\240c\250\021\200\001\330\004\n\210+\220Q";
+    #else /* compression: none (4061 bytes) */
+const char* const bytes = "?Note that Cython is deliberately stricter than PEP-484 and rejects subclasses of builtin types. If you need to pass subclasses then set the 'annotation_typing' directive to False.add_notedisableenablefast_tiles.pyxgcisenabledno default __reduce__ due to non-trivial __cinit__numpy._core.multiarray failed to importnumpy._core.umath failed to import<stringsource>EN__Pyx_PyDict_NextRefSTileGridTileGrid.__reduce_cython__TileGrid.__setstate_cython__TileGrid.cast_raysTileGrid.is_passableTileGrid.is_walkableTileGrid.spatial_wallsTileGrid.syncWadj_walkangleasyncio.coroutinesbboundscast_rayscline_in_tracebackcolcos_acos_corrcoveredcxcydddxddydelta_dist_xdelta_dist_ydepthdirsdxdyeentry_bitexit_bitfacefast_tilesfovfrom_xfrom_y__func__game_map__getstate__hhalf_fovhitiidx_is_coroutineis_passableis_walkableitemskeyliquid__main__map_xmap_ymax_depth__module__n__name__nenpnumpynwpackedpassableperp_distplayer_xplayer_ypopppxppyprev_xprev_ypxpy__pyx_state__pyx_vtable____qualname__ray_angle__reduce____reduce_cython____reduce_ex__resultresultsringring_tilesring_walksscreen_wseself__set_name__setdefault__setstate____setstate_cython__sideside_dist_xside_dist_ysightsight_fsin_aspatial_wallsstepstep_xstep_yswsync__test__tiletilesto_xto_ytxtyvalueswwalkablewall_structureswall_xws_keyxx_maxx_minyy_maxy_min\200A\360\020\000\t\036\230[\250\003\2501\340\010\014\210A\210R\210q\220\005\220T\230\024\230Q\230b\240\001\240\026\240q\330\010\014\210A\210R\210q\220\005\220T\230\024\230Q\230b\240\001\240\025\240a\330\010\014\210A\210R\210q\220\005\220T\230\024\230Q\230b\240\001\240\025\240a\330\010\014\210A\210R\210q\220\006\220c\230\024\230Q\230b\240\001\240\025\240a\330\010\014\210A\210R\210q\220\005\220T\230\024\230Q\230b\240\001\240\026\240q\330\010\014\210A\210R\210q\220\006\220c\230\024\230Q\230b\240\001\240\026\240q\330\010\014\210A\210R\210q\220\005\220T\230\024\230Q\230b\240\001\240\025\240a\330\010\014\210A\210R\210q\220\006\220c\230\024\230Q\230b\240\001\240\025\240a\340\010\021\220\021\360""\n\000\t\r\210E\220\025\220a\220q\330\014\021\220\024\220Q\220b\230\001\230\021\330\014\021\220\024\220Q\220b\230\001\230\021\330\014\020\220\001\330\014\020\220\010\230\005\230Q\230c\240\026\240r\250\021\330\020\025\220S\230\002\230#\230R\230q\330\020\025\220S\230\002\230#\230R\230q\330\020\023\2204\220t\230=\250\001\250\024\250Q\330\024\025\340\020\026\220c\230\022\2303\230c\240\025\240b\250\001\330\020\026\220c\230\022\2303\230c\240\025\240b\250\001\330\020\023\2204\220t\230<\240q\250\005\250U\260$\260a\330\024\025\330\020\024\220A\330\014\022\220'\230\021\230\"\230B\230a\360\006\000\t\r\210E\220\025\220a\220q\330\014\021\220\024\220Q\220b\230\001\230\021\330\014\021\220\024\220Q\220b\230\001\230\021\330\014\027\220t\230<\240q\250\004\250D\260\003\2602\260T\270\023\270B\270a\330\014\022\220'\230\021\230'\240\036\250q\360\010\000\t\r\210H\220E\230\021\230#\230Q\330\014\031\230\021\330\014\030\230\001\330\014\020\220\007\220u\230A\230Q\230f\240E\250\022\2501\330\020\024\220G\2305\240\001\240\021\240&\250\005\250R\250q\330\024\027\220s\230!\2305\240\003\2405\250\003\2503\250a\250u\260C\260q\330\030&\240a\330\030\033\2304\230}\250A\250S\260\002\260%\260s\270\"\270A\330\034)\250\021\330\014\022\220'\230\021\230'\240\032\2502\250[\270\003\2701\360\006\000\t\035\230A\330\010\014\210E\220\025\220a\220q\330\014\017\210t\220=\240\001\240\023\240B\240d\250!\2502\250Q\250d\260#\260R\260t\2701\270B\270a\270q\330\020\034\230A\330\010\016\210g\220Q\220g\230Y\240c\250\027\260\001\330\010\016\210g\220Q\220g\230Y\240c\250\027\260\001\330\010\016\210g\220Q\220g\230Y\240c\250\027\260\001\360\006\000\t\017\210g\220Q\220a\330\010\016\210g\220Q\220a\340\010\017\210q\200A\340\010\013\2104\210t\220=\240\001\240\026\240q\330\014\023\2201\330\010\026\220e\2302\230Q\330\010\026\220e\2302\230Q\360\006\000\t\014\2103\210c\220\022\2204\220s\230#\230Q\330\014\027\220u\230L\250\001\330\r\020\220\004\220B\220d\230#\230S\240\001\330\014\027\220u\230L\250\001\330\r\020\220\003\2202\220T\230\023""\230D\240\001\330\014\027\220u\230L\250\001\330\r\020\220\003\2202\220T\230\023\230C\230q\330\014\027\220u\230L\250\001\330\r\020\220\003\2202\220T\230\023\230D\240\001\330\014\027\220v\230\\\250\021\330\r\020\220\004\220B\220d\230#\230T\240\021\330\014\027\220v\230\\\250\021\330\r\020\220\003\2202\220T\230\023\230C\230q\330\014\027\220v\230\\\250\021\330\r\020\220\004\220B\220d\230#\230S\240\001\330\014\027\220v\230\\\250\021\340\014\023\2201\340\010\013\2104\210t\220<\230q\240\010\250\010\260\001\330\014\023\2201\330\010\013\2104\210t\220<\230q\240\006\240f\250A\330\014\023\2201\330\010\017\210q\200A\330.G\300q\360\n\000\t \230u\240B\240a\330\010\032\230%\230r\240\021\360\022\000\t\023\220!\340\010\014\210G\2205\230\001\230\021\330\014\030\230\006\230b\240\t\250\023\250H\260D\270\002\270(\300*\310B\310a\330\014\024\220C\220q\230\001\330\014\024\220C\220q\230\001\330\014\017\210v\220S\230\005\230X\240Q\330\014\017\210v\220S\230\005\230X\240Q\340\014\024\220E\230\021\330\014\024\220E\230\021\330\014\033\2304\230q\240\004\240B\240a\330\014\033\2304\230q\240\004\240B\240a\340\014\017\210v\220R\220q\330\020\032\230!\330\020\037\230y\250\002\250'\260\022\2601\340\020\031\230\021\330\020\037\230v\240R\240t\2502\250Z\260r\270\021\330\014\017\210v\220R\220q\330\020\032\230!\330\020\037\230y\250\002\250'\260\022\2601\340\020\031\230\021\330\020\037\230v\240R\240t\2502\250Z\260r\270\021\340\014\022\220!\330\014\023\2201\330\014\024\220A\330\014\027\220s\230!\230:\240R\240q\340\014\022\220&\230\002\230!\330\020\023\220<\230r\240\021\330\024#\2401\330\024\035\230Q\330\024\033\2301\340\024#\2401\330\024\035\230Q\330\024\033\2301\330\020\031\230\021\360\006\000\021\024\320\023#\2407\250!\330\024\027\220u\230C\230q\330\030\037\230w\240g\250R\250w\260a\340\030\037\230w\240g\250R\250w\260a\330\024\036\230g\240W\250A\330\024\027\220w\230c\240\021\330\030\033\2305\240\003\2401\330\034(\250\014\260B\260a\340\034(\250\014\260B\260a\330\030\033\230:\240R\240w\250l\270!\330\030%\240Q""\330\030\033\2305\240\003\2401\330\034%\240Y\250b\260\n\270\"\270F\300\"\300A\340\034%\240Y\250b\260\n\270\"\270F\300\"\300A\330\030\"\240%\240q\250\001\330\030\037\230w\240b\250\013\2606\270\030\300\027\310\007\310q\330\030\036\230a\330\030\031\360\006\000\021\024\2204\220t\230;\240a\240w\250g\260S\270\004\270D\300\r\310Q\310g\320UV\330\024\027\220u\230C\230q\330\030$\240L\260\002\260!\340\030$\240L\260\002\260!\330\024\027\220z\240\022\2407\250,\260a\330\024!\240\021\330\024\027\220u\230C\230q\330\030!\240\031\250\"\250J\260b\270\006\270b\300\001\340\030!\240\031\250\"\250J\260b\270\006\270b\300\001\330\024\036\230e\2401\240A\330\024\033\2307\240\"\240K\250v\260X\270W\300G\3101\330\024\032\230!\330\024\025\360\006\000\021\024\2205\230\003\2301\330\024\037\230w\240g\250R\250w\260a\330\024 \240\007\240w\250b\260\007\260q\330\024\035\230V\2402\240Q\330\024\035\230Q\340\024\037\230w\240g\250R\250w\260a\330\024 \240\007\240w\250b\260\007\260q\330\024\035\230Q\330\024\035\230V\2402\240Q\340\020\023\2204\220{\240!\2408\2508\2604\260t\2704\270|\3101\310H\320T\\\320\\]\330\024\027\220u\230C\230q\330\030$\240L\260\002\260!\340\030$\240L\260\002\260!\330\024\027\220z\240\022\2407\250,\260a\330\024!\240\021\330\024\027\220u\230C\230q\330\030!\240\031\250\"\250J\260b\270\006\270b\300\001\340\030!\240\031\250\"\250J\260b\270\006\270b\300\001\330\024\036\230e\2401\240A\330\024\033\2307\240\"\240K\250v\260X\270W\300G\3101\330\024\032\230!\330\024\025\340\020\023\2204\220t\230<\240q\250\007\250w\260a\330\024\027\220u\230C\230q\330\030$\240L\260\002\260!\340\030$\240L\260\002\260!\330\024\027\220z\240\022\2407\250,\260a\330\024!\240\021\330\024\027\220u\230C\230q\330\030!\240\031\250\"\250J\260b\270\006\270b\300\001\340\030!\240\031\250\"\250J\260b\270\006\270b\300\001\330\024\036\230e\2401\240A\330\024\033\2307\240\"\240K\250v\260X\270W\300G\3101\330\024\032\230!\330\024\025\340\014\017\210t\2201\330\020\027\220w\230b\240\010\250\013\2603\260e\2703\270c\300\021\340\010\017\210q""\200A\340\010\025\220X\230W\240B\240h\250g\260R\260q\330\010\025\220X\230W\240B\240h\250g\260R\260q\330\010\014\210I\220X\230Q\330\010\014\210I\220X\230Q\330\010\014\210I\220Q\330\010\014\210J\220a\340\010\025\220R\220r\230\021\340\010\013\2104\210z\230\023\230F\240$\240a\240t\2501\330\010\013\2104\210x\220s\230(\240$\240a\240t\2501\330\010\013\2104\210x\220s\230(\240$\240a\240t\2501\330\010\013\2104\210y\230\003\2307\240$\240a\240t\2501\330\010\014\210L\320\030(\250\006\250a\250q\330\010\014\210L\320\030(\250\006\250a\250q\330\010\014\210L\320\030(\250\006\250a\250q\330\010\014\210L\320\030(\250\006\250a\250q\360\010\000\t\r\210E\220\025\220a\220q\330\014\020\220\t\230\021\230%\230q\330\014\020\220\007\220q\230\005\230Q\330\014\020\220\007\220q\230\005\230Q\330\014\020\220\010\230\001\230\025\230a\360\010\000\t\r\210E\220\030\230\030\240\026\240v\250Q\330\014\021\220\023\220C\220r\230\024\230Q\330\014\021\220\023\220C\220r\230\024\230Q\330\014\017\210s\220\"\220B\220c\230\023\230C\230r\240\023\240C\240r\250\022\2503\250c\260\023\260A\330\020\021\330\014\022\220#\220R\220r\230\022\2301\330\014\020\220\t\230\021\230'\240\025\240d\250/\270\021\330\014\020\220\007\220q\230\007\230u\240G\2501\250F\260*\270L\310\001\330\014\020\220\010\230\001\230\027\240\005\240W\250A\250V\260;\270l\310!\360\006\000\r\021\220\007\220q\230\006\230j\250\001\330\014\017\210r\220\027\230\001\330\020\031\230\021\330\020\023\2207\230!\2303\230e\2408\250=\270\001\330\020\023\2207\230!\2303\230e\2408\250=\270\001\330\020\023\2207\230!\2303\230e\2408\250=\270\001\330\020\023\2207\230!\2303\230e\2408\250=\270\001\330\020\023\2207\230!\2303\230f\240G\250=\270\001\330\020\023\2207\230!\2303\230f\240G\250=\270\001\330\020\023\2207\230!\2303\230f\240G\250=\270\001\330\020\023\2207\230!\2303\230f\240G\250=\270\001\330\020\024\220G\2301\230G\2401\200A\330\010\017\210t\2201\220D\230\r\240Q\240c\250\021\200\001\330\004\n\210+\220Q";
     PyObject *data = NULL;
     CYTHON_UNUSED_VAR(__Pyx_DecompressString);
     #endif
     PyObject **stringtab = __pyx_mstate->__pyx_string_tab;
     Py_ssize_t pos = 0;
-    for (int i = 0; i < 104; i++) {
+    for (int i = 0; i < 143; i++) {
       Py_ssize_t bytes_length = index[i].length;
       PyObject *string = PyUnicode_DecodeUTF8(bytes + pos, bytes_length, NULL);
-      if (likely(string) && i >= 10) PyUnicode_InternInPlace(&string);
+      if (likely(string) && i >= 12) PyUnicode_InternInPlace(&string);
       if (unlikely(!string)) {
         Py_XDECREF(data);
         __PYX_ERR(0, 1, __pyx_L1_error)
@@ -8748,7 +10554,7 @@ const char* const bytes = "?disableenablefast_tiles.pyxgcisenabledno default __r
       stringtab[i] = string;
       pos += bytes_length;
     }
-    for (int i = 104; i < 109; i++) {
+    for (int i = 143; i < 149; i++) {
       Py_ssize_t bytes_length = index[i].length;
       PyObject *string = PyBytes_FromStringAndSize(bytes + pos, bytes_length);
       stringtab[i] = string;
@@ -8759,15 +10565,15 @@ const char* const bytes = "?disableenablefast_tiles.pyxgcisenabledno default __r
       }
     }
     Py_XDECREF(data);
-    for (Py_ssize_t i = 0; i < 109; i++) {
+    for (Py_ssize_t i = 0; i < 149; i++) {
       if (unlikely(PyObject_Hash(stringtab[i]) == -1)) {
         __PYX_ERR(0, 1, __pyx_L1_error)
       }
     }
     #if CYTHON_IMMORTAL_CONSTANTS
     {
-      PyObject **table = stringtab + 104;
-      for (Py_ssize_t i=0; i<5; ++i) {
+      PyObject **table = stringtab + 143;
+      for (Py_ssize_t i=0; i<6; ++i) {
         #if CYTHON_COMPILING_IN_CPYTHON_FREETHREADING
         #if PY_VERSION_HEX < 0x030E0000
         if (_Py_IsOwnedByCurrentThread(table[i]) && Py_REFCNT(table[i]) == 1)
@@ -8794,8 +10600,8 @@ const char* const bytes = "?disableenablefast_tiles.pyxgcisenabledno default __r
   }
   {
     PyObject **numbertab = __pyx_mstate->__pyx_number_tab + 2;
-    int8_t const cint_constants_1[] = {0,1};
-    for (int i = 0; i < 2; i++) {
+    int8_t const cint_constants_1[] = {0,1,40};
+    for (int i = 0; i < 3; i++) {
       numbertab[i] = PyLong_FromLong(cint_constants_1[i - 0]);
       if (unlikely(!numbertab[i])) __PYX_ERR(0, 1, __pyx_L1_error)
     }
@@ -8803,7 +10609,7 @@ const char* const bytes = "?disableenablefast_tiles.pyxgcisenabledno default __r
   #if CYTHON_IMMORTAL_CONSTANTS
   {
     PyObject **table = __pyx_mstate->__pyx_number_tab;
-    for (Py_ssize_t i=0; i<4; ++i) {
+    for (Py_ssize_t i=0; i<5; ++i) {
       #if CYTHON_COMPILING_IN_CPYTHON_FREETHREADING
       #if PY_VERSION_HEX < 0x030E0000
       if (_Py_IsOwnedByCurrentThread(table[i]) && Py_REFCNT(table[i]) == 1)
@@ -8828,7 +10634,7 @@ typedef struct {
     unsigned int argcount : 3;
     unsigned int num_posonly_args : 1;
     unsigned int num_kwonly_args : 1;
-    unsigned int nlocals : 5;
+    unsigned int nlocals : 6;
     unsigned int flags : 10;
     unsigned int first_line : 8;
 } __Pyx_PyCode_New_function_description;
@@ -8867,14 +10673,19 @@ static int __Pyx_CreateCodeObjects(__pyx_mstatetype *__pyx_mstate) {
     __pyx_mstate_global->__pyx_codeobj_tab[3] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_fast_tiles_pyx, __pyx_mstate->__pyx_n_u_spatial_walls, __pyx_mstate->__pyx_kp_b_iso88591_A_1_ARq_T_Qb_q_ARq_T_Qb_a_ARq_T, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[3])) goto bad;
   }
   {
+    const __Pyx_PyCode_New_function_description descr = {7, 0, 0, 34, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 236};
+    PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_self, __pyx_mstate->__pyx_n_u_player_x, __pyx_mstate->__pyx_n_u_player_y, __pyx_mstate->__pyx_n_u_angle, __pyx_mstate->__pyx_n_u_screen_w, __pyx_mstate->__pyx_n_u_max_depth, __pyx_mstate->__pyx_n_u_wall_structures, __pyx_mstate->__pyx_n_u_half_fov, __pyx_mstate->__pyx_n_u_fov, __pyx_mstate->__pyx_n_u_ray_angle, __pyx_mstate->__pyx_n_u_sin_a, __pyx_mstate->__pyx_n_u_cos_a, __pyx_mstate->__pyx_n_u_delta_dist_x, __pyx_mstate->__pyx_n_u_delta_dist_y, __pyx_mstate->__pyx_n_u_side_dist_x, __pyx_mstate->__pyx_n_u_side_dist_y, __pyx_mstate->__pyx_n_u_step_x, __pyx_mstate->__pyx_n_u_step_y, __pyx_mstate->__pyx_n_u_map_x, __pyx_mstate->__pyx_n_u_map_y, __pyx_mstate->__pyx_n_u_side, __pyx_mstate->__pyx_n_u_depth, __pyx_mstate->__pyx_n_u_col, __pyx_mstate->__pyx_n_u_perp_dist, __pyx_mstate->__pyx_n_u_wall_x, __pyx_mstate->__pyx_n_u_cos_corr, __pyx_mstate->__pyx_n_u_exit_bit, __pyx_mstate->__pyx_n_u_entry_bit, __pyx_mstate->__pyx_n_u_prev_x, __pyx_mstate->__pyx_n_u_prev_y, __pyx_mstate->__pyx_n_u_results, __pyx_mstate->__pyx_n_u_hit, __pyx_mstate->__pyx_n_u_face, __pyx_mstate->__pyx_n_u_ws_key};
+    __pyx_mstate_global->__pyx_codeobj_tab[4] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_fast_tiles_pyx, __pyx_mstate->__pyx_n_u_cast_rays, __pyx_mstate->__pyx_kp_b_iso88591_A_Gq_uBa_r_G5_b_HD_Ba_Cq_Cq_vS_X, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[4])) goto bad;
+  }
+  {
     const __Pyx_PyCode_New_function_description descr = {1, 0, 0, 1, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 1};
     PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_self};
-    __pyx_mstate_global->__pyx_codeobj_tab[4] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_stringsource, __pyx_mstate->__pyx_n_u_reduce_cython, __pyx_mstate->__pyx_kp_b_iso88591_Q, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[4])) goto bad;
+    __pyx_mstate_global->__pyx_codeobj_tab[5] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_stringsource, __pyx_mstate->__pyx_n_u_reduce_cython, __pyx_mstate->__pyx_kp_b_iso88591_Q, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[5])) goto bad;
   }
   {
     const __Pyx_PyCode_New_function_description descr = {2, 0, 0, 2, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 3};
     PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_self, __pyx_mstate->__pyx_n_u_pyx_state};
-    __pyx_mstate_global->__pyx_codeobj_tab[5] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_stringsource, __pyx_mstate->__pyx_n_u_setstate_cython, __pyx_mstate->__pyx_kp_b_iso88591_Q, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[5])) goto bad;
+    __pyx_mstate_global->__pyx_codeobj_tab[6] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_stringsource, __pyx_mstate->__pyx_n_u_setstate_cython, __pyx_mstate->__pyx_kp_b_iso88591_Q, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[6])) goto bad;
   }
   Py_DECREF(tuple_dedup_map);
   return 0;
@@ -10972,6 +12783,54 @@ static PyObject *__Pyx_PyObject_FastCallMethod(PyObject *name, PyObject *const *
     return result;
 }
 #endif
+
+/* ArgTypeTestFunc (used by ArgTypeTest) */
+static int __Pyx__ArgTypeTest(PyObject *obj, PyTypeObject *type, const char *name, int exact)
+{
+    __Pyx_TypeName type_name;
+    __Pyx_TypeName obj_type_name;
+    PyObject *extra_info = __pyx_mstate_global->__pyx_empty_unicode;
+    int from_annotation_subclass = 0;
+    if (unlikely(!type)) {
+        PyErr_SetString(PyExc_SystemError, "Missing type object");
+        return 0;
+    }
+    else if (!exact) {
+        if (likely(__Pyx_TypeCheck(obj, type))) return 1;
+    } else if (exact == 2) {
+        if (__Pyx_TypeCheck(obj, type)) {
+            from_annotation_subclass = 1;
+            extra_info = __pyx_mstate_global->__pyx_kp_u_Note_that_Cython_is_deliberately;
+        }
+    }
+    type_name = __Pyx_PyType_GetFullyQualifiedName(type);
+    obj_type_name = __Pyx_PyType_GetFullyQualifiedName(Py_TYPE(obj));
+    PyErr_Format(PyExc_TypeError,
+        "Argument '%.200s' has incorrect type (expected " __Pyx_FMT_TYPENAME
+        ", got " __Pyx_FMT_TYPENAME ")"
+#if __PYX_LIMITED_VERSION_HEX < 0x030C0000
+        "%s%U"
+#endif
+        , name, type_name, obj_type_name
+#if __PYX_LIMITED_VERSION_HEX < 0x030C0000
+        , (from_annotation_subclass ? ". " : ""), extra_info
+#endif
+        );
+#if __PYX_LIMITED_VERSION_HEX >= 0x030C0000
+    if (exact == 2 && from_annotation_subclass) {
+        PyObject *res;
+        PyObject *vargs[2];
+        vargs[0] = PyErr_GetRaisedException();
+        vargs[1] = extra_info;
+        res = PyObject_VectorcallMethod(__pyx_mstate_global->__pyx_kp_u_add_note, vargs, 2, NULL);
+        Py_XDECREF(res);
+        PyErr_SetRaisedException(vargs[0]);
+    }
+#endif
+    __Pyx_DECREF_TypeName(type_name);
+    __Pyx_DECREF_TypeName(obj_type_name);
+    return 0;
+}
 
 /* AllocateExtensionType */
 static PyObject *__Pyx_AllocateExtensionType(PyTypeObject *t, int is_final) {
