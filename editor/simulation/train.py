@@ -1120,6 +1120,7 @@ def train_curriculum_stage(stage_number: int, model_name: str,
                             ppo_creatures: int = None,
                             mappo_cols: int = None, mappo_rows: int = None,
                             ppo_cols: int = None, ppo_rows: int = None,
+                            parallel: int = 1,
                             resume_override: str = None,
                             seed: int = None) -> int:
     """Run one curriculum stage and save the resulting model.
@@ -1331,12 +1332,14 @@ def train_curriculum_full(model_name: str,
                           ppo_creatures: int = None,
                           mappo_cols: int = None, mappo_rows: int = None,
                           ppo_cols: int = None, ppo_rows: int = None,
+                          parallel: int = 1,
                           seed: int = None):
     """Run the full curriculum from start_stage to the last stage in order.
 
     Each stage's saved model becomes the resume target for the next.
     mappo_creatures/cols/rows: MAPPO phase arena config (default: num_creatures/arena_cols/rows)
     ppo_creatures/cols/rows: PPO phase arena config (default: num_creatures/arena_cols/rows)
+    parallel: number of worker processes (1=sequential)
     """
     stages = _list_curriculum_stages()
     stages = [s for s in stages if s['stage_number'] >= start_stage]
@@ -1361,6 +1364,7 @@ def train_curriculum_full(model_name: str,
             ppo_creatures=ppo_creatures,
             mappo_cols=mappo_cols, mappo_rows=mappo_rows,
             ppo_cols=ppo_cols, ppo_rows=ppo_rows,
+            parallel=parallel,
             seed=seed,
         )
 
@@ -1621,6 +1625,8 @@ if __name__ == '__main__':
     parser.add_argument('--ppo-cols', type=int, default=None, help='PPO arena width')
     parser.add_argument('--ppo-rows', type=int, default=None, help='PPO arena height')
     parser.add_argument('--ppo-creatures', type=int, default=None, help='PPO creature count')
+    parser.add_argument('--parallel', type=int, default=1,
+                        help='Number of parallel worker processes (1=sequential)')
     parser.add_argument('--curriculum-stage', type=int, default=None,
                         help='Run a single curriculum stage by number (e.g. --curriculum-stage 1)')
     parser.add_argument('--curriculum-full', action='store_true',
@@ -1649,6 +1655,7 @@ if __name__ == '__main__':
             mappo_rows=args.mappo_rows,
             ppo_cols=args.ppo_cols,
             ppo_rows=args.ppo_rows,
+            parallel=args.parallel,
             seed=args.seed,
         )
     elif args.curriculum_stage is not None:

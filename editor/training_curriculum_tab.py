@@ -251,6 +251,9 @@ class TrainingCurriculumTab(ttk.Frame):
         ttk.Label(ppo_row, text='Pop:').pack(side=tk.LEFT, padx=(4, 0))
         self.v_ppo_creatures = tk.StringVar(value='100')
         ttk.Entry(ppo_row, textvariable=self.v_ppo_creatures, width=4).pack(side=tk.LEFT)
+        ttk.Label(ppo_row, text='Parallel:').pack(side=tk.LEFT, padx=(8, 0))
+        self.v_parallel = tk.StringVar(value='1')
+        ttk.Entry(ppo_row, textvariable=self.v_parallel, width=3).pack(side=tk.LEFT)
         row += 1
 
         # Status line
@@ -421,6 +424,7 @@ class TrainingCurriculumTab(ttk.Frame):
             '--ppo-cols', self.v_ppo_cols.get(),
             '--ppo-rows', self.v_ppo_rows.get(),
             '--ppo-creatures', self.v_ppo_creatures.get(),
+            '--parallel', self.v_parallel.get(),
         ] + extra_args
         try:
             self._process = subprocess.Popen(
