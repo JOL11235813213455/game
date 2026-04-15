@@ -862,8 +862,9 @@ def seed():
     # MOVE (0) auto-resolves direction toward goal. JOB auto-triggers on
     # arrival. BRIBE/SHARE_RUMOR/EXIT_BLOCK/EXIT_GUARD removed (merged/auto).
     # Dynamic masking prevents impossible actions each tick.
-    _MOVE_BASE = [0, 16, 18]             # MOVE, WAIT, SEARCH
+    _MOVE_BASE = [0, 18]                 # MOVE, SEARCH (no WAIT until S3)
     _PICKUP_DROP = [13, 14]              # PICKUP, DROP
+    _WAIT = [16]                         # WAIT (introduced with hunger in S3)
     _USE = [15]                          # USE_ITEM
     _SNEAK = [1]                         # SET_SNEAK
     _FOLLOW = [3]                        # FOLLOW
@@ -878,7 +879,7 @@ def seed():
     # Build cumulative action sets per stage
     _s1_actions = sorted(_MOVE_BASE)
     _s2_actions = sorted(_s1_actions + _PICKUP_DROP)
-    _s3_actions = sorted(_s2_actions + _USE + _SNEAK)
+    _s3_actions = sorted(_s2_actions + _USE + _SNEAK + _WAIT)
     _s4_actions = sorted(_s3_actions + _FOLLOW)
     _s5_actions = sorted(_s4_actions + _HARVEST)
     _s6_actions = sorted(_s5_actions + _PROCESS)
@@ -891,22 +892,21 @@ def seed():
 
     # S1 — Wander
     _stage(1, 'Wander',
-           'Move and explore. No hunger, no combat, no economy. '
+           'Move and explore. No WAIT available — must move or search. '
            'Failed actions and water danger penalized.',
            {'exploration': 3.0, 'hp': 0.3,
-            'failed_actions': 0.2, 'water_danger': 1.0,
-            'idleness': 1.0},
+            'failed_actions': 0.2, 'water_danger': 1.0},
            hunger=False, combat=False, gestation=False,
            mappo=20000, es_gens=0, es_vars=20, es_steps=1000, ppo=20000,
            allowed_actions=_s1_actions, fatigue_enabled=False)
 
     # S2 — Pickup
     _stage(2, 'Pickup',
-           'Grab items and surface gold off the ground. No hunger yet.',
-           {'exploration': 0.5, 'hp': 0.3,
+           'Grab items and surface gold off the ground. No WAIT, no hunger.',
+           {'exploration': 1.0, 'hp': 0.3,
             'gold': 1.0, 'inventory': 1.0,
-            'failed_actions': 0.5, 'water_danger': 1.0,
-            'idleness': 0.5, 'pickup_success': 0.3},
+            'failed_actions': 0.3, 'water_danger': 1.0,
+            'pickup_success': 0.5},
            hunger=False, combat=False, gestation=False,
            mappo=20000, es_gens=0, es_vars=20, es_steps=1000, ppo=30000,
            resume=1, allowed_actions=_s2_actions, fatigue_enabled=False)
