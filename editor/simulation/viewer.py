@@ -511,19 +511,26 @@ def run_training_viewer(cell_size: int = 20):
 
         # Draw creatures
         selected_data = None
+        agent_uid = state.get('info', {}).get('agent_uid')
         for c in state['creatures']:
             if not c['alive']:
                 continue
             cx = c['x'] * cell_size + cell_size // 2
             cy = c['y'] * cell_size + cell_size // 2
 
-            color = SPECIES_COLORS.get(c['species'], C_WHITE)
-            if c['sex'] == 'female':
-                r, g, b = color
-                color = (min(255, r + 40), min(255, g + 40), min(255, b + 40))
+            is_agent = (agent_uid is not None and c['uid'] == agent_uid)
+            if is_agent:
+                color = C_RED
+            else:
+                color = SPECIES_COLORS.get(c['species'], C_WHITE)
+                if c['sex'] == 'female':
+                    r, g, b = color
+                    color = (min(255, r + 40), min(255, g + 40), min(255, b + 40))
 
             sizes = {'tiny': 3, 'small': 4, 'medium': 5, 'large': 7, 'huge': 9, 'colossal': 12}
             radius = sizes.get(c['size'], 5)
+            if is_agent:
+                radius = max(radius, 6)
             pygame.draw.circle(screen, color, (cx, cy), radius)
 
             # HP bar

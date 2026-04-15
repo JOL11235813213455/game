@@ -985,6 +985,7 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
                 'total_reward': round(total_reward, 2),
                 'ep_steps': len(ppo_step_rewards),
                 'top_actions': top_action_stats,
+                'agent_uid': agent.uid,
                 **(viewer_extra or {}),
             }
             write_state(sim, phase='PPO', step=step, info=viewer_info)
@@ -1090,6 +1091,8 @@ def train_curriculum_stage(stage_number: int, model_name: str,
                             num_creatures: int = 16,
                             mappo_creatures: int = None,
                             ppo_creatures: int = None,
+                            mappo_cols: int = None, mappo_rows: int = None,
+                            ppo_cols: int = None, ppo_rows: int = None,
                             resume_override: str = None,
                             seed: int = None) -> int:
     """Run one curriculum stage and save the resulting model.
@@ -1202,12 +1205,14 @@ def train_curriculum_stage(stage_number: int, model_name: str,
     _mappo_n = mappo_creatures or num_creatures
     _ppo_n = ppo_creatures or num_creatures
     arena_kwargs_mappo = {
-        'cols': arena_cols, 'rows': arena_rows,
+        'cols': mappo_cols or arena_cols,
+        'rows': mappo_rows or arena_rows,
         'num_creatures': _mappo_n,
         'mask_probability': 0.0,
     }
     arena_kwargs_ppo = {
-        'cols': arena_cols, 'rows': arena_rows,
+        'cols': ppo_cols or arena_cols,
+        'rows': ppo_rows or arena_rows,
         'num_creatures': _ppo_n,
         'mask_probability': 0.0,
     }
@@ -1297,12 +1302,14 @@ def train_curriculum_full(model_name: str,
                           num_creatures: int = 16,
                           mappo_creatures: int = None,
                           ppo_creatures: int = None,
+                          mappo_cols: int = None, mappo_rows: int = None,
+                          ppo_cols: int = None, ppo_rows: int = None,
                           seed: int = None):
     """Run the full curriculum from start_stage to the last stage in order.
 
     Each stage's saved model becomes the resume target for the next.
-    mappo_creatures: creature count for MAPPO phase (default: num_creatures)
-    ppo_creatures: creature count for PPO phase (default: num_creatures)
+    mappo_creatures/cols/rows: MAPPO phase arena config (default: num_creatures/arena_cols/rows)
+    ppo_creatures/cols/rows: PPO phase arena config (default: num_creatures/arena_cols/rows)
     """
     stages = _list_curriculum_stages()
     stages = [s for s in stages if s['stage_number'] >= start_stage]
@@ -1325,6 +1332,8 @@ def train_curriculum_full(model_name: str,
             num_creatures=num_creatures,
             mappo_creatures=mappo_creatures,
             ppo_creatures=ppo_creatures,
+            mappo_cols=mappo_cols, mappo_rows=mappo_rows,
+            ppo_cols=ppo_cols, ppo_rows=ppo_rows,
             seed=seed,
         )
 
