@@ -558,14 +558,18 @@ class CombatMixin:
 
         self.play_animation('death')
 
-        # Permanently remove non-ghost dead creature from all registries
+        # Permanently remove non-ghost dead creature from spatial registries.
+        # Keep incoming relationship edges — survivors remember the dead.
         from classes.creature import Creature
         from classes.relationship_graph import GRAPH
         Creature._uid_registry.pop(self.uid, None)
         if self._current_map and hasattr(self._current_map, 'unregister_creature_at'):
             self._current_map.unregister_creature_at(
                 self, self.location.x, self.location.y, self.location.z)
-        GRAPH.remove_creature(self.uid)
+        # Clear only the dead creature's own memories, not others' memories of them
+        GRAPH._edges.pop(self.uid, None)
+        GRAPH._rumors.pop(self.uid, None)
+        GRAPH._deceits.pop(self.uid, None)
         self.current_map = None
 
     def _become_ghost(self):
