@@ -538,28 +538,142 @@ class CombatMixin:
         tile.stat_mods.pop('trap_creator_uid', None)
 
     def die(self):
-        """Handle creature death: drop inventory + gold on tile, remove from map."""
+        """Handle creature death: drop inventory + gold, maybe become ghost."""
         tile = self.current_map.tiles.get(self.location)
         if tile:
-            # Drop gold
             tile.gold += self.gold
             self.gold = 0
-
-            # Drop all inventory items
             for item in list(self.inventory.items):
                 tile.inventory.items.append(item)
             self.inventory.items.clear()
-
-            # Drop equipped items
             for item in set(self.equipment.values()):
                 tile.inventory.items.append(item)
                 self.stats.remove_mods_by_source(f'equip_{item.uid}')
             self.equipment.clear()
 
+        # 1% chance to become a ghost
+        if random.random() < 0.01:
+            self._become_ghost()
+            return
+
         self.play_animation('death')
 
-        # Clean up spatial registrations
+        # Permanently remove non-ghost dead creature from all registries
         from classes.creature import Creature
+        from classes.relationship_graph import GRAPH
+        Creature._uid_registry.pop(self.uid, None)
+        if self._current_map and hasattr(self._current_map, 'unregister_creature_at'):
+            self._current_map.unregister_creature_at(
+                self, self.location.x, self.location.y, self.location.z)
+        GRAPH.remove_creature(self.uid)
+        self.current_map = None
+
+    def _become_ghost(self):
+        """Transform this creature into a ghost that haunts periodically."""
+        from classes.relationship_graph import GRAPH
+
+        self.is_ghost = True
+        map_name = getattr(self.current_map, 'name', '') or ''
+        self._ghost_death_location = (map_name, self.location.x, self.location.y)
+
+        # Determine death day from game clock
+        try:
+            from classes.creature._utility import _current_hour
+            # Find game day via Trackable scan for GameClock
+            from classes.trackable import Trackable
+            for obj in Trackable.all_instances():
+                if hasattr(obj, 'day') and hasattr(obj, 'hour'):
+                    self._ghost_death_day = int(obj.day)
+                    break
+        except Exception:
+            self._ghost_death_day = 0
+
+        # Find worst enemy to haunt
+        rels = GRAPH.edges_from(self.uid)
+        worst_uid = None
+        worst_sent = 0.0
+        for uid, rel in rels.items():
+            if rel[0] < worst_sent:
+                worst_sent = rel[0]
+                worst_uid = uid
+        self._ghost_haunt_uid = worst_uid
+
+        # Ghost starts invisible — will manifest on schedule
+        self._ghost_visible = False
+        self.stats.base[Stat.HP_CURR] = 1  # alive but ghostly
+
+        # Unregister from spatial grid (invisible until manifested)
+        if self._current_map and hasattr(self._current_map, 'unregister_creature_at'):
+            self._current_map.unregister_creature_at(
+                self, self.location.x, self.location.y, self.location.z)
+
+        # Register ghost tick — checks manifestation schedule
+        self.register_tick('ghost', 500, self._do_ghost_tick)
+        self.play_animation('idle')
+
+    def _do_ghost_tick(self, now: int):
+        """Periodic ghost check: manifest/demanifest based on schedule."""
+        if not self.is_ghost:
+            return
+
+        # Get current game clock
+        cur_day = 0
+        cur_hour = 12.0
+        try:
+            from classes.trackable import Trackable
+            for obj in Trackable.all_instances():
+                if hasattr(obj, 'day') and hasattr(obj, 'hour'):
+                    cur_day = int(obj.day)
+                    cur_hour = obj.hour
+                    break
+        except Exception:
+            return
+
+        # Check schedule: every 7th day since death, between 11pm and 1am
+        days_since = cur_day - self._ghost_death_day
+        is_haunt_day = days_since >= 0 and days_since % 7 == 0
+        is_haunt_hour = cur_hour >= 23.0 or cur_hour < 1.0
+        should_show = is_haunt_day and is_haunt_hour
+
+        if should_show and not self._ghost_visible:
+            self._manifest()
+        elif not should_show and self._ghost_visible:
+            self._demanifest()
+
+    def _manifest(self):
+        """Ghost becomes visible — appears at death spot or near worst enemy."""
+        from classes.creature import Creature
+        from classes.maps import MapKey
+
+        self._ghost_visible = True
+
+        # Choose location: haunt enemy if alive and on same map, else death spot
+        target = None
+        if self._ghost_haunt_uid is not None:
+            target = Creature.by_uid(self._ghost_haunt_uid)
+
+        if target is not None and target.current_map == self.current_map:
+            # Haunt near the enemy
+            self.location = MapKey(target.location.x + random.choice([-1, 0, 1]),
+                                   target.location.y + random.choice([-1, 0, 1]),
+                                   target.location.z)
+        elif self._ghost_death_location:
+            # Haunt the death spot
+            map_name, dx, dy = self._ghost_death_location
+            self.location = MapKey(dx, dy, 0)
+
+        # Re-register in spatial grid
+        if self._current_map and hasattr(self._current_map, 'register_creature_at'):
+            self._current_map.register_creature_at(
+                self, self.location.x, self.location.y, self.location.z)
+        Creature._uid_registry[self.uid] = self
+        self.play_animation('ghost')
+
+    def _demanifest(self):
+        """Ghost fades away until next haunting cycle."""
+        from classes.creature import Creature
+
+        self._ghost_visible = False
         Creature._uid_registry.pop(self.uid, None)
         if self._current_map and hasattr(self._current_map, 'unregister_creature_at'):
             self._current_map.unregister_creature_at(
@@ -567,4 +681,6 @@ class CombatMixin:
 
     @property
     def is_alive(self) -> bool:
+        if self.is_ghost:
+            return self._ghost_visible
         return self.stats.active[Stat.HP_CURR]() > 0

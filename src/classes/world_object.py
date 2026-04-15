@@ -173,7 +173,25 @@ class WorldObject(Trackable):
         blit_dy = tile_cy - ap_sy
 
         result = (surface, (blit_dx, blit_dy))
-        return self._overlay_equipment(result, block_size)
+        result = self._overlay_equipment(result, block_size)
+        if getattr(self, 'is_ghost', False):
+            result = self._apply_ghost_effect(result)
+        return result
+
+    def _apply_ghost_effect(self, result):
+        """Apply translucent blue tint for ghost creatures."""
+        if result is None:
+            return result
+        import pygame
+        surface, offsets = result
+        ghost_surf = surface.copy()
+        tint = pygame.Surface(ghost_surf.get_size(), pygame.SRCALPHA)
+        tint.fill((100, 150, 255, 80))
+        ghost_surf.blit(tint, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
+        alpha_surf = pygame.Surface(ghost_surf.get_size(), pygame.SRCALPHA)
+        alpha_surf.fill((255, 255, 255, 120))
+        ghost_surf.blit(alpha_surf, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+        return (ghost_surf, offsets)
 
     def _overlay_equipment(self, result, block_size: int):
         """Overlay equipped items with render_on_creature=True."""

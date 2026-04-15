@@ -271,6 +271,14 @@ class Creature(
         self.fp_x: float = 0.5         # sub-tile x (0-1 within current tile)
         self.fp_y: float = 0.5         # sub-tile y
 
+        # Ghost state — 1% chance on death. Haunts death spot or worst enemy.
+        # Appears 11pm-1am on every 7th day (offset by death day).
+        self.is_ghost: bool = False
+        self._ghost_death_location: tuple | None = None   # (map_name, x, y)
+        self._ghost_death_day: int = 0                     # game day creature died
+        self._ghost_haunt_uid: int | None = None           # worst enemy UID to haunt
+        self._ghost_visible: bool = False                  # currently manifested
+
         # Sleep deprivation
         self.sleep_debt: int = 0  # days without sleep
         self._fatigue_level: int = 0  # current debuff tier (0-4)
