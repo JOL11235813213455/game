@@ -126,31 +126,24 @@ class TrainingCurriculumTab(ttk.Frame):
 
         pipe_grid = ttk.Frame(f)
         pipe_grid.grid(row=row, column=0, columnspan=2, sticky='ew', padx=6, pady=2)
-        left_items = [
-            ('MAPPO steps',     'v_mappo',    'Multi-agent PPO step count'),
-            ('ES gens',         'v_es_gens',  'ES generations (0 = skip)'),
-            ('ES variants',     'v_es_vars',  'Variants per generation'),
-            ('ES steps',        'v_es_steps', 'Steps per ES variant'),
+        items = [
+            ('MAPPO',    'v_mappo',    'Multi-agent PPO steps'),
+            ('ES gens',  'v_es_gens',  'ES generations (0=skip)'),
+            ('ES vars',  'v_es_vars',  'Variants per gen'),
+            ('ES steps', 'v_es_steps', 'Steps per variant'),
+            ('PPO',      'v_ppo',      'Single-agent PPO steps'),
+            ('LR',       'v_lr',       'Learning rate'),
+            ('Entropy',  'v_ent',      'Entropy bonus'),
+            ('Resume',   'v_resume',   'Resume from stage'),
         ]
-        right_items = [
-            ('PPO steps',       'v_ppo',      'Single-agent PPO step count'),
-            ('Learn rate',      'v_lr',       'Optimizer learning rate'),
-            ('Entropy',         'v_ent',      'Entropy bonus weight'),
-            ('Resume stg',      'v_resume',   'Stage to resume from (blank = fresh)'),
-        ]
-        for i, (label, attr, tooltip) in enumerate(left_items):
-            ttk.Label(pipe_grid, text=label).grid(row=i, column=0, sticky='w', padx=(0, 4), pady=1)
+        for idx, (label, attr, tooltip) in enumerate(items):
+            r = idx // 4
+            c = (idx % 4) * 2
+            ttk.Label(pipe_grid, text=label).grid(row=r, column=c, sticky='w', padx=(0, 2), pady=1)
             var = tk.StringVar()
             setattr(self, attr, var)
-            entry = ttk.Entry(pipe_grid, textvariable=var, width=10)
-            entry.grid(row=i, column=1, sticky='w', padx=(0, 12), pady=1)
-            add_tooltip(entry, tooltip)
-        for i, (label, attr, tooltip) in enumerate(right_items):
-            ttk.Label(pipe_grid, text=label).grid(row=i, column=2, sticky='w', padx=(0, 4), pady=1)
-            var = tk.StringVar()
-            setattr(self, attr, var)
-            entry = ttk.Entry(pipe_grid, textvariable=var, width=10)
-            entry.grid(row=i, column=3, sticky='w', pady=1)
+            entry = ttk.Entry(pipe_grid, textvariable=var, width=8)
+            entry.grid(row=r, column=c + 1, sticky='w', padx=(0, 8), pady=1)
             add_tooltip(entry, tooltip)
         row += 1
 
