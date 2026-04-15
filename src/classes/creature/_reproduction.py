@@ -205,11 +205,12 @@ class ReproductionMixin:
         child_sex = random.choice(('male', 'female'))
 
         # Check inbreeding
-        from classes.trackable import Trackable
+        from classes.creature import Creature as _C
         lineage = {}
-        for obj in Trackable.all_instances():
-            if hasattr(obj, 'mother_uid') and hasattr(obj, 'father_uid'):
-                lineage[obj.uid] = (obj.mother_uid, obj.father_uid)
+        for uid, obj in _C._uid_registry.items():
+            if obj is not None:
+                lineage[uid] = (getattr(obj, 'mother_uid', None),
+                                getattr(obj, 'father_uid', None))
 
         inbreeding_closeness = check_inbreeding(
             female.uid, self.uid, lineage, generations=3

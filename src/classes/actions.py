@@ -118,19 +118,29 @@ def action_aligned_with_tile(action: int, tile, zone_purposes: set = None) -> bo
 ACTION_NAMES = {a: a.name.lower() for a in Action}
 
 
+_world_data_cache = None
+
+def _get_world_data():
+    global _world_data_cache
+    if _world_data_cache is not None:
+        return _world_data_cache
+    try:
+        from classes.gods import WorldData
+        instances = WorldData.all()
+        if instances:
+            _world_data_cache = instances[-1]
+            return _world_data_cache
+    except Exception:
+        pass
+    return None
+
 def _record_god_action(action: int):
     action_name = ACTION_NAMES.get(action)
     if action_name is None:
         return
-    try:
-        from classes.gods import WorldData
-        from classes.trackable import Trackable
-        for obj in Trackable.all_instances():
-            if isinstance(obj, WorldData):
-                obj.record_action(action_name)
-                break
-    except Exception:
-        pass
+    wd = _get_world_data()
+    if wd:
+        wd.record_action(action_name)
 
 
 # Direction vectors for 8-dir movement (used by FLEE, FOLLOW, sleepwalk)
@@ -665,13 +675,8 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
         if not creature.loans:
             return {'success': False, 'reason': 'no_debt'}
         lender_uid = next(iter(creature.loans))
-        from classes.trackable import Trackable
         from classes.creature import Creature as _C
-        lender = None
-        for obj in Trackable.all_instances():
-            if isinstance(obj, _C) and obj.uid == lender_uid and obj.is_alive:
-                lender = obj
-                break
+        lender = _C.by_uid(lender_uid)
         if lender is None:
             return {'success': False, 'reason': 'lender_gone'}
         return creature.repay_loan(lender, creature.gold, now)

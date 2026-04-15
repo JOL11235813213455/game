@@ -44,13 +44,8 @@ class SocialMixin:
             import random as _rand
             c_roll = partner.stats.active[_S.DETECTION]() + _rand.randint(1, 20)
             # Use the deceiver's deception stat if available, else use 10
-            from classes.trackable import Trackable
             from classes.creature import Creature as _Creature
-            deceiver = None
-            for obj in Trackable.all_instances():
-                if isinstance(obj, _Creature) and obj.uid == deceiver_uid:
-                    deceiver = obj
-                    break
+            deceiver = _Creature.by_uid(deceiver_uid)
             if deceiver is None or not deceiver.is_alive:
                 GRAPH.reveal_deceit(deceiver_uid, self.uid)
                 continue

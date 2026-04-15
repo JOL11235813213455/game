@@ -392,11 +392,9 @@ def make_reward_snapshot(creature) -> dict:
     world_balance = 0.0
     if deity:
         from classes.gods import WorldData
-        from classes.trackable import Trackable
-        for obj in Trackable.all_instances():
-            if isinstance(obj, WorldData):
-                world_balance = obj.get_balance(deity)
-                break
+        instances = WorldData.all()
+        if instances:
+            world_balance = instances[-1].get_balance(deity)
 
     # Nearby creature counts (within 3 tiles), split by sentiment
     nearby_hostile = 0   # sentiment < -2 or unknown (stranger)
