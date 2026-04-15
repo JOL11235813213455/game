@@ -592,15 +592,22 @@ class CombatMixin:
         except Exception:
             self._ghost_death_day = 0
 
-        # Find worst enemy to haunt
+        # Find worst enemy and closest friend to haunt
         rels = GRAPH.edges_from(self.uid)
         worst_uid = None
         worst_sent = 0.0
+        best_uid = None
+        best_sent = 0.0
         for uid, rel in rels.items():
             if rel[0] < worst_sent:
                 worst_sent = rel[0]
                 worst_uid = uid
-        self._ghost_haunt_uid = worst_uid
+            if rel[0] > best_sent:
+                best_sent = rel[0]
+                best_uid = uid
+        self._ghost_haunt_uid = worst_uid     # worst enemy
+        self._ghost_loved_uid = best_uid      # closest friend
+        self._ghost_visit_count = 0           # alternates targets
 
         # Ghost starts invisible — will manifest on schedule
         self._ghost_visible = False
@@ -647,24 +654,26 @@ class CombatMixin:
             self._spook_nearby()
 
     def _manifest(self):
-        """Ghost becomes visible — appears at death spot or near worst enemy."""
+        """Ghost becomes visible — alternates between enemy, friend, and death spot."""
         from classes.creature import Creature
         from classes.maps import MapKey
 
         self._ghost_visible = True
+        self._ghost_visit_count = getattr(self, '_ghost_visit_count', 0) + 1
 
-        # Choose location: haunt enemy if alive and on same map, else death spot
+        # Cycle: enemy → death spot → friend → death spot → ...
+        cycle = self._ghost_visit_count % 4
         target = None
-        if self._ghost_haunt_uid is not None:
+        if cycle == 0 and self._ghost_haunt_uid is not None:
             target = Creature.by_uid(self._ghost_haunt_uid)
+        elif cycle == 2 and getattr(self, '_ghost_loved_uid', None) is not None:
+            target = Creature.by_uid(self._ghost_loved_uid)
 
         if target is not None and target.current_map == self.current_map:
-            # Haunt near the enemy
             self.location = MapKey(target.location.x + random.choice([-1, 0, 1]),
                                    target.location.y + random.choice([-1, 0, 1]),
                                    target.location.z)
         elif self._ghost_death_location:
-            # Haunt the death spot
             map_name, dx, dy = self._ghost_death_location
             self.location = MapKey(dx, dy, 0)
 

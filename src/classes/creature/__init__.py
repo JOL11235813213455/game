@@ -281,6 +281,8 @@ class Creature(
         self._ghost_death_location: tuple | None = None   # (map_name, x, y)
         self._ghost_death_day: int = 0                     # game day creature died
         self._ghost_haunt_uid: int | None = None           # worst enemy UID to haunt
+        self._ghost_loved_uid: int | None = None           # closest friend UID to visit
+        self._ghost_visit_count: int = 0                   # cycles through targets
         self._ghost_visible: bool = False                  # currently manifested
 
         # Sleep deprivation
