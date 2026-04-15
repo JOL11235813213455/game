@@ -1113,6 +1113,153 @@ def _list_curriculum_stages() -> list[dict]:
     return [_load_curriculum_stage(r['stage_number']) for r in rows]
 
 
+def _run_mappo_parallel(net, ppo, steps, arena_kwargs, signal_scales,
+                        sim_kwargs, action_mask, n_workers, viewer_extra=None):
+    """Parallel MAPPO: N workers collect rollouts, merge, PPO update."""
+    from classes.parallel_training import ParallelTrainer
+    from editor.simulation.train_state import write_state
+
+    rollout_per_worker = max(256, 4096 // n_workers)
+    total_collected = 0
+    config = {
+        'arena_kwargs': arena_kwargs,
+        'sim_kwargs': sim_kwargs,
+        'signal_scales': signal_scales,
+        'action_mask': action_mask,
+        'rollout_len': rollout_per_worker,
+    }
+
+    print(f'  Parallel MAPPO: {n_workers} workers × {rollout_per_worker} steps')
+
+    with ParallelTrainer(n_workers, 'mappo', config) as trainer:
+        while total_collected < steps:
+            # Send current weights
+            weights = net.weights if hasattr(net, 'weights') else {
+                k: v.cpu().numpy() for k, v in net.state_dict().items()
+            }
+            rollouts = trainer.collect_rollouts(weights)
+            merged = ParallelTrainer.merge_rollouts(rollouts)
+
+            n_samples = len(merged['rewards'])
+            total_collected += n_samples
+
+            if n_samples > 0:
+                info = ppo.update(
+                    merged['obs'], merged['actions'], merged['rewards'],
+                    merged['values'], merged['log_probs'], merged['dones'],
+                    action_masks_arr=merged['masks'])
+
+            if total_collected % 5000 < n_samples:
+                avg_r = float(merged['rewards'].mean()) if n_samples > 0 else 0
+                print(f'    Step ~{total_collected}: avg_reward={avg_r:.4f}, '
+                      f'samples={n_samples} from {n_workers} workers')
+
+    return net
+
+
+def _run_ppo_parallel(net, ppo, steps, arena_kwargs, signal_scales,
+                      sim_kwargs, action_mask, n_workers, viewer_extra=None):
+    """Parallel PPO: N workers run independent agent episodes."""
+    from classes.parallel_training import ParallelTrainer
+
+    rollout_per_worker = max(256, 2048 // n_workers)
+    total_collected = 0
+    config = {
+        'arena_kwargs': arena_kwargs,
+        'sim_kwargs': sim_kwargs,
+        'signal_scales': signal_scales,
+        'action_mask': action_mask,
+        'rollout_len': rollout_per_worker,
+    }
+
+    print(f'  Parallel PPO: {n_workers} workers × {rollout_per_worker} steps')
+
+    with ParallelTrainer(n_workers, 'ppo', config) as trainer:
+        while total_collected < steps:
+            weights = net.weights if hasattr(net, 'weights') else {
+                k: v.cpu().numpy() for k, v in net.state_dict().items()
+            }
+            rollouts = trainer.collect_rollouts(weights)
+            merged = ParallelTrainer.merge_rollouts(rollouts)
+
+            n_samples = len(merged['rewards'])
+            total_collected += n_samples
+
+            if n_samples > 0:
+                info = ppo.update(
+                    merged['obs'], merged['actions'], merged['rewards'],
+                    merged['values'], merged['log_probs'], merged['dones'],
+                    action_masks_arr=merged['masks'])
+
+            if total_collected % 5000 < n_samples:
+                avg_r = float(merged['rewards'].mean()) if n_samples > 0 else 0
+                print(f'    Step ~{total_collected}: avg_reward={avg_r:.4f}, '
+                      f'samples={n_samples} from {n_workers} workers')
+
+    return net
+
+
+def _run_es_parallel(net, generations, variants, steps_per_variant,
+                     arena_kwargs, sim_kwargs, signal_scales=None, n_workers=4):
+    """Parallel ES: evaluate variants across N processes."""
+    from classes.parallel_training import parallel_es_evaluate
+
+    noise_scale = 0.02
+    config = {
+        'arena_kwargs': arena_kwargs,
+        'sim_kwargs': sim_kwargs,
+        'steps_per_variant': steps_per_variant,
+        'signal_scales': signal_scales,
+    }
+
+    print(f'  Parallel ES: {n_workers} workers, {generations} gens × {variants} variants')
+
+    # Get base weights as numpy
+    if hasattr(net, 'weights'):
+        base_weights = net.weights
+    else:
+        base_weights = {k: v.cpu().numpy() for k, v in net.state_dict().items()}
+
+    for gen in range(generations):
+        # Generate noise vectors
+        noise_vectors = []
+        for _ in range(variants):
+            noise = {k: np.random.randn(*w.shape).astype(np.float32)
+                     for k, w in base_weights.items()}
+            noise_vectors.append(noise)
+
+        # Evaluate all variants in parallel
+        rewards = parallel_es_evaluate(base_weights, noise_vectors,
+                                        noise_scale, config, n_workers)
+
+        # Select top 20% and update weights
+        n_top = max(1, len(rewards) // 5)
+        ranked = sorted(range(len(rewards)), key=lambda i: -rewards[i])
+        top_indices = ranked[:n_top]
+
+        # Weighted update toward top performers
+        for k in base_weights:
+            update = np.zeros_like(base_weights[k])
+            for idx in top_indices:
+                update += noise_vectors[idx][k] * rewards[idx]
+            update /= max(1, n_top)
+            base_weights[k] = (base_weights[k] + noise_scale * update).astype(np.float32)
+
+        avg_r = np.mean(rewards)
+        best_r = max(rewards)
+        print(f'    Gen {gen+1}/{generations}: best={best_r:.2f}, avg={avg_r:.2f}')
+
+    # Load updated weights back into net
+    if hasattr(net, 'weights'):
+        net.weights = base_weights
+    else:
+        import torch
+        for k, v in base_weights.items():
+            net.state_dict()[k].copy_(torch.from_numpy(v))
+
+    return net
+
+
 def train_curriculum_stage(stage_number: int, model_name: str,
                             arena_cols: int = 25, arena_rows: int = 25,
                             num_creatures: int = 16,
@@ -1254,38 +1401,68 @@ def train_curriculum_stage(stage_number: int, model_name: str,
     # MAPPO
     if stage['mappo_steps'] > 0:
         mappo_t0 = time.time()
-        net = run_mappo(net, ppo, steps=stage['mappo_steps'],
-                        arena_kwargs=arena_kwargs_mappo,
-                        goal_net=goal_net, goal_ppo=goal_ppo,
-                        signal_scales=signal_scales,
-                        sim_kwargs=sim_kwargs,
-                        action_mask=stage['action_mask'],
-                        viewer_extra=_viewer_extra)
+        if parallel > 1:
+            net = _run_mappo_parallel(
+                net, ppo, steps=stage['mappo_steps'],
+                arena_kwargs=arena_kwargs_mappo,
+                signal_scales=signal_scales,
+                sim_kwargs=sim_kwargs,
+                action_mask=stage['action_mask'],
+                n_workers=parallel,
+                viewer_extra=_viewer_extra)
+        else:
+            net = run_mappo(net, ppo, steps=stage['mappo_steps'],
+                            arena_kwargs=arena_kwargs_mappo,
+                            goal_net=goal_net, goal_ppo=goal_ppo,
+                            signal_scales=signal_scales,
+                            sim_kwargs=sim_kwargs,
+                            action_mask=stage['action_mask'],
+                            viewer_extra=_viewer_extra)
         net.export_to_numpy(SAVE_DIR / 'mappo.npz')
         print(f'  MAPPO complete in {time.time() - mappo_t0:.0f}s')
 
     # ES (skip if generations == 0)
     if stage['es_generations'] > 0:
         es_t0 = time.time()
-        net = run_es(net, generations=stage['es_generations'],
-                     variants=stage['es_variants'],
-                     steps_per_variant=stage['es_steps'],
-                     arena_kwargs=arena_kwargs_ppo,
-                     sim_kwargs=sim_kwargs)
+        if parallel > 1:
+            net = _run_es_parallel(
+                net, generations=stage['es_generations'],
+                variants=stage['es_variants'],
+                steps_per_variant=stage['es_steps'],
+                arena_kwargs=arena_kwargs_ppo,
+                sim_kwargs=sim_kwargs,
+                signal_scales=signal_scales,
+                n_workers=parallel)
+        else:
+            net = run_es(net, generations=stage['es_generations'],
+                         variants=stage['es_variants'],
+                         steps_per_variant=stage['es_steps'],
+                         arena_kwargs=arena_kwargs_ppo,
+                         sim_kwargs=sim_kwargs)
         print(f'  ES complete in {time.time() - es_t0:.0f}s')
 
     # PPO
     if stage['ppo_steps'] > 0:
         ppo_t0 = time.time()
         ppo = PPO(net, lr=stage['learning_rate'], ent_coef=stage['ent_coef'])
-        net = run_ppo(net, ppo, steps=stage['ppo_steps'],
-                      checkpoint_dir=SAVE_DIR,
-                      arena_kwargs=arena_kwargs_ppo,
-                      goal_net=goal_net, goal_ppo=goal_ppo,
-                      signal_scales=signal_scales,
-                      sim_kwargs=sim_kwargs,
-                      action_mask=stage['action_mask'],
-                      viewer_extra=_viewer_extra)
+        if parallel > 1:
+            net = _run_ppo_parallel(
+                net, ppo, steps=stage['ppo_steps'],
+                arena_kwargs=arena_kwargs_ppo,
+                signal_scales=signal_scales,
+                sim_kwargs=sim_kwargs,
+                action_mask=stage['action_mask'],
+                n_workers=parallel,
+                viewer_extra=_viewer_extra)
+        else:
+            net = run_ppo(net, ppo, steps=stage['ppo_steps'],
+                          checkpoint_dir=SAVE_DIR,
+                          arena_kwargs=arena_kwargs_ppo,
+                          goal_net=goal_net, goal_ppo=goal_ppo,
+                          signal_scales=signal_scales,
+                          sim_kwargs=sim_kwargs,
+                          action_mask=stage['action_mask'],
+                          viewer_extra=_viewer_extra)
         print(f'  PPO complete in {time.time() - ppo_t0:.0f}s')
 
     total_seconds = time.time() - pipeline_t0

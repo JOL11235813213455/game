@@ -90,6 +90,34 @@ def write_state(sim, phase: str = '', step: int = 0, info: dict = None):
         pass  # non-critical — viewer just shows stale data
 
 
+def write_parallel_state(worker_stats: list[dict], phase: str = '',
+                         step: int = 0, info: dict = None):
+    """Write parallel training state — per-worker stats, no tile grid.
+
+    worker_stats: list of dicts, one per worker, with keys like
+        avg_reward, alive, total, samples, worker_id
+    """
+    state = {
+        'timestamp': time.time(),
+        'phase': phase,
+        'step': step,
+        'tick': 0,
+        'clock': '',
+        'cols': 0, 'rows': 0,
+        'alive': sum(w.get('alive', 0) for w in worker_stats),
+        'total': sum(w.get('total', 0) for w in worker_stats),
+        'creatures': [],
+        'tile_info': [],
+        'info': info or {},
+        'parallel': True,
+        'workers': worker_stats,
+    }
+    try:
+        STATE_FILE.write_text(json.dumps(state))
+    except Exception:
+        pass
+
+
 def read_state() -> dict | None:
     """Read the latest state from the training process."""
     try:

@@ -86,6 +86,79 @@ def _tile_base_color(tile):
     return TILE_COLORS.get(tmpl, C_GRASS)
 
 
+def _draw_parallel_view(screen, state, font, font_sm, font_lg):
+    """Render parallel training stats — one column per worker."""
+    sw, sh = screen.get_size()
+    screen.fill(C_BLACK)
+
+    workers = state.get('workers', [])
+    n_workers = len(workers)
+    info = state.get('info', {})
+    phase = state.get('phase', '?')
+    stage = info.get('curriculum_stage', '')
+    stale = state.get('stale', False)
+
+    # Header
+    y = 10
+    if stage:
+        screen.blit(font_lg.render(f'Stage: {stage}', True, C_YELLOW), (10, y))
+        y += 22
+    screen.blit(font_lg.render(
+        f'Parallel {phase} — {n_workers} workers', True,
+        C_YELLOW if not stale else C_RED), (10, y))
+    y += 22
+    screen.blit(font.render(f'Step: ~{state["step"]}', True, C_WHITE), (10, y))
+    y += 16
+    if stale:
+        screen.blit(font.render('STALE — training may have stopped', True, C_RED), (10, y))
+        y += 16
+    y += 10
+
+    if n_workers == 0:
+        screen.blit(font.render('Waiting for worker data...', True, C_GRAY), (10, y))
+        return
+
+    # Column layout
+    col_w = max(120, (sw - 20) // n_workers)
+
+    # Column headers
+    for i in range(n_workers):
+        x = 10 + i * col_w
+        screen.blit(font.render(f'Core {i}', True, C_YELLOW), (x, y))
+    y += 18
+
+    # Stats rows
+    stat_keys = ['alive', 'total', 'avg_reward', 'samples', 'ep_steps']
+    stat_labels = ['Alive', 'Total', 'Avg Reward', 'Samples', 'Ep Steps']
+
+    for label, key in zip(stat_labels, stat_keys):
+        # Label
+        screen.blit(font_sm.render(label, True, C_GRAY), (10, y))
+        for i, w in enumerate(workers):
+            x = 10 + i * col_w + 60
+            val = w.get(key, '')
+            if isinstance(val, float):
+                text = f'{val:+.3f}'
+                color = C_GREEN if val > 0 else C_RED if val < 0 else C_WHITE
+            else:
+                text = str(val)
+                color = C_WHITE
+            screen.blit(font_sm.render(text, True, color), (x, y))
+        y += 14
+
+    # Totals
+    y += 10
+    total_alive = sum(w.get('alive', 0) for w in workers)
+    total_total = sum(w.get('total', 0) for w in workers)
+    total_samples = sum(w.get('samples', 0) for w in workers)
+    avg_rewards = [w.get('avg_reward', 0) for w in workers if 'avg_reward' in w]
+    overall_avg = sum(avg_rewards) / max(1, len(avg_rewards))
+    color_r = C_GREEN if overall_avg > 0 else C_RED if overall_avg < 0 else C_WHITE
+    screen.blit(font.render(f'Total: {total_alive}/{total_total} alive, '
+                            f'{total_samples} samples, '
+                            f'avg_reward={overall_avg:+.4f}', True, color_r), (10, y))
+
+
 def run_viewer(scenario: str = 'arena', cols: int = 25, rows: int = 25,
                num_creatures: int = 12, tick_ms: int = 500,
                cell_size: int = 20):
@@ -445,6 +518,13 @@ def run_training_viewer(cell_size: int = 20):
                 y += 20
                 es_text('STALE — training may have stopped', C_RED)
 
+            pygame.display.flip()
+            clock.tick(5)
+            continue
+
+        # Parallel mode: stats columns instead of tile grid
+        if state.get('parallel'):
+            _draw_parallel_view(screen, state, font, font_sm, font_lg)
             pygame.display.flip()
             clock.tick(5)
             continue
