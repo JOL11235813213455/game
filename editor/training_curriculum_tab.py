@@ -221,15 +221,36 @@ class TrainingCurriculumTab(ttk.Frame):
         ttk.Label(cfg_row, text='Model name:').pack(side=tk.LEFT)
         self.v_model_name = tk.StringVar(value='curriculum')
         ttk.Entry(cfg_row, textvariable=self.v_model_name, width=20).pack(side=tk.LEFT, padx=4)
-        ttk.Label(cfg_row, text='Cols:').pack(side=tk.LEFT, padx=4)
-        self.v_cols = tk.StringVar(value='25')
-        ttk.Entry(cfg_row, textvariable=self.v_cols, width=5).pack(side=tk.LEFT)
-        ttk.Label(cfg_row, text='Rows:').pack(side=tk.LEFT, padx=4)
-        self.v_rows = tk.StringVar(value='25')
-        ttk.Entry(cfg_row, textvariable=self.v_rows, width=5).pack(side=tk.LEFT)
-        ttk.Label(cfg_row, text='Creatures:').pack(side=tk.LEFT, padx=4)
-        self.v_creatures = tk.StringVar(value='12')
-        ttk.Entry(cfg_row, textvariable=self.v_creatures, width=5).pack(side=tk.LEFT)
+        row += 1
+
+        # MAPPO config row
+        mappo_row = ttk.Frame(f)
+        mappo_row.grid(row=row, column=0, columnspan=2, sticky='w', padx=6, pady=2)
+        ttk.Label(mappo_row, text='MAPPO:').pack(side=tk.LEFT)
+        ttk.Label(mappo_row, text='Cols:').pack(side=tk.LEFT, padx=(8, 0))
+        self.v_mappo_cols = tk.StringVar(value='25')
+        ttk.Entry(mappo_row, textvariable=self.v_mappo_cols, width=4).pack(side=tk.LEFT)
+        ttk.Label(mappo_row, text='Rows:').pack(side=tk.LEFT, padx=(4, 0))
+        self.v_mappo_rows = tk.StringVar(value='25')
+        ttk.Entry(mappo_row, textvariable=self.v_mappo_rows, width=4).pack(side=tk.LEFT)
+        ttk.Label(mappo_row, text='Pop:').pack(side=tk.LEFT, padx=(4, 0))
+        self.v_mappo_creatures = tk.StringVar(value='12')
+        ttk.Entry(mappo_row, textvariable=self.v_mappo_creatures, width=4).pack(side=tk.LEFT)
+        row += 1
+
+        # PPO config row
+        ppo_row = ttk.Frame(f)
+        ppo_row.grid(row=row, column=0, columnspan=2, sticky='w', padx=6, pady=2)
+        ttk.Label(ppo_row, text='PPO:    ').pack(side=tk.LEFT)
+        ttk.Label(ppo_row, text='Cols:').pack(side=tk.LEFT, padx=(8, 0))
+        self.v_ppo_cols = tk.StringVar(value='100')
+        ttk.Entry(ppo_row, textvariable=self.v_ppo_cols, width=4).pack(side=tk.LEFT)
+        ttk.Label(ppo_row, text='Rows:').pack(side=tk.LEFT, padx=(4, 0))
+        self.v_ppo_rows = tk.StringVar(value='100')
+        ttk.Entry(ppo_row, textvariable=self.v_ppo_rows, width=4).pack(side=tk.LEFT)
+        ttk.Label(ppo_row, text='Pop:').pack(side=tk.LEFT, padx=(4, 0))
+        self.v_ppo_creatures = tk.StringVar(value='100')
+        ttk.Entry(ppo_row, textvariable=self.v_ppo_creatures, width=4).pack(side=tk.LEFT)
         row += 1
 
         # Status line
@@ -394,9 +415,12 @@ class TrainingCurriculumTab(ttk.Frame):
         cmd = [
             sys.executable, '-u', '-m', 'editor.simulation.train',
             '--model', model_name,
-            '--arena-cols', self.v_cols.get(),
-            '--arena-rows', self.v_rows.get(),
-            '--num-creatures', self.v_creatures.get(),
+            '--mappo-cols', self.v_mappo_cols.get(),
+            '--mappo-rows', self.v_mappo_rows.get(),
+            '--mappo-creatures', self.v_mappo_creatures.get(),
+            '--ppo-cols', self.v_ppo_cols.get(),
+            '--ppo-rows', self.v_ppo_rows.get(),
+            '--ppo-creatures', self.v_ppo_creatures.get(),
         ] + extra_args
         try:
             self._process = subprocess.Popen(

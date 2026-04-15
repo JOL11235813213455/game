@@ -1585,9 +1585,15 @@ if __name__ == '__main__':
     parser.add_argument('--model', type=str, default=None, help='Model lineage name (stored in DB)')
     parser.add_argument('--resume', type=str, default=None,
                         help='Resume from: "name:version" for DB, or path to .pt file')
-    parser.add_argument('--arena-cols', type=int, default=25, help='Arena width in tiles')
-    parser.add_argument('--arena-rows', type=int, default=25, help='Arena height in tiles')
-    parser.add_argument('--num-creatures', type=int, default=16, help='Creatures per arena')
+    parser.add_argument('--arena-cols', type=int, default=25, help='Default arena width')
+    parser.add_argument('--arena-rows', type=int, default=25, help='Default arena height')
+    parser.add_argument('--num-creatures', type=int, default=16, help='Default creature count')
+    parser.add_argument('--mappo-cols', type=int, default=None, help='MAPPO arena width')
+    parser.add_argument('--mappo-rows', type=int, default=None, help='MAPPO arena height')
+    parser.add_argument('--mappo-creatures', type=int, default=None, help='MAPPO creature count')
+    parser.add_argument('--ppo-cols', type=int, default=None, help='PPO arena width')
+    parser.add_argument('--ppo-rows', type=int, default=None, help='PPO arena height')
+    parser.add_argument('--ppo-creatures', type=int, default=None, help='PPO creature count')
     parser.add_argument('--curriculum-stage', type=int, default=None,
                         help='Run a single curriculum stage by number (e.g. --curriculum-stage 1)')
     parser.add_argument('--curriculum-full', action='store_true',
@@ -1610,6 +1616,12 @@ if __name__ == '__main__':
             arena_cols=args.arena_cols,
             arena_rows=args.arena_rows,
             num_creatures=args.num_creatures,
+            mappo_creatures=args.mappo_creatures,
+            ppo_creatures=args.ppo_creatures,
+            mappo_cols=args.mappo_cols,
+            mappo_rows=args.mappo_rows,
+            ppo_cols=args.ppo_cols,
+            ppo_rows=args.ppo_rows,
             seed=args.seed,
         )
     elif args.curriculum_stage is not None:
