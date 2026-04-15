@@ -1131,12 +1131,29 @@ def _run_mappo_parallel(net, ppo, steps, arena_kwargs, signal_scales,
 
     print(f'  Parallel MAPPO: {n_workers} workers × {rollout_per_worker} steps')
 
+    def _export_weights(torch_net):
+        """Convert TorchCreatureNet state to CreatureNet numpy format."""
+        sd = torch_net.state_dict()
+        return {
+            'w1': sd['fc1.weight'].T.cpu().numpy(),
+            'b1': sd['fc1.bias'].cpu().numpy(),
+            'w2': sd['fc2.weight'].T.cpu().numpy(),
+            'b2': sd['fc2.bias'].cpu().numpy(),
+            'w3': sd['fc3.weight'].T.cpu().numpy(),
+            'b3': sd['fc3.bias'].cpu().numpy(),
+            'w4': sd['fc4.weight'].T.cpu().numpy(),
+            'b4': sd['fc4.bias'].cpu().numpy(),
+            'w5': sd['fc5.weight'].T.cpu().numpy(),
+            'b5': sd['fc5.bias'].cpu().numpy(),
+            'w_pol': sd['policy_head.weight'].T.cpu().numpy(),
+            'b_pol': sd['policy_head.bias'].cpu().numpy(),
+        }
+
+    from editor.simulation.train_state import write_parallel_state
+
     with ParallelTrainer(n_workers, 'mappo', config) as trainer:
         while total_collected < steps:
-            # Send current weights
-            weights = net.weights if hasattr(net, 'weights') else {
-                k: v.cpu().numpy() for k, v in net.state_dict().items()
-            }
+            weights = _export_weights(net)
             rollouts = trainer.collect_rollouts(weights)
             merged = ParallelTrainer.merge_rollouts(rollouts)
 
@@ -1148,6 +1165,20 @@ def _run_mappo_parallel(net, ppo, steps, arena_kwargs, signal_scales,
                     merged['obs'], merged['actions'], merged['rewards'],
                     merged['values'], merged['log_probs'], merged['dones'],
                     action_masks_arr=merged['masks'])
+
+            # Write viewer state
+            worker_stats = []
+            for r in rollouts:
+                worker_stats.append({
+                    'worker_id': r['worker_id'],
+                    'alive': int((r['dones'] == 0).sum()) if len(r['dones']) > 0 else 0,
+                    'total': len(r['rewards']),
+                    'avg_reward': float(r['rewards'].mean()) if len(r['rewards']) > 0 else 0,
+                    'samples': len(r['rewards']),
+                })
+            write_parallel_state(worker_stats, phase='MAPPO',
+                                  step=total_collected,
+                                  info=viewer_extra or {})
 
             if total_collected % 5000 < n_samples:
                 avg_r = float(merged['rewards'].mean()) if n_samples > 0 else 0
@@ -1174,11 +1205,28 @@ def _run_ppo_parallel(net, ppo, steps, arena_kwargs, signal_scales,
 
     print(f'  Parallel PPO: {n_workers} workers × {rollout_per_worker} steps')
 
+    def _export_weights(torch_net):
+        sd = torch_net.state_dict()
+        return {
+            'w1': sd['fc1.weight'].T.cpu().numpy(),
+            'b1': sd['fc1.bias'].cpu().numpy(),
+            'w2': sd['fc2.weight'].T.cpu().numpy(),
+            'b2': sd['fc2.bias'].cpu().numpy(),
+            'w3': sd['fc3.weight'].T.cpu().numpy(),
+            'b3': sd['fc3.bias'].cpu().numpy(),
+            'w4': sd['fc4.weight'].T.cpu().numpy(),
+            'b4': sd['fc4.bias'].cpu().numpy(),
+            'w5': sd['fc5.weight'].T.cpu().numpy(),
+            'b5': sd['fc5.bias'].cpu().numpy(),
+            'w_pol': sd['policy_head.weight'].T.cpu().numpy(),
+            'b_pol': sd['policy_head.bias'].cpu().numpy(),
+        }
+
+    from editor.simulation.train_state import write_parallel_state
+
     with ParallelTrainer(n_workers, 'ppo', config) as trainer:
         while total_collected < steps:
-            weights = net.weights if hasattr(net, 'weights') else {
-                k: v.cpu().numpy() for k, v in net.state_dict().items()
-            }
+            weights = _export_weights(net)
             rollouts = trainer.collect_rollouts(weights)
             merged = ParallelTrainer.merge_rollouts(rollouts)
 
@@ -1190,6 +1238,19 @@ def _run_ppo_parallel(net, ppo, steps, arena_kwargs, signal_scales,
                     merged['obs'], merged['actions'], merged['rewards'],
                     merged['values'], merged['log_probs'], merged['dones'],
                     action_masks_arr=merged['masks'])
+
+            worker_stats = []
+            for r in rollouts:
+                worker_stats.append({
+                    'worker_id': r['worker_id'],
+                    'alive': int((r['dones'] == 0).sum()) if len(r['dones']) > 0 else 0,
+                    'total': len(r['rewards']),
+                    'avg_reward': float(r['rewards'].mean()) if len(r['rewards']) > 0 else 0,
+                    'samples': len(r['rewards']),
+                })
+            write_parallel_state(worker_stats, phase='PPO',
+                                  step=total_collected,
+                                  info=viewer_extra or {})
 
             if total_collected % 5000 < n_samples:
                 avg_r = float(merged['rewards'].mean()) if n_samples > 0 else 0
@@ -1214,11 +1275,22 @@ def _run_es_parallel(net, generations, variants, steps_per_variant,
 
     print(f'  Parallel ES: {n_workers} workers, {generations} gens × {variants} variants')
 
-    # Get base weights as numpy
-    if hasattr(net, 'weights'):
-        base_weights = net.weights
-    else:
-        base_weights = {k: v.cpu().numpy() for k, v in net.state_dict().items()}
+    # Get base weights as numpy (CreatureNet format)
+    sd = net.state_dict()
+    base_weights = {
+        'w1': sd['fc1.weight'].T.cpu().numpy(),
+        'b1': sd['fc1.bias'].cpu().numpy(),
+        'w2': sd['fc2.weight'].T.cpu().numpy(),
+        'b2': sd['fc2.bias'].cpu().numpy(),
+        'w3': sd['fc3.weight'].T.cpu().numpy(),
+        'b3': sd['fc3.bias'].cpu().numpy(),
+        'w4': sd['fc4.weight'].T.cpu().numpy(),
+        'b4': sd['fc4.bias'].cpu().numpy(),
+        'w5': sd['fc5.weight'].T.cpu().numpy(),
+        'b5': sd['fc5.bias'].cpu().numpy(),
+        'w_pol': sd['policy_head.weight'].T.cpu().numpy(),
+        'b_pol': sd['policy_head.bias'].cpu().numpy(),
+    }
 
     for gen in range(generations):
         # Generate noise vectors
@@ -1249,13 +1321,21 @@ def _run_es_parallel(net, generations, variants, steps_per_variant,
         best_r = max(rewards)
         print(f'    Gen {gen+1}/{generations}: best={best_r:.2f}, avg={avg_r:.2f}')
 
-    # Load updated weights back into net
-    if hasattr(net, 'weights'):
-        net.weights = base_weights
-    else:
-        import torch
-        for k, v in base_weights.items():
-            net.state_dict()[k].copy_(torch.from_numpy(v))
+    # Load updated weights back into TorchCreatureNet
+    import torch
+    sd = net.state_dict()
+    sd['fc1.weight'].copy_(torch.from_numpy(base_weights['w1'].T))
+    sd['fc1.bias'].copy_(torch.from_numpy(base_weights['b1']))
+    sd['fc2.weight'].copy_(torch.from_numpy(base_weights['w2'].T))
+    sd['fc2.bias'].copy_(torch.from_numpy(base_weights['b2']))
+    sd['fc3.weight'].copy_(torch.from_numpy(base_weights['w3'].T))
+    sd['fc3.bias'].copy_(torch.from_numpy(base_weights['b3']))
+    sd['fc4.weight'].copy_(torch.from_numpy(base_weights['w4'].T))
+    sd['fc4.bias'].copy_(torch.from_numpy(base_weights['b4']))
+    sd['fc5.weight'].copy_(torch.from_numpy(base_weights['w5'].T))
+    sd['fc5.bias'].copy_(torch.from_numpy(base_weights['b5']))
+    sd['policy_head.weight'].copy_(torch.from_numpy(base_weights['w_pol'].T))
+    sd['policy_head.bias'].copy_(torch.from_numpy(base_weights['b_pol']))
 
     return net
 

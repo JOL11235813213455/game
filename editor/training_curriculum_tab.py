@@ -221,39 +221,41 @@ class TrainingCurriculumTab(ttk.Frame):
         ttk.Label(cfg_row, text='Model name:').pack(side=tk.LEFT)
         self.v_model_name = tk.StringVar(value='curriculum')
         ttk.Entry(cfg_row, textvariable=self.v_model_name, width=20).pack(side=tk.LEFT, padx=4)
-        row += 1
-
-        # MAPPO config row
-        mappo_row = ttk.Frame(f)
-        mappo_row.grid(row=row, column=0, columnspan=2, sticky='w', padx=6, pady=2)
-        ttk.Label(mappo_row, text='MAPPO:').pack(side=tk.LEFT)
-        ttk.Label(mappo_row, text='Cols:').pack(side=tk.LEFT, padx=(8, 0))
-        self.v_mappo_cols = tk.StringVar(value='25')
-        ttk.Entry(mappo_row, textvariable=self.v_mappo_cols, width=4).pack(side=tk.LEFT)
-        ttk.Label(mappo_row, text='Rows:').pack(side=tk.LEFT, padx=(4, 0))
-        self.v_mappo_rows = tk.StringVar(value='25')
-        ttk.Entry(mappo_row, textvariable=self.v_mappo_rows, width=4).pack(side=tk.LEFT)
-        ttk.Label(mappo_row, text='Pop:').pack(side=tk.LEFT, padx=(4, 0))
-        self.v_mappo_creatures = tk.StringVar(value='12')
-        ttk.Entry(mappo_row, textvariable=self.v_mappo_creatures, width=4).pack(side=tk.LEFT)
-        row += 1
-
-        # PPO config row
-        ppo_row = ttk.Frame(f)
-        ppo_row.grid(row=row, column=0, columnspan=2, sticky='w', padx=6, pady=2)
-        ttk.Label(ppo_row, text='PPO:    ').pack(side=tk.LEFT)
-        ttk.Label(ppo_row, text='Cols:').pack(side=tk.LEFT, padx=(8, 0))
-        self.v_ppo_cols = tk.StringVar(value='100')
-        ttk.Entry(ppo_row, textvariable=self.v_ppo_cols, width=4).pack(side=tk.LEFT)
-        ttk.Label(ppo_row, text='Rows:').pack(side=tk.LEFT, padx=(4, 0))
-        self.v_ppo_rows = tk.StringVar(value='100')
-        ttk.Entry(ppo_row, textvariable=self.v_ppo_rows, width=4).pack(side=tk.LEFT)
-        ttk.Label(ppo_row, text='Pop:').pack(side=tk.LEFT, padx=(4, 0))
-        self.v_ppo_creatures = tk.StringVar(value='100')
-        ttk.Entry(ppo_row, textvariable=self.v_ppo_creatures, width=4).pack(side=tk.LEFT)
-        ttk.Label(ppo_row, text='Parallel:').pack(side=tk.LEFT, padx=(8, 0))
+        ttk.Label(cfg_row, text='Parallel:').pack(side=tk.LEFT, padx=(8, 0))
         self.v_parallel = tk.StringVar(value='1')
-        ttk.Entry(ppo_row, textvariable=self.v_parallel, width=3).pack(side=tk.LEFT)
+        ttk.Entry(cfg_row, textvariable=self.v_parallel, width=3).pack(side=tk.LEFT)
+        row += 1
+
+        # Pipeline config grid — headers
+        hdr = ttk.Frame(f)
+        hdr.grid(row=row, column=0, columnspan=2, sticky='w', padx=6, pady=(4, 0))
+        ttk.Label(hdr, text='', width=8).pack(side=tk.LEFT)
+        for label in ('Cols', 'Rows', 'Pop'):
+            ttk.Label(hdr, text=label, width=6, anchor='center').pack(side=tk.LEFT, padx=2)
+        row += 1
+
+        # MAPPO row
+        mappo_row = ttk.Frame(f)
+        mappo_row.grid(row=row, column=0, columnspan=2, sticky='w', padx=6, pady=1)
+        ttk.Label(mappo_row, text='MAPPO:', width=8).pack(side=tk.LEFT)
+        self.v_mappo_cols = tk.StringVar(value='25')
+        ttk.Entry(mappo_row, textvariable=self.v_mappo_cols, width=5).pack(side=tk.LEFT, padx=2)
+        self.v_mappo_rows = tk.StringVar(value='25')
+        ttk.Entry(mappo_row, textvariable=self.v_mappo_rows, width=5).pack(side=tk.LEFT, padx=2)
+        self.v_mappo_creatures = tk.StringVar(value='12')
+        ttk.Entry(mappo_row, textvariable=self.v_mappo_creatures, width=5).pack(side=tk.LEFT, padx=2)
+        row += 1
+
+        # PPO row
+        ppo_row = ttk.Frame(f)
+        ppo_row.grid(row=row, column=0, columnspan=2, sticky='w', padx=6, pady=1)
+        ttk.Label(ppo_row, text='PPO:', width=8).pack(side=tk.LEFT)
+        self.v_ppo_cols = tk.StringVar(value='50')
+        ttk.Entry(ppo_row, textvariable=self.v_ppo_cols, width=5).pack(side=tk.LEFT, padx=2)
+        self.v_ppo_rows = tk.StringVar(value='50')
+        ttk.Entry(ppo_row, textvariable=self.v_ppo_rows, width=5).pack(side=tk.LEFT, padx=2)
+        self.v_ppo_creatures = tk.StringVar(value='30')
+        ttk.Entry(ppo_row, textvariable=self.v_ppo_creatures, width=5).pack(side=tk.LEFT, padx=2)
         row += 1
 
         # Status line
