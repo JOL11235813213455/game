@@ -616,11 +616,10 @@ class CombatMixin:
         self.play_animation('idle')
 
     def _do_ghost_tick(self, now: int):
-        """Periodic ghost check: manifest/demanifest based on schedule."""
+        """Periodic ghost check: manifest/demanifest and spook nearby."""
         if not self.is_ghost:
             return
 
-        # Get current game clock
         cur_day = 0
         cur_hour = 12.0
         try:
@@ -633,7 +632,6 @@ class CombatMixin:
         except Exception:
             return
 
-        # Check schedule: every 7th day since death, between 11pm and 1am
         days_since = cur_day - self._ghost_death_day
         is_haunt_day = days_since >= 0 and days_since % 7 == 0
         is_haunt_hour = cur_hour >= 23.0 or cur_hour < 1.0
@@ -643,6 +641,10 @@ class CombatMixin:
             self._manifest()
         elif not should_show and self._ghost_visible:
             self._demanifest()
+
+        # Spook nearby living creatures while manifested
+        if self._ghost_visible:
+            self._spook_nearby()
 
     def _manifest(self):
         """Ghost becomes visible — appears at death spot or near worst enemy."""
@@ -673,6 +675,26 @@ class CombatMixin:
         Creature._uid_registry[self.uid] = self
         self.play_animation('ghost')
 
+    def _spook_nearby(self):
+        """Frighten living creatures within 3 tiles of the ghost.
+
+        Effects: negative sentiment hit, fear stat debuff (temporary),
+        emit a spooky sound.
+        """
+        from classes.sound import emit_sound
+        emit_sound(self, 'death_cry', volume=6.0, tick=0)
+
+        for other in self.nearby(max_dist=3):
+            if other.is_ghost:
+                continue
+            # Dread: negative sentiment toward the ghost
+            other.record_interaction(self, -3.0)
+            # Fear debuff: -2 PER, -1 CHR for a few ticks (via timed mod)
+            source = f'spooked_{self.uid}'
+            if not any(m['source'] == source for m in other.stats.mods):
+                other.stats.add_mod(source, Stat.PER, -2)
+                other.stats.add_mod(source, Stat.CHR, -1)
+
     def _demanifest(self):
         """Ghost fades away until next haunting cycle."""
         from classes.creature import Creature
@@ -688,3 +710,8 @@ class CombatMixin:
         if self.is_ghost:
             return self._ghost_visible
         return self.stats.active[Stat.HP_CURR]() > 0
+
+    @property
+    def is_targetable(self) -> bool:
+        """Ghosts can be seen but not targeted for combat, trade, or social."""
+        return self.is_alive and not self.is_ghost

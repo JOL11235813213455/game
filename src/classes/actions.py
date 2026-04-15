@@ -494,7 +494,7 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
     if action == Action.TRADE:
         if target is None:
             target = next(
-                (o for o in creature.nearby(max_dist=1)),
+                (o for o in creature.nearby(max_dist=1, include_ghosts=False)),
                 None
             )
             if target is None:
@@ -526,7 +526,7 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
     if action == Action.STEAL:
         if target is None:
             target = next(
-                (o for o in creature.nearby(max_dist=1)),
+                (o for o in creature.nearby(max_dist=1, include_ghosts=False)),
                 None
             )
             if target is None:
@@ -660,7 +660,7 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
     if action == Action.PAIR:
         if target is None:
             target = next(
-                (o for o in creature.nearby(max_dist=1)
+                (o for o in creature.nearby(max_dist=1, include_ghosts=False)
                  if o.sex != creature.sex and o.species == creature.species),
                 None
             )
