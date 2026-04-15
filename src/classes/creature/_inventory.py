@@ -192,12 +192,8 @@ class InventoryMixin:
         accessible = [self.inventory]
         if tile:
             accessible.append(tile.inventory)
-        cx, cy = self.location.x, self.location.y
-        for creature in WorldObject.on_map(self.current_map):
-            if isinstance(creature, Creature) and creature is not self and creature.is_alive:
-                d = abs(cx - creature.location.x) + abs(cy - creature.location.y)
-                if d <= 1:
-                    accessible.append(creature.inventory)
+        for creature in self.nearby(max_dist=1):
+            accessible.append(creature.inventory)
         if source not in accessible or target not in accessible:
             return False
         if item not in source.items:

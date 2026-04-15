@@ -470,12 +470,7 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             tick_data[c.uid] = (obs_arr, action, log_prob, value, combined_mask)
 
             # Dispatch action
-            target = None
-            for obj in WorldObject.on_map(c.current_map):
-                if isinstance(obj, Creature) and obj is not c and obj.is_alive and c.can_see(obj):
-                    target = obj
-                    break
-
+            target = next((o for o in c.nearby() if c.can_see(o)), None)
             dispatch(c, action, {'cols': sim.cols, 'rows': sim.rows,
                                  'target': target, 'now': sim.now})
             action_counts[action] = action_counts.get(action, 0) + 1
@@ -879,13 +874,7 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             action, log_prob, value = net.get_action(obs_arr, temperature=hunger_temperature(agent),
                                                       action_mask=combined_mask)
 
-            target = None
-            for obj in WorldObject.on_map(agent.current_map):
-                if isinstance(obj, Creature) and obj is not agent and obj.is_alive:
-                    if agent.can_see(obj):
-                        target = obj
-                        break
-
+            target = next((o for o in agent.nearby() if agent.can_see(o)), None)
             dispatch(agent, action, {'cols': sim.cols, 'rows': sim.rows,
                                      'target': target, 'now': sim.now})
             ppo_action_counts[action] = ppo_action_counts.get(action, 0) + 1

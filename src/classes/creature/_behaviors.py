@@ -138,15 +138,7 @@ class NeuralBehavior:
         reroll_chance = self._lck_reroll_chance(lck_val)
 
         # Build context first (needed for failure check)
-        target = None
-        nearest_dist = 999
-        for obj in WorldObject.on_map(creature.current_map):
-            if not isinstance(obj, Creature) or obj is creature or not obj.is_alive:
-                continue
-            dist = creature._sight_distance(obj)
-            if dist < nearest_dist and creature.can_see(obj):
-                nearest_dist = dist
-                target = obj
+        target = next((o for o in creature.nearby() if creature.can_see(o)), None)
 
         now = 0  # ticks managed by simulation loop
         context = {
@@ -199,15 +191,8 @@ class StatWeightedBehavior:
         stam_ratio = creature.stats.active[Stat.CUR_STAMINA]() / max(1, creature.stats.active[Stat.MAX_STAMINA]())
 
         # Find nearest visible creature
-        target = None
-        nearest_dist = 999
-        for obj in WorldObject.on_map(creature.current_map):
-            if not isinstance(obj, Creature) or obj is creature or not obj.is_alive:
-                continue
-            dist = creature._sight_distance(obj)
-            if dist < nearest_dist and creature.can_see(obj):
-                nearest_dist = dist
-                target = obj
+        target = next((o for o in creature.nearby() if creature.can_see(o)), None)
+        nearest_dist = creature._sight_distance(target) if target else 999
 
         # Build weighted action candidates
         candidates = []

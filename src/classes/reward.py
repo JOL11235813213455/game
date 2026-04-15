@@ -404,20 +404,14 @@ def make_reward_snapshot(creature) -> dict:
     nearby_neutral = 0   # -2 <= sentiment < 2
     my_rels = GRAPH.edges_from(creature.uid)
     try:
-        from classes.world_object import WorldObject
-        from classes.creature import Creature as _Creature
-        for obj in WorldObject.on_map(creature.current_map):
-            if isinstance(obj, _Creature) and obj is not creature and obj.is_alive:
-                dx = abs(obj.location.x - creature.location.x)
-                dy = abs(obj.location.y - creature.location.y)
-                if dx + dy <= 3:
-                    rel = my_rels.get(obj.uid)
-                    if rel and rel[0] >= 2:
-                        nearby_friendly += 1
-                    elif rel and rel[0] > -2:
-                        nearby_neutral += 1
-                    else:
-                        nearby_hostile += 1
+        for obj in creature.nearby(max_dist=3):
+            rel = my_rels.get(obj.uid)
+            if rel and rel[0] >= 2:
+                nearby_friendly += 1
+            elif rel and rel[0] > -2:
+                nearby_neutral += 1
+            else:
+                nearby_hostile += 1
     except Exception:
         pass
     nearby_count = nearby_hostile + nearby_friendly + nearby_neutral

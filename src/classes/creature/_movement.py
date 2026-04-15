@@ -125,18 +125,13 @@ class MovementMixin:
         # Stealth tracking: sneaking past hostiles without detection
         if getattr(self, 'movement_mode', 'walk') == 'sneak' and self.location != old_loc:
             from classes.relationship_graph import GRAPH
-            from classes.world_object import WorldObject
-            from classes.creature import Creature as _C
+            from classes.relationship_graph import GRAPH
             rels = GRAPH.edges_from(self.uid)
-            sight = self.stats.active[Stat.SIGHT_RANGE]()
-            for obj in WorldObject.on_map(self.current_map):
-                if not isinstance(obj, _C) or obj is self or not obj.is_alive:
-                    continue
+            for obj in self.nearby():
                 rel = rels.get(obj.uid)
                 if not rel or rel[0] >= -5:
                     continue
-                d = abs(self.location.x - obj.location.x) + abs(self.location.y - obj.location.y)
-                if d <= sight and not obj.can_see(self):
+                if not obj.can_see(self):
                     self._stealth_moves = getattr(self, '_stealth_moves', 0) + 1
                     break
 
@@ -298,18 +293,8 @@ class MovementMixin:
         can_swim=True, this creature has a 10% chance per tick of
         learning to swim from observation.
         """
-        from classes.world_object import WorldObject
-        from classes.creature import Creature as _C
-        sight = self.stats.active[Stat.SIGHT_RANGE]()
-        cx, cy = self.location.x, self.location.y
-        for obj in WorldObject.on_map(self.current_map):
-            if not isinstance(obj, _C) or obj is self or not obj.is_alive:
-                continue
+        for obj in self.nearby():
             if not obj.can_swim:
-                continue
-            dx = abs(cx - obj.location.x)
-            dy = abs(cy - obj.location.y)
-            if dx + dy > sight:
                 continue
             obj_tile = self.current_map.tiles.get(obj.location)
             if obj_tile and getattr(obj_tile, 'liquid', False):

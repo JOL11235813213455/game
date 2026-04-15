@@ -337,14 +337,11 @@ class ReproductionMixin:
         return self.partner_uid is not None
 
     def get_partner(self):
-        """Find partner creature by UID on the same map."""
+        """Find partner creature by UID."""
         from classes.creature import Creature
         if self.partner_uid is None:
             return None
-        for obj in WorldObject.on_map(self.current_map):
-            if isinstance(obj, Creature) and obj.uid == self.partner_uid:
-                return obj
-        return None
+        return Creature.by_uid(self.partner_uid)
 
     def break_pair_bond(self):
         """End the amorous pair bond. Updates both partners."""
@@ -405,8 +402,8 @@ class ReproductionMixin:
         if (egg.mother_species == self.species or egg.father_species == self.species):
             result['cannibalism'] = True
             # All witnesses record MASSIVE negative
-            for obj in WorldObject.on_map(self.current_map):
-                if isinstance(obj, Creature) and obj is not self and obj.can_see(self):
+            for obj in self.nearby():
+                if obj.can_see(self):
                     obj.record_interaction(self, -20.0)
 
         return result
@@ -487,12 +484,7 @@ class ReproductionMixin:
         Returns 0.0 (least attractive) to 1.0 (most attractive).
         Used for gender competition dynamics.
         """
-        from classes.creature import Creature
-        same_sex = []
-        for obj in WorldObject.on_map(self.current_map):
-            if (isinstance(obj, Creature) and obj is not self and
-                    obj.sex == self.sex and obj.is_alive and self.can_see(obj)):
-                same_sex.append(obj)
+        same_sex = [o for o in self.nearby() if o.sex == self.sex and self.can_see(o)]
 
         if not same_sex:
             return 0.5  # no competitors → neutral

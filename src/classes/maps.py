@@ -201,12 +201,10 @@ class Map(Trackable):
         it wasn't pickled) or whenever the index might be stale.
         """
         self._creature_cells = {}
-        from classes.world_object import WorldObject
         from classes.creature import Creature
-        for obj in WorldObject.on_map(self):
-            if isinstance(obj, Creature) and obj.is_alive:
-                self.register_creature_at(
-                    obj, obj.location.x, obj.location.y, obj.location.z)
+        for obj in Creature.on_same_map(self):
+            self.register_creature_at(
+                obj, obj.location.x, obj.location.y, obj.location.z)
 
     # Flow directions to (dx, dy)
     _FLOW_DIRS = {'N': (0, -1), 'S': (0, 1), 'E': (1, 0), 'W': (-1, 0)}

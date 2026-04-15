@@ -151,19 +151,10 @@ def _should_run(creature, context) -> bool:
     if creature.stats.active[Stat.CUR_STAMINA]() < 3:
         return False
     from classes.relationship_graph import GRAPH
-    sight = creature.stats.active[Stat.SIGHT_RANGE]()
-    cx, cy = creature.location.x, creature.location.y
     rels = GRAPH.edges_from(creature.uid)
     if not rels:
         return False
-    from classes.world_object import WorldObject
-    from classes.creature import Creature as _C
-    for obj in WorldObject.on_map(creature.current_map):
-        if not isinstance(obj, _C) or obj is creature or not obj.is_alive:
-            continue
-        dist = abs(cx - obj.location.x) + abs(cy - obj.location.y)
-        if dist > sight:
-            continue
+    for obj in creature.nearby():
         rel = rels.get(obj.uid)
         if rel and rel[0] < -5:
             return True
@@ -235,23 +226,16 @@ def compute_dynamic_mask(creature, context: dict = None) -> np.ndarray:
     has_visible = False
     has_hostile_visible = False
     if creature.current_map:
-        from classes.world_object import WorldObject
-        from classes.creature import Creature as _C
         from classes.relationship_graph import GRAPH
         cx, cy = creature.location.x, creature.location.y
-        sight = creature.stats.active[Stat.SIGHT_RANGE]()
         rels = GRAPH.edges_from(creature.uid)
-        for obj in WorldObject.on_map(creature.current_map):
-            if not isinstance(obj, _C) or obj is creature or not obj.is_alive:
-                continue
+        for obj in creature.nearby():
             d = abs(cx - obj.location.x) + abs(cy - obj.location.y)
             if d <= 1:
                 has_adjacent = True
-                has_visible = True
-            elif d <= sight:
-                has_visible = True
+            has_visible = True
             rel = rels.get(obj.uid)
-            if rel and rel[0] < -5 and d <= sight:
+            if rel and rel[0] < -5:
                 has_hostile_visible = True
 
     tile = creature.current_map.tiles.get(creature.location) if creature.current_map else None
@@ -499,14 +483,8 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
     # -- Social --
     if action == Action.TRADE:
         if target is None:
-            from classes.world_object import WorldObject
-            from classes.creature import Creature as _Creature
             target = next(
-                (o for o in WorldObject.on_map(creature.current_map)
-                 if isinstance(o, _Creature) and o is not creature
-                 and o.is_alive
-                 and abs(o.location.x - creature.location.x) +
-                     abs(o.location.y - creature.location.y) <= 1),
+                (o for o in creature.nearby(max_dist=1)),
                 None
             )
             if target is None:
@@ -537,14 +515,8 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
 
     if action == Action.STEAL:
         if target is None:
-            from classes.world_object import WorldObject
-            from classes.creature import Creature as _Creature
             target = next(
-                (o for o in WorldObject.on_map(creature.current_map)
-                 if isinstance(o, _Creature) and o is not creature
-                 and o.is_alive
-                 and abs(o.location.x - creature.location.x) +
-                     abs(o.location.y - creature.location.y) <= 1),
+                (o for o in creature.nearby(max_dist=1)),
                 None
             )
             if target is None:
@@ -677,16 +649,9 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
     # -- Reproduction --
     if action == Action.PAIR:
         if target is None:
-            from classes.world_object import WorldObject
-            from classes.creature import Creature as _Creature
             target = next(
-                (o for o in WorldObject.on_map(creature.current_map)
-                 if isinstance(o, _Creature) and o is not creature
-                 and o.is_alive
-                 and o.sex != creature.sex
-                 and o.species == creature.species
-                 and abs(o.location.x - creature.location.x) +
-                     abs(o.location.y - creature.location.y) <= 1),
+                (o for o in creature.nearby(max_dist=1)
+                 if o.sex != creature.sex and o.species == creature.species),
                 None
             )
             if target is None:

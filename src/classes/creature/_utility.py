@@ -329,16 +329,7 @@ class UtilityMixin:
         elif purpose == 'crafting':
             self.process()
         elif purpose == 'trading':
-            from classes.world_object import WorldObject
-            from classes.creature import Creature as _Creature
-            partner = next(
-                (o for o in WorldObject.on_map(self.current_map)
-                 if isinstance(o, _Creature) and o is not self
-                 and o.is_alive
-                 and abs(o.location.x - self.location.x) +
-                     abs(o.location.y - self.location.y) <= 1),
-                None
-            )
+            partner = next((o for o in self.nearby(max_dist=1)), None)
             if partner is not None:
                 self.auto_trade(partner)
         elif purpose == 'guarding':
@@ -371,15 +362,8 @@ class UtilityMixin:
         from classes.relationship_graph import GRAPH
         from classes.world_object import WorldObject
         from classes.creature import Creature as _C
-        sight = self.stats.active[Stat.SIGHT_RANGE]()
-        cx, cy = self.location.x, self.location.y
         rels = GRAPH.edges_from(self.uid)
-        for obj in WorldObject.on_map(self.current_map):
-            if not isinstance(obj, _C) or obj is self or not obj.is_alive:
-                continue
-            d = abs(cx - obj.location.x) + abs(cy - obj.location.y)
-            if d > sight:
-                continue
+        for obj in self.nearby():
             rel = rels.get(obj.uid)
             if rel and rel[0] < -5:
                 self._occupation = None
@@ -430,11 +414,10 @@ class UtilityMixin:
         Returns list of creatures that could potentially respond
         (within their HEARING_RANGE of the caller, with positive sentiment).
         """
-        from classes.creature import Creature
+        from classes.stats import Stat as _S
+        hearing_max = max(1, self.stats.active[_S.HEARING_RANGE]())
         responders = []
-        for obj in WorldObject.on_map(self.current_map):
-            if not isinstance(obj, Creature) or obj is self:
-                continue
+        for obj in self.nearby(max_dist=hearing_max * 2):
             dist = self._sight_distance(obj)
             # Responder must be within THEIR hearing range of the caller
             hearing = obj.stats.active[Stat.HEARING_RANGE]()

@@ -56,6 +56,23 @@ class Creature(
         from classes.world_object import WorldObject
         return [o for o in WorldObject._by_map.get(id(game_map), [])
                 if isinstance(o, cls) and o.is_alive]
+
+    def nearby(self, max_dist: int = None) -> list['Creature']:
+        """Return living creatures within max_dist using spatial grid.
+
+        If max_dist is None, uses SIGHT_RANGE. Much faster than
+        scanning all WorldObjects on the map.
+        """
+        from classes.stats import Stat
+        if max_dist is None:
+            max_dist = max(1, self.stats.active[Stat.SIGHT_RANGE]())
+        gm = self._current_map
+        if gm is not None and hasattr(gm, 'creatures_in_range'):
+            return [c for c in gm.creatures_in_range(
+                        self.location.x, self.location.y,
+                        self.location.z, max_dist)
+                    if c is not self and c.is_alive]
+        return [c for c in Creature.on_same_map(gm) if c is not self and c.is_alive]
     collision   = True
 
     def __init__(
