@@ -1492,26 +1492,17 @@ def train_curriculum_stage(stage_number: int, model_name: str,
         'curriculum_stage': f"S{stage_number} {stage['name']}",
     }
 
-    # MAPPO
+    # MAPPO — always sequential (every creature builds observations,
+    # parallelism doesn't help — bottleneck is per-creature obs cost)
     if stage['mappo_steps'] > 0:
         mappo_t0 = time.time()
-        if parallel > 1:
-            net = _run_mappo_parallel(
-                net, ppo, steps=stage['mappo_steps'],
-                arena_kwargs=arena_kwargs_mappo,
-                signal_scales=signal_scales,
-                sim_kwargs=sim_kwargs,
-                action_mask=stage['action_mask'],
-                n_workers=parallel,
-                viewer_extra=_viewer_extra)
-        else:
-            net = run_mappo(net, ppo, steps=stage['mappo_steps'],
-                            arena_kwargs=arena_kwargs_mappo,
-                            goal_net=goal_net, goal_ppo=goal_ppo,
-                            signal_scales=signal_scales,
-                            sim_kwargs=sim_kwargs,
-                            action_mask=stage['action_mask'],
-                            viewer_extra=_viewer_extra)
+        net = run_mappo(net, ppo, steps=stage['mappo_steps'],
+                        arena_kwargs=arena_kwargs_mappo,
+                        goal_net=goal_net, goal_ppo=goal_ppo,
+                        signal_scales=signal_scales,
+                        sim_kwargs=sim_kwargs,
+                        action_mask=stage['action_mask'],
+                        viewer_extra=_viewer_extra)
         net.export_to_numpy(SAVE_DIR / 'mappo.npz')
         print(f'  MAPPO complete in {time.time() - mappo_t0:.0f}s')
 
