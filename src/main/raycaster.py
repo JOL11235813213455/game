@@ -56,7 +56,8 @@ def _get_ceiling_color(tile, covered: bool) -> tuple:
 
 
 def cast_rays(player_x: float, player_y: float, angle: float,
-              game_map, screen_w: int) -> list:
+              game_map, screen_w: int,
+              wall_structures: dict = None) -> list:
     """Cast rays for each screen column.
 
     Returns list of (distance, tile, side, wall_x_frac, hit_x, hit_y)
@@ -112,6 +113,33 @@ def cast_rays(player_x: float, player_y: float, angle: float,
                 depth += 1
 
             tile = game_map.tiles.get(MapKey(map_x, map_y, 0))
+
+            # Check for wall-faced structure on this tile.
+            # wall_face = which wall the sprite is mounted on.
+            # Ray going east enters from west → sees 'W' wall.
+            if wall_structures:
+                if side == 0:
+                    face = 'W' if step_x > 0 else 'E'
+                else:
+                    face = 'N' if step_y > 0 else 'S'
+                ws_key = (map_x, map_y, face)
+                if ws_key in wall_structures:
+                    # Structure hit — compute distance and wall frac
+                    if side == 0:
+                        perp_dist = side_dist_x - delta_dist_x
+                    else:
+                        perp_dist = side_dist_y - delta_dist_y
+                    perp_dist = max(0.001, perp_dist)
+                    perp_dist *= math.cos(ray_angle - angle)
+                    if side == 0:
+                        wall_x = player_y + perp_dist * sin_a / math.cos(ray_angle - angle)
+                    else:
+                        wall_x = player_x + perp_dist * cos_a / math.cos(ray_angle - angle)
+                    wall_x -= math.floor(wall_x)
+                    results.append((perp_dist, tile, side, wall_x,
+                                    map_x, map_y))
+                    hit = True
+                    break
 
             # Check if this tile blocks the ray
             blocked = False
@@ -217,7 +245,8 @@ def render_first_person(screen: pygame.Surface, player, game_map,
     angle = player.facing_angle
 
     # Cast all rays
-    ray_results = cast_rays(px, py, angle, game_map, sw)
+    ray_results = cast_rays(px, py, angle, game_map, sw,
+                            wall_structures=wall_structures)
 
     # Depth buffer for sprite clipping
     depth_buffer = [MAX_DEPTH] * sw
@@ -278,6 +307,7 @@ def render_first_person(screen: pygame.Surface, player, game_map,
         strip_h = draw_end - draw_start
 
         # Check for wall-aligned structure on this face
+        # wall_face = which wall the sprite is on. Player east of tile sees 'W' wall.
         if side == 0:
             face = 'W' if hx > px else 'E'
         else:

@@ -62,15 +62,15 @@ def main():
     # wall_face: None=billboard, 'N'/'S'/'E'/'W'=flush against that wall face.
     _structures = [
         # --- test_town structures ---
-        ('test_town', 8,  8,  's_house_wood',      3, 'S'),   # NW house
+        ('test_town', 8,  8,  's_house_wood',      3, 'S'),   # NW house — on south wall
         ('test_town', 15, 8,  's_house_wood',      3, 'S'),   # NE house
-        ('test_town', 8,  15, 's_house_wood',      3, 'S'),   # SW house
-        ('test_town', 15, 15, 's_house_wood',      3, 'S'),   # SE house
+        ('test_town', 8,  15, 's_house_wood',      3, 'N'),   # SW house — on north wall
+        ('test_town', 15, 15, 's_house_wood',      3, 'N'),   # SE house
         ('test_town', 15, 5,  's_house_wood',      3, 'S'),   # far N house
         ('test_town', 12, 11, 's_well',            2, None),  # well (billboard)
-        ('test_town', 1,  12, 's_cave_entrance',   3, 'E'),   # cave entrance (west wall, faces east)
-        ('test_town', 12, 2,  's_sign',            2, 'S'),   # town sign
-        ('test_town', 21, 12, 's_sign',            2, 'W'),   # signpost east
+        ('test_town', 1,  12, 's_cave_entrance',   3, 'W'),   # cave — on west wall
+        ('test_town', 12, 2,  's_sign',            2, 'S'),   # town sign — on south wall
+        ('test_town', 21, 12, 's_sign',            2, 'E'),   # signpost — on east wall
         # --- cave interior ---
         ('cave_test', 4,  3,  's_chest',           2, None),  # chest (billboard)
         ('cave_test', 8,  3,  's_treasure',        2, None),  # treasure (billboard)
