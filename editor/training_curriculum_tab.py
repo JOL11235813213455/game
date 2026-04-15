@@ -124,23 +124,35 @@ class TrainingCurriculumTab(ttk.Frame):
                   ).grid(row=row, column=0, columnspan=2, sticky='w', padx=6, pady=2)
         row += 1
 
-        for label, attr, tooltip in [
-            ('MAPPO steps',     'v_mappo',    'Multi-agent PPO step count for this stage'),
-            ('ES generations',  'v_es_gens',  'Evolutionary strategies generations (0 = skip ES)'),
+        pipe_grid = ttk.Frame(f)
+        pipe_grid.grid(row=row, column=0, columnspan=2, sticky='ew', padx=6, pady=2)
+        left_items = [
+            ('MAPPO steps',     'v_mappo',    'Multi-agent PPO step count'),
+            ('ES gens',         'v_es_gens',  'ES generations (0 = skip)'),
             ('ES variants',     'v_es_vars',  'Variants per generation'),
-            ('ES sim steps',    'v_es_steps', 'Sim steps per ES variant evaluation'),
-            ('PPO steps',       'v_ppo',      'Single-agent PPO step count for this stage'),
-            ('Learning rate',   'v_lr',       'Optimizer learning rate'),
-            ('Entropy coef',    'v_ent',      'Entropy bonus weight (higher = more exploration)'),
-            ('Resume from stage', 'v_resume', 'Stage number to load weights from at start (blank = fresh)'),
-        ]:
-            ttk.Label(f, text=label).grid(row=row, column=0, sticky='w', padx=6, pady=2)
+            ('ES steps',        'v_es_steps', 'Steps per ES variant'),
+        ]
+        right_items = [
+            ('PPO steps',       'v_ppo',      'Single-agent PPO step count'),
+            ('Learn rate',      'v_lr',       'Optimizer learning rate'),
+            ('Entropy',         'v_ent',      'Entropy bonus weight'),
+            ('Resume stg',      'v_resume',   'Stage to resume from (blank = fresh)'),
+        ]
+        for i, (label, attr, tooltip) in enumerate(left_items):
+            ttk.Label(pipe_grid, text=label).grid(row=i, column=0, sticky='w', padx=(0, 4), pady=1)
             var = tk.StringVar()
             setattr(self, attr, var)
-            entry = ttk.Entry(f, textvariable=var, width=12)
-            entry.grid(row=row, column=1, sticky='w', padx=6, pady=2)
+            entry = ttk.Entry(pipe_grid, textvariable=var, width=10)
+            entry.grid(row=i, column=1, sticky='w', padx=(0, 12), pady=1)
             add_tooltip(entry, tooltip)
-            row += 1
+        for i, (label, attr, tooltip) in enumerate(right_items):
+            ttk.Label(pipe_grid, text=label).grid(row=i, column=2, sticky='w', padx=(0, 4), pady=1)
+            var = tk.StringVar()
+            setattr(self, attr, var)
+            entry = ttk.Entry(pipe_grid, textvariable=var, width=10)
+            entry.grid(row=i, column=3, sticky='w', pady=1)
+            add_tooltip(entry, tooltip)
+        row += 1
 
         # Signals
         ttk.Separator(f, orient=tk.HORIZONTAL).grid(
@@ -155,7 +167,7 @@ class TrainingCurriculumTab(ttk.Frame):
         row += 1
 
         # Single Text widget for the JSON dict — simplest editable form
-        self.scales_text = tk.Text(f, width=50, height=6, wrap=tk.NONE,
+        self.scales_text = tk.Text(f, width=50, height=4, wrap=tk.NONE,
                                     font=('monospace', 9))
         self.scales_text.grid(row=row, column=0, columnspan=2,
                                sticky='ew', padx=6, pady=2)
@@ -175,7 +187,7 @@ class TrainingCurriculumTab(ttk.Frame):
                                            sticky='w', padx=6)
         row += 1
 
-        self.actions_text = tk.Text(f, width=50, height=3, wrap=tk.NONE,
+        self.actions_text = tk.Text(f, width=50, height=2, wrap=tk.NONE,
                                      font=('monospace', 9))
         self.actions_text.grid(row=row, column=0, columnspan=2,
                                 sticky='ew', padx=6, pady=2)
