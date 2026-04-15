@@ -558,6 +558,13 @@ class CombatMixin:
 
         self.play_animation('death')
 
+        # Clean up spatial registrations
+        from classes.creature import Creature
+        Creature._uid_registry.pop(self.uid, None)
+        if self._current_map and hasattr(self._current_map, 'unregister_creature_at'):
+            self._current_map.unregister_creature_at(
+                self, self.location.x, self.location.y, self.location.z)
+
     @property
     def is_alive(self) -> bool:
         return self.stats.active[Stat.HP_CURR]() > 0
