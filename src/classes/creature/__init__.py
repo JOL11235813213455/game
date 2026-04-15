@@ -43,6 +43,19 @@ class Creature(
     """
     sprite_name = 'player'
     z_index     = 3
+    _uid_registry: dict[int, 'Creature'] = {}
+
+    @classmethod
+    def by_uid(cls, uid: int) -> 'Creature | None':
+        ref = cls._uid_registry.get(uid)
+        return ref if ref is not None and ref.is_alive else None
+
+    @classmethod
+    def on_same_map(cls, game_map) -> list['Creature']:
+        """Fast: return all living creatures on a map via _by_map + uid registry."""
+        from classes.world_object import WorldObject
+        return [o for o in WorldObject._by_map.get(id(game_map), [])
+                if isinstance(o, cls) and o.is_alive]
     collision   = True
 
     def __init__(
@@ -65,6 +78,7 @@ class Creature(
         size: str = None,
     ):
         super().__init__(current_map=current_map, location=location)
+        Creature._uid_registry[self.uid] = self
         self.name = name
         self.species = species
 
@@ -165,6 +179,11 @@ class Creature(
         # Spatial memory: {purpose_str: [(map_name, x, y, tick_discovered), ...]}
         # Populated when creature visits a purpose zone or purpose tile
         self.known_locations: dict[str, list[tuple]] = {}
+
+        # Observation cache: full obs vector, invalidated on move/action
+        self._obs_cache: list | None = None
+        self._obs_cache_tick: int = -1
+        self._obs_dirty: bool = True
 
         # Goal state (hierarchical RL)
         self.current_goal: str | None = None      # purpose string e.g. 'trading'
@@ -301,9 +320,8 @@ class Creature(
         if (new_loc is not None and cm is not None
                 and hasattr(cm, 'register_creature_at')):
             cm.register_creature_at(self, new_loc.x, new_loc.y, new_loc.z)
-        # Invalidate the cached visibility snapshot — position changed.
-        # Use setattr so this works even before __init__ has set the attr.
         self._perception_cache_tick = -1
+        self._obs_dirty = True
 
     # -- Perception cache ---------------------------------------------------
     #
@@ -398,6 +416,19 @@ class Creature(
                     d, c = entry
                     result.append((i, c, d))
         return result
+
+    def get_cached_observation(self, cols: int, rows: int, tick: int,
+                               **kwargs) -> list[float]:
+        """Return observation, using cache if state hasn't changed."""
+        if (not self._obs_dirty and self._obs_cache is not None
+                and self._obs_cache_tick == tick):
+            return self._obs_cache
+        from classes.observation import build_observation
+        obs = build_observation(self, cols, rows, observation_tick=tick, **kwargs)
+        self._obs_cache = obs
+        self._obs_cache_tick = tick
+        self._obs_dirty = False
+        return obs
 
     def get_perception(self, tick: int) -> tuple[list, list]:
         """Return (visible, heard_only) lists for this creature at ``tick``.

@@ -186,12 +186,12 @@ class Map(Trackable):
                     uids.update(cell)
         if not uids:
             return []
-        # Resolve uids to live Creature instances via Trackable registry.
         from classes.creature import Creature
         out = []
-        for obj in Trackable.all_instances():
-            if isinstance(obj, Creature) and obj.uid in uids and obj.is_alive:
-                out.append(obj)
+        for uid in uids:
+            c = Creature.by_uid(uid)
+            if c is not None:
+                out.append(c)
         return out
 
     def rebuild_spatial_index(self):
