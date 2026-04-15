@@ -451,10 +451,9 @@ def run_training_viewer(cell_size: int = 20):
 
         cols = state['cols']
         rows = state['rows']
-        n_alive = state.get('alive', 0)
-        panel_w = max(300, 50 + n_alive * 16 + 20)
+        panel_w = 300
         need_w = cols * cell_size + panel_w
-        need_h = max(rows * cell_size, 400 + n_alive * 16 + 200)
+        need_h = rows * cell_size
         if screen.get_width() != need_w or screen.get_height() != need_h:
             screen = pygame.display.set_mode((need_w, need_h))
 
@@ -626,47 +625,6 @@ def run_training_viewer(cell_size: int = 20):
         text(f'Gold: {total_gold}  Items: {total_items}  Equip: {total_equip}')
         tile_gold = sum(ti['gold'] for ti in state.get('tile_info', []))
         text(f'Ground gold: {tile_gold}')
-
-        # Sentiment grid
-        sentiments = state.get('sentiments', [])
-        s_names = state.get('sentiment_names', [])
-        n = len(sentiments)
-        if n > 0:
-            y += 10
-            text('--- Sentiments ---', C_GRAY)
-            label_w = 42
-            gcell = min(16, max(8, (panel_w - label_w - 10) // n))
-            grid_x = panel_x + label_w
-            grid_y = y
-            # Column headers (rotated names would be ideal but just use initials)
-            for j, nm in enumerate(s_names):
-                lbl = font_sm.render(nm[:2], True, C_GRAY)
-                screen.blit(lbl, (grid_x + j * gcell + 1, grid_y - 10))
-            y = grid_y
-            for i, row in enumerate(sentiments):
-                # Row label
-                lbl = font_sm.render(s_names[i] if i < len(s_names) else '', True, C_GRAY)
-                screen.blit(lbl, (panel_x, y + 1))
-                for j, val in enumerate(row):
-                    rx = grid_x + j * gcell
-                    ry = y
-                    if i == j:
-                        color = (40, 40, 40)
-                    elif val > 5:
-                        g_int = min(255, 80 + int(val * 3))
-                        color = (0, g_int, 0)
-                    elif val < -5:
-                        r_int = min(255, 80 + int(abs(val) * 3))
-                        color = (r_int, 0, 0)
-                    else:
-                        color = (50, 50, 50)
-                    pygame.draw.rect(screen, color,
-                                     (rx, ry, gcell - 1, gcell - 1))
-                    if gcell >= 12 and i != j and val != 0:
-                        v_str = f'{int(val)}'
-                        v_surf = font_sm.render(v_str, True, C_WHITE)
-                        screen.blit(v_surf, (rx + 1, ry + 1))
-                y += gcell
 
         pygame.display.flip()
         clock.tick(15)  # 15 FPS for viewer — training writes every 10 ticks

@@ -244,15 +244,15 @@ def render_first_person(screen: pygame.Surface, player, game_map,
     py = player.location.y + player.fp_y
     angle = player.facing_angle
 
+    # Build wall-structure lookup for this frame
+    wall_structures = _build_wall_structure_lookup(game_map)
+
     # Cast all rays
     ray_results = cast_rays(px, py, angle, game_map, sw,
                             wall_structures=wall_structures)
 
     # Depth buffer for sprite clipping
     depth_buffer = [MAX_DEPTH] * sw
-
-    # Build wall-structure lookup for this frame
-    wall_structures = _build_wall_structure_lookup(game_map)
 
     # Determine if player is under cover
     player_tile = game_map.tiles.get(player.location)

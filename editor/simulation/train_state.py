@@ -65,24 +65,6 @@ def write_state(sim, phase: str = '', step: int = 0, info: dict = None):
                 'buried_gold': int(buried),
             })
 
-    # Sentiment matrix: capped to first 10 alive creatures (10x10 = 100 entries)
-    from classes.relationship_graph import GRAPH
-    alive_creatures = [c for c in sim.creatures if c.is_alive][:10]
-    alive_uids = [c.uid for c in alive_creatures]
-    sentiments = []
-    sentiment_names = []
-    for from_uid in alive_uids:
-        row = []
-        for to_uid in alive_uids:
-            if from_uid == to_uid:
-                row.append(0.0)
-            else:
-                edge = GRAPH.get_edge(from_uid, to_uid)
-                row.append(round(edge[0], 1) if edge else 0.0)
-        sentiments.append(row)
-    for c in alive_creatures:
-        sentiment_names.append((c.name or '')[:6])
-
     state = {
         'timestamp': time.time(),
         'phase': phase,
@@ -95,8 +77,6 @@ def write_state(sim, phase: str = '', step: int = 0, info: dict = None):
         'creatures': creatures,
         'tile_info': tile_info,
         'info': info or {},
-        'sentiments': sentiments,
-        'sentiment_names': sentiment_names,
     }
 
     try:
