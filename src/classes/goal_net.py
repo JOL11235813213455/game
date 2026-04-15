@@ -21,6 +21,12 @@ import numpy as np
 from classes.actions import TILE_PURPOSES, NUM_PURPOSES
 from classes.relationship_graph import GRAPH
 
+try:
+    from fast_native.fast_math import c_forward_3layer_ln, c_layer_norm
+    _HAS_CYTHON = True
+except ImportError:
+    _HAS_CYTHON = False
+
 
 def _layer_norm(x: np.ndarray, gamma: np.ndarray, beta: np.ndarray,
                 eps: float = 1e-5) -> np.ndarray:
@@ -54,6 +60,13 @@ class GoalNet:
         self.b_goal = np.zeros(NUM_PURPOSES, dtype=np.float32)
 
     def forward(self, obs: np.ndarray) -> np.ndarray:
+        if _HAS_CYTHON:
+            return c_forward_3layer_ln(
+                np.ascontiguousarray(obs, dtype=np.float32),
+                self.w1, self.b1, self.ln1_g, self.ln1_b,
+                self.w2, self.b2, self.ln2_g, self.ln2_b,
+                self.w3, self.b3, self.ln3_g, self.ln3_b,
+                self.w_goal, self.b_goal)
         x = np.maximum(0, _layer_norm(obs @ self.w1 + self.b1, self.ln1_g, self.ln1_b))
         x = np.maximum(0, _layer_norm(x @ self.w2 + self.b2, self.ln2_g, self.ln2_b))
         x = np.maximum(0, _layer_norm(x @ self.w3 + self.b3, self.ln3_g, self.ln3_b))

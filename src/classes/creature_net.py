@@ -17,12 +17,18 @@ from classes.actions import NUM_ACTIONS
 from classes.observation import OBSERVATION_SIZE
 
 
+try:
+    from fast_native.fast_math import c_relu as _c_relu, c_softmax as _c_softmax
+    from fast_native.fast_math import c_forward_5layer
+    _HAS_CYTHON = True
+except ImportError:
+    _HAS_CYTHON = False
+
 def relu(x: np.ndarray) -> np.ndarray:
     return np.maximum(0, x)
 
 
 def softmax(x: np.ndarray) -> np.ndarray:
-    """Row-wise softmax for 2D array, or simple softmax for 1D."""
     if x.ndim == 1:
         e = np.exp(x - x.max())
         return e / e.sum()
@@ -83,9 +89,27 @@ class CreatureNet:
         """Forward pass. Accepts single observation or batch."""
         x = np.asarray(obs, dtype=np.float32)
         single = x.ndim == 1
+
+        # Cython fast path for single observations
+        if single and _HAS_CYTHON:
+            w = self.weights
+            return c_forward_5layer(
+                np.ascontiguousarray(x, dtype=np.float32),
+                np.ascontiguousarray(w['w1'], dtype=np.float32),
+                np.ascontiguousarray(w['b1'], dtype=np.float32),
+                np.ascontiguousarray(w['w2'], dtype=np.float32),
+                np.ascontiguousarray(w['b2'], dtype=np.float32),
+                np.ascontiguousarray(w['w3'], dtype=np.float32),
+                np.ascontiguousarray(w['b3'], dtype=np.float32),
+                np.ascontiguousarray(w['w4'], dtype=np.float32),
+                np.ascontiguousarray(w['b4'], dtype=np.float32),
+                np.ascontiguousarray(w['w5'], dtype=np.float32),
+                np.ascontiguousarray(w['b5'], dtype=np.float32),
+                np.ascontiguousarray(w['w_pol'], dtype=np.float32),
+                np.ascontiguousarray(w['b_pol'], dtype=np.float32))
+
         if single:
             x = x.reshape(1, -1)
-
         x = relu(x @ self.weights['w1'] + self.weights['b1'])
         x = relu(x @ self.weights['w2'] + self.weights['b2'])
         x = relu(x @ self.weights['w3'] + self.weights['b3'])

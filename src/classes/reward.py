@@ -12,17 +12,21 @@ import math
 from classes.stats import Stat
 from classes.relationship_graph import GRAPH
 
+try:
+    from fast_native.fast_math import c_ln_ratio, c_sln
+    _ln_ratio = c_ln_ratio
+    _sln = c_sln
+    _HAS_CYTHON = True
+except ImportError:
+    _HAS_CYTHON = False
 
-def _ln_ratio(after: float, before: float, epsilon: float = 0.001) -> float:
-    """ln(after / before) with safety for zero/negative."""
-    return math.log(max(epsilon, after) / max(epsilon, before))
+    def _ln_ratio(after: float, before: float, epsilon: float = 0.001) -> float:
+        return math.log(max(epsilon, after) / max(epsilon, before))
 
-
-def _sln(x: float) -> float:
-    """Signed ln: sign(x) * ln(|x| + 1)."""
-    if x == 0:
-        return 0.0
-    return math.copysign(math.log(abs(x) + 1), x)
+    def _sln(x: float) -> float:
+        if x == 0:
+            return 0.0
+        return math.copysign(math.log(abs(x) + 1), x)
 
 
 def _current_tile_liquid(creature) -> bool:

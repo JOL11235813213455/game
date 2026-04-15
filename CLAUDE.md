@@ -40,6 +40,15 @@ leaning towards apocalyptic
     _all_instances()/all() for every class.
 - tile sets are dictionaries of Tiles with MapKey keys
 
+## Performance Guidelines
+
+- **Spatial grid over full scans.** NEVER iterate `WorldObject.on_map()` or `Trackable.all_instances()` to find creatures. Use `creature.nearby(max_dist)` for spatial queries (O(cell) via the Map's grid), `Creature.by_uid(uid)` for direct lookups (O(1) via UID registry), or `Creature.on_same_map(map)` for all creatures on a map. The spatial grid lives in `Map._creature_cells` and is updated automatically by the Creature location setter.
+- **Cython for numeric hotpaths.** Tight numeric loops (math transforms, neural network inference, raycasting, distance calculations) should have Cython implementations in `src/fast_native/`. Pattern: `try: from fast_native.fast_math import c_func; except ImportError: def c_func(...): # pure Python fallback`. Build with `cd src/fast_native && python setup.py build_ext --inplace`.
+- **Staggered ticks.** Use `TickScheduler(max_per_frame=25)` to distribute creature updates across frames. Only ~25 creatures tick per frame; others just animate. Behavior intervals (500ms+) naturally spread across 60fps.
+- **Batch NN inference.** When multiple creatures need decisions the same frame, stack observations into one matrix and run a single forward pass via `BatchBehavior`. 3-5x faster than per-creature inference.
+- **Off-map reduced rate.** Creatures on non-active maps tick via `WorldManager` at reduced rate (once per 30 game-seconds) for hunger/fatigue only — no perception, no behavior.
+- **Observation caching caveat.** Do NOT cache full observations — they include census data from other creatures' positions. The per-tick perception cache (`_perception_cache_tick`) is the safe caching boundary.
+
 ## Critical Architectural Knowledge
 
 ### Creature / Stat System (src/classes/creature.py, src/classes/stats.py)
