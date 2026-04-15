@@ -15,6 +15,21 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
+_WORKER_STATE_DIR = Path(__file__).parent.parent.parent / 'editor' / 'models'
+
+
+def _write_worker_state(worker_id: int, stats: dict):
+    """Write per-worker live stats to a tiny JSON file."""
+    import json, time
+    stats['timestamp'] = time.time()
+    stats['worker_id'] = worker_id
+    path = _WORKER_STATE_DIR / f'_live_worker_{worker_id}.json'
+    try:
+        path.write_text(json.dumps(stats))
+    except Exception:
+        pass
+
+
 def _mappo_worker(worker_id: int, weight_queue: mp.Queue,
                   result_queue: mp.Queue, config: dict):
     """Worker process: creates arena, runs MAPPO rollout, returns buffer data."""
@@ -63,6 +78,10 @@ def _mappo_worker(worker_id: int, weight_queue: mp.Queue,
         for c in sim.creatures:
             reward_snapshots[c.uid] = make_reward_snapshot(c)
 
+        action_counts = {}
+        signal_totals = {}
+        total_reward = 0.0
+
         for step in range(rollout_len):
             sim.now += sim.tick_ms
             sim.step_count += 1
@@ -106,11 +125,11 @@ def _mappo_worker(worker_id: int, weight_queue: mp.Queue,
                 prev_rew = reward_snapshots.get(c.uid)
                 curr_rew = make_reward_snapshot(c)
                 if prev_rew:
-                    reward, _ = compute_reward(c, prev_rew, curr_rew,
-                                               breakdown=True, last_action=action,
-                                               signal_scales=signal_scales)
+                    reward, signals = compute_reward(c, prev_rew, curr_rew,
+                                                     breakdown=True, last_action=action,
+                                                     signal_scales=signal_scales)
                 else:
-                    reward = 0.0
+                    reward, signals = 0.0, {}
                 reward_snapshots[c.uid] = curr_rew
 
                 obs_buf.append(obs_arr)
@@ -121,10 +140,42 @@ def _mappo_worker(worker_id: int, weight_queue: mp.Queue,
                 done_buf.append(0.0 if c.is_alive else 1.0)
                 mask_buf.append(combined)
 
+                action_counts[action] = action_counts.get(action, 0) + 1
+                total_reward += reward
+                if signals:
+                    for sk, sv in signals.items():
+                        signal_totals[sk] = signal_totals.get(sk, 0.0) + sv
+
             # Process opponent ticks
             for c in sim.creatures:
                 if c.is_alive:
                     c.process_ticks(sim.now)
+
+            # Live stats every 50 steps
+            if step % 50 == 0:
+                alive = sum(1 for c in sim.creatures if c.is_alive)
+                n_steps = max(1, len(rew_buf))
+                _day = int(sim.game_clock.day)
+                _hr = int(sim.game_clock.hour)
+                _mn = int((sim.game_clock.hour % 1) * 60)
+                top_actions = sorted(action_counts.items(), key=lambda x: -x[1])[:5]
+                act_total = max(1, sum(action_counts.values()))
+                act_pcts = {}
+                for aid, cnt in top_actions:
+                    try:
+                        act_pcts[Action(aid).name.lower()] = round(cnt / act_total, 3)
+                    except ValueError:
+                        act_pcts[f'act_{aid}'] = round(cnt / act_total, 3)
+                sig_avgs = {k: round(v / n_steps, 4) for k, v in signal_totals.items() if abs(v) > 0.001}
+                _write_worker_state(worker_id, {
+                    'phase': 'MAPPO', 'step': step,
+                    'alive': alive, 'total': len(sim.creatures),
+                    'avg_reward': round(total_reward / n_steps, 4),
+                    'samples': n_steps,
+                    'clock': f'{_day:02d}:{_hr:02d}:{_mn:02d}',
+                    'actions': act_pcts,
+                    'signals': sig_avgs,
+                })
 
         # Package as numpy arrays
         result = {
@@ -187,6 +238,9 @@ def _ppo_worker(worker_id: int, weight_queue: mp.Queue,
         mask_buf = []
 
         reward_snapshots = {agent.uid: make_reward_snapshot(agent)}
+        action_counts = {}
+        signal_totals = {}
+        total_reward = 0.0
 
         for step in range(rollout_len):
             sim.now += sim.tick_ms
@@ -243,11 +297,11 @@ def _ppo_worker(worker_id: int, weight_queue: mp.Queue,
             prev_rew = reward_snapshots.get(agent.uid)
             curr_rew = make_reward_snapshot(agent)
             if prev_rew:
-                reward, _ = compute_reward(agent, prev_rew, curr_rew,
-                                           breakdown=True, last_action=action,
-                                           signal_scales=signal_scales)
+                reward, signals = compute_reward(agent, prev_rew, curr_rew,
+                                                 breakdown=True, last_action=action,
+                                                 signal_scales=signal_scales)
             else:
-                reward = 0.0
+                reward, signals = 0.0, {}
             reward_snapshots[agent.uid] = curr_rew
 
             obs_buf.append(obs_arr)
@@ -257,6 +311,35 @@ def _ppo_worker(worker_id: int, weight_queue: mp.Queue,
             lp_buf.append(log_prob)
             done_buf.append(0.0 if agent.is_alive else 1.0)
             mask_buf.append(combined)
+
+            action_counts[action] = action_counts.get(action, 0) + 1
+            total_reward += reward
+            for sk, sv in signals.items():
+                signal_totals[sk] = signal_totals.get(sk, 0.0) + sv
+
+            if step % 50 == 0:
+                n_steps = max(1, len(rew_buf))
+                _day = int(sim.game_clock.day)
+                _hr = int(sim.game_clock.hour)
+                _mn = int((sim.game_clock.hour % 1) * 60)
+                act_total = max(1, sum(action_counts.values()))
+                act_pcts = {}
+                for aid, cnt in sorted(action_counts.items(), key=lambda x: -x[1])[:5]:
+                    try:
+                        act_pcts[Action(aid).name.lower()] = round(cnt / act_total, 3)
+                    except ValueError:
+                        act_pcts[f'act_{aid}'] = round(cnt / act_total, 3)
+                sig_avgs = {k: round(v / n_steps, 4) for k, v in signal_totals.items() if abs(v) > 0.001}
+                _write_worker_state(worker_id, {
+                    'phase': 'PPO', 'step': step,
+                    'alive': sim.alive_count,
+                    'total': len(sim.creatures),
+                    'avg_reward': round(total_reward / n_steps, 4),
+                    'samples': n_steps,
+                    'clock': f'{_day:02d}:{_hr:02d}:{_mn:02d}',
+                    'actions': act_pcts,
+                    'signals': sig_avgs,
+                })
 
         result = {
             'obs': np.array(obs_buf, dtype=np.float32) if obs_buf else np.empty((0, OBSERVATION_SIZE), dtype=np.float32),

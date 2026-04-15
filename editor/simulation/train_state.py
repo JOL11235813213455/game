@@ -118,6 +118,20 @@ def write_parallel_state(worker_stats: list[dict], phase: str = '',
         pass
 
 
+def read_worker_states() -> list[dict]:
+    """Read per-worker live stat files."""
+    import glob
+    results = []
+    for path in sorted(glob.glob(str(STATE_FILE.parent / '_live_worker_*.json'))):
+        try:
+            data = json.loads(Path(path).read_text())
+            if time.time() - data.get('timestamp', 0) < 120:
+                results.append(data)
+        except Exception:
+            pass
+    return results
+
+
 def read_state() -> dict | None:
     """Read the latest state from the training process."""
     try:

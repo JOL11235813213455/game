@@ -87,16 +87,20 @@ def _tile_base_color(tile):
 
 
 def _draw_parallel_view(screen, state, font, font_sm, font_lg):
-    """Render parallel training stats — one column per worker."""
+    """Render parallel training stats — one column per worker with full stats."""
+    from editor.simulation.train_state import read_worker_states
+
     sw, sh = screen.get_size()
     screen.fill(C_BLACK)
 
-    workers = state.get('workers', [])
+    # Read live worker files
+    workers = read_worker_states()
+    if not workers:
+        workers = state.get('workers', [])
     n_workers = len(workers)
     info = state.get('info', {})
-    phase = state.get('phase', '?')
+    phase = workers[0].get('phase', state.get('phase', '?')) if workers else state.get('phase', '?')
     stage = info.get('curriculum_stage', '')
-    stale = state.get('stale', False)
 
     # Header
     y = 10
@@ -104,22 +108,20 @@ def _draw_parallel_view(screen, state, font, font_sm, font_lg):
         screen.blit(font_lg.render(f'Stage: {stage}', True, C_YELLOW), (10, y))
         y += 22
     screen.blit(font_lg.render(
-        f'Parallel {phase} — {n_workers} workers', True,
-        C_YELLOW if not stale else C_RED), (10, y))
+        f'Parallel {phase} — {n_workers} workers', True, C_YELLOW), (10, y))
     y += 22
-    screen.blit(font.render(f'Step: ~{state["step"]}', True, C_WHITE), (10, y))
-    y += 16
-    if stale:
-        screen.blit(font.render('STALE — training may have stopped', True, C_RED), (10, y))
-        y += 16
-    y += 10
 
     if n_workers == 0:
         screen.blit(font.render('Waiting for worker data...', True, C_GRAY), (10, y))
         return
 
     # Column layout
-    col_w = max(120, (sw - 20) // n_workers)
+    col_w = max(180, (sw - 10) // n_workers)
+    need_w = 10 + col_w * n_workers
+    need_h = max(400, sh)
+    if screen.get_width() != need_w or screen.get_height() != need_h:
+        screen = pygame.display.set_mode((need_w, need_h))
+        screen.fill(C_BLACK)
 
     # Column headers
     for i in range(n_workers):
@@ -127,18 +129,16 @@ def _draw_parallel_view(screen, state, font, font_sm, font_lg):
         screen.blit(font.render(f'Core {i}', True, C_YELLOW), (x, y))
     y += 18
 
-    # Stats rows
-    stat_keys = ['alive', 'total', 'avg_reward', 'samples', 'ep_steps']
-    stat_labels = ['Alive', 'Total', 'Avg Reward', 'Samples', 'Ep Steps']
-
-    for label, key in zip(stat_labels, stat_keys):
-        # Label
-        screen.blit(font_sm.render(label, True, C_GRAY), (10, y))
+    # Basic stats
+    for label, key in [('Step', 'step'), ('Clock', 'clock'),
+                        ('Alive', 'alive'), ('Total', 'total'),
+                        ('Avg Reward', 'avg_reward'), ('Samples', 'samples')]:
+        screen.blit(font_sm.render(f'{label}:', True, C_GRAY), (10, y))
         for i, w in enumerate(workers):
-            x = 10 + i * col_w + 60
+            x = 10 + i * col_w + 70
             val = w.get(key, '')
             if isinstance(val, float):
-                text = f'{val:+.3f}'
+                text = f'{val:+.4f}'
                 color = C_GREEN if val > 0 else C_RED if val < 0 else C_WHITE
             else:
                 text = str(val)
@@ -146,17 +146,38 @@ def _draw_parallel_view(screen, state, font, font_sm, font_lg):
             screen.blit(font_sm.render(text, True, color), (x, y))
         y += 14
 
-    # Totals
-    y += 10
-    total_alive = sum(w.get('alive', 0) for w in workers)
-    total_total = sum(w.get('total', 0) for w in workers)
-    total_samples = sum(w.get('samples', 0) for w in workers)
-    avg_rewards = [w.get('avg_reward', 0) for w in workers if 'avg_reward' in w]
-    overall_avg = sum(avg_rewards) / max(1, len(avg_rewards))
-    color_r = C_GREEN if overall_avg > 0 else C_RED if overall_avg < 0 else C_WHITE
-    screen.blit(font.render(f'Total: {total_alive}/{total_total} alive, '
-                            f'{total_samples} samples, '
-                            f'avg_reward={overall_avg:+.4f}', True, color_r), (10, y))
+    # Actions
+    y += 6
+    screen.blit(font_sm.render('Actions:', True, C_GRAY), (10, y))
+    y += 14
+    all_action_names = set()
+    for w in workers:
+        all_action_names.update(w.get('actions', {}).keys())
+    for aname in sorted(all_action_names):
+        screen.blit(font_sm.render(f'  {aname}', True, C_GRAY), (10, y))
+        for i, w in enumerate(workers):
+            x = 10 + i * col_w + 70
+            val = w.get('actions', {}).get(aname, 0)
+            screen.blit(font_sm.render(f'{val:.0%}', True, C_WHITE), (x, y))
+        y += 12
+
+    # Signals
+    y += 6
+    screen.blit(font_sm.render('Signals:', True, C_GRAY), (10, y))
+    y += 14
+    all_signal_names = set()
+    for w in workers:
+        all_signal_names.update(w.get('signals', {}).keys())
+    for sname in sorted(all_signal_names):
+        screen.blit(font_sm.render(f'  {sname}', True, C_GRAY), (10, y))
+        for i, w in enumerate(workers):
+            x = 10 + i * col_w + 70
+            val = w.get('signals', {}).get(sname, 0)
+            color = C_GREEN if val > 0 else C_RED if val < 0 else C_GRAY
+            screen.blit(font_sm.render(f'{val:+.4f}', True, color), (x, y))
+        y += 12
+        if y > sh - 20:
+            break
 
 
 def run_viewer(scenario: str = 'arena', cols: int = 25, rows: int = 25,
