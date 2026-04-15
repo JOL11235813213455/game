@@ -676,24 +676,60 @@ class CombatMixin:
         self.play_animation('ghost')
 
     def _spook_nearby(self):
-        """Frighten living creatures within 3 tiles of the ghost.
+        """Affect living creatures within 3 tiles based on the ghost's
+        relationship with each target.
 
-        Effects: negative sentiment hit, fear stat debuff (temporary),
-        emit a spooky sound.
+        The ghost's pre-death sentiment toward the target determines
+        the interaction:
+          Hated (< -10): terrifying — strong fear debuff, big sentiment hit
+          Disliked (-10 to -3): unsettling — moderate fear
+          Neutral (-3 to +3): eerie — mild unease
+          Liked (+3 to +10): bittersweet — small positive sentiment
+          Loved (> +10): protective — warmth, small stat buff
         """
         from classes.sound import emit_sound
-        emit_sound(self, 'death_cry', volume=6.0, tick=0)
+        from classes.relationship_graph import GRAPH
+
+        # Ghost's preserved feelings toward others
+        ghost_rels = GRAPH.edges_from(self.uid)
+
+        emit_sound(self, 'death_cry', volume=4.0, tick=0)
 
         for other in self.nearby(max_dist=3):
             if other.is_ghost:
                 continue
-            # Dread: negative sentiment toward the ghost
-            other.record_interaction(self, -3.0)
-            # Fear debuff: -2 PER, -1 CHR for a few ticks (via timed mod)
+
+            # How did the ghost feel about this creature in life?
+            rel = ghost_rels.get(other.uid)
+            ghost_sentiment = rel[0] if rel else 0.0
+
             source = f'spooked_{self.uid}'
-            if not any(m['source'] == source for m in other.stats.mods):
-                other.stats.add_mod(source, Stat.PER, -2)
-                other.stats.add_mod(source, Stat.CHR, -1)
+
+            if ghost_sentiment < -10:
+                # Hated: terrifying haunting
+                other.record_interaction(self, -3.0)
+                if not any(m['source'] == source for m in other.stats.mods):
+                    other.stats.add_mod(source, Stat.PER, -3)
+                    other.stats.add_mod(source, Stat.CHR, -2)
+                    other.stats.add_mod(source, Stat.AGL, -1)
+            elif ghost_sentiment < -3:
+                # Disliked: unsettling
+                other.record_interaction(self, -1.5)
+                if not any(m['source'] == source for m in other.stats.mods):
+                    other.stats.add_mod(source, Stat.PER, -1)
+                    other.stats.add_mod(source, Stat.CHR, -1)
+            elif ghost_sentiment <= 3:
+                # Neutral: eerie presence
+                other.record_interaction(self, -0.5)
+            elif ghost_sentiment <= 10:
+                # Liked: bittersweet visitation
+                other.record_interaction(self, 0.5)
+            else:
+                # Loved: protective presence
+                other.record_interaction(self, 1.0)
+                if not any(m['source'] == source for m in other.stats.mods):
+                    other.stats.add_mod(source, Stat.PER, 1)
+                    other.stats.add_mod(source, Stat.CHR, 1)
 
     def _demanifest(self):
         """Ghost fades away until next haunting cycle."""
