@@ -176,11 +176,8 @@ class StatWeightedBehavior:
     """
 
     def think(self, creature, cols: int, rows: int):
-        from classes.world_object import WorldObject
-        from classes.actions import dispatch, Action
-        from classes.creature import Creature
+        from classes.actions import dispatch, Action, ACTION_NAMES
 
-        # Compute stat-based weights
         str_mod = (creature.stats.active[Stat.STR]() - 10) // 2
         agl_mod = (creature.stats.active[Stat.AGL]() - 10) // 2
         int_mod = (creature.stats.active[Stat.INT]() - 10) // 2
@@ -189,91 +186,82 @@ class StatWeightedBehavior:
 
         hp_ratio = creature.stats.active[Stat.HP_CURR]() / max(1, creature.stats.active[Stat.HP_MAX]())
         stam_ratio = creature.stats.active[Stat.CUR_STAMINA]() / max(1, creature.stats.active[Stat.MAX_STAMINA]())
+        hunger = getattr(creature, 'hunger', 0.0)
 
-        # Find nearest visible creature
         target = next((o for o in creature.nearby() if creature.can_see(o)), None)
         nearest_dist = creature._sight_distance(target) if target else 999
 
-        # Build weighted action candidates
         candidates = []
 
-        # Always consider wandering
-        wander_weight = 5 + agl_mod
-        for d in range(8):
-            candidates.append((d, wander_weight))
+        # Movement — single MOVE action (auto-direction toward goal)
+        candidates.append((Action.MOVE, 8 + agl_mod))
 
         if stam_ratio < 0.2:
-            # Low stamina -> strongly prefer waiting
             candidates.append((Action.WAIT, 20))
         else:
             candidates.append((Action.WAIT, 2))
+
+        # Eat when hungry
+        if hunger < 0:
+            candidates.append((Action.USE_ITEM, int(5 + abs(hunger) * 10)))
+
+        # Pickup items on tile
+        tile = creature.current_map.tiles.get(creature.location) if creature.current_map else None
+        if tile and (tile.inventory.items or getattr(tile, 'gold', 0) > 0):
+            candidates.append((Action.PICKUP, 6 + per_mod))
 
         if target is not None:
             rel = creature.get_relationship(target)
             sentiment = rel[0] if rel else 0.0
 
             if nearest_dist <= 1:
-                # Adjacent — combat or social
                 if sentiment < -3 or hp_ratio > 0.5:
-                    # Hostile or healthy -> consider attack
                     candidates.append((Action.MELEE_ATTACK, 8 + str_mod * 2))
                     candidates.append((Action.GRAPPLE, 4 + str_mod))
 
                 if sentiment >= 0:
-                    # Neutral/positive -> social
                     candidates.append((Action.TALK, 5 + chr_mod * 2))
+                    candidates.append((Action.TRADE, 4 + chr_mod))
                     candidates.append((Action.INTIMIDATE, 3 + str_mod + chr_mod))
 
-                # Curiosity-driven approach for strangers
                 if rel is None:
                     curiosity = creature.curiosity_toward(target)
                     candidates.append((Action.TALK, int(curiosity * 10 + int_mod * 2)))
 
             elif nearest_dist <= 8:
-                # Medium range
                 if sentiment < -3:
                     candidates.append((Action.RANGED_ATTACK, 5 + per_mod * 2))
                     candidates.append((Action.FLEE, 3 + agl_mod))
 
-                # Follow interesting creatures
                 if rel is None or sentiment > 0:
                     candidates.append((Action.FOLLOW, 5 + int_mod))
 
-            # Low HP -> flee or wait
             if hp_ratio < 0.3 and sentiment < 0:
                 candidates.append((Action.FLEE, 15 + agl_mod * 2))
 
-        # Search tiles occasionally (curiosity)
         candidates.append((Action.SEARCH, 2 + int_mod + per_mod))
-
-        # Guard stance if guarding makes sense (territorial)
         candidates.append((Action.GUARD, 1 + str_mod))
 
-        # Piety modifier: boost aligned actions, penalize opposed
+        # Economy: harvest/farm if on resource tile
+        if tile and getattr(tile, 'resource_type', None) and getattr(tile, 'resource_amount', 0) > 0:
+            candidates.append((Action.HARVEST, 5 + str_mod))
+            candidates.append((Action.FARM, 3))
+
+        # Sleep when fatigued
+        if getattr(creature, 'sleep_debt', 0) >= 2:
+            candidates.append((Action.SLEEP, 10 + getattr(creature, 'sleep_debt', 0) * 3))
+
+        # Piety modifier
         if creature.deity and creature.piety > 0:
             from classes.gods import WorldData as _WD
-            from classes.trackable import Trackable as _T
-            _world = None
-            for _obj in _T.all_instances():
-                if isinstance(_obj, _WD):
-                    _world = _obj
-                    break
-            if _world:
-                god = _world.gods.get(creature.deity)
+            instances = _WD.all()
+            if instances:
+                god = instances[-1].gods.get(creature.deity)
                 if god:
-                    _action_names = {
-                        Action.MELEE_ATTACK: 'melee_attack', Action.RANGED_ATTACK: 'ranged_attack',
-                        Action.GRAPPLE: 'grapple', Action.INTIMIDATE: 'intimidate',
-                        Action.DECEIVE: 'deceive', Action.TRADE: 'trade',
-                        Action.TALK: 'talk', Action.STEAL: 'steal',
-                        Action.GUARD: 'guard', Action.FOLLOW: 'follow',
-                        Action.FLEE: 'flee', Action.SEARCH: 'search',
-                        Action.WAIT: 'wait',
-                    }
                     piety_boost = int(creature.piety * 5)
                     new_candidates = []
                     for action, weight in candidates:
-                        aname = _action_names.get(action, '')
+                        aname = ACTION_NAMES.get(action, '')
                         if aname in god.aligned_actions:
                             weight += piety_boost
                         elif aname in god.opposed_actions:
@@ -281,16 +269,13 @@ class StatWeightedBehavior:
                         new_candidates.append((action, weight))
                     candidates = new_candidates
 
-        # Normalize weights and select
         weights = [max(1, w) for _, w in candidates]
         total = sum(weights)
         probs = [w / total for w in weights]
         idx = random.choices(range(len(candidates)), weights=probs, k=1)[0]
         chosen_action = candidates[idx][0]
 
-        context = {
+        dispatch(creature, chosen_action, {
             'cols': cols, 'rows': rows,
             'target': target, 'now': 0,
-        }
-
-        dispatch(creature, chosen_action, context)
+        })
