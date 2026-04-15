@@ -1088,6 +1088,8 @@ def _list_curriculum_stages() -> list[dict]:
 def train_curriculum_stage(stage_number: int, model_name: str,
                             arena_cols: int = 25, arena_rows: int = 25,
                             num_creatures: int = 16,
+                            mappo_creatures: int = None,
+                            ppo_creatures: int = None,
                             resume_override: str = None,
                             seed: int = None) -> int:
     """Run one curriculum stage and save the resulting model.
@@ -1197,10 +1199,17 @@ def train_curriculum_stage(stage_number: int, model_name: str,
         'fatigue_enabled':      stage['fatigue_enabled'],
     }
 
-    arena_kwargs = {
+    _mappo_n = mappo_creatures or num_creatures
+    _ppo_n = ppo_creatures or num_creatures
+    arena_kwargs_mappo = {
         'cols': arena_cols, 'rows': arena_rows,
-        'num_creatures': num_creatures,
-        'mask_probability': 0.0,  # masks off during curriculum — keep things clean
+        'num_creatures': _mappo_n,
+        'mask_probability': 0.0,
+    }
+    arena_kwargs_ppo = {
+        'cols': arena_cols, 'rows': arena_rows,
+        'num_creatures': _ppo_n,
+        'mask_probability': 0.0,
     }
 
     pipeline_t0 = time.time()
@@ -1213,7 +1222,7 @@ def train_curriculum_stage(stage_number: int, model_name: str,
     if stage['mappo_steps'] > 0:
         mappo_t0 = time.time()
         net = run_mappo(net, ppo, steps=stage['mappo_steps'],
-                        arena_kwargs=arena_kwargs,
+                        arena_kwargs=arena_kwargs_mappo,
                         goal_net=goal_net, goal_ppo=goal_ppo,
                         signal_scales=signal_scales,
                         sim_kwargs=sim_kwargs,
@@ -1228,7 +1237,7 @@ def train_curriculum_stage(stage_number: int, model_name: str,
         net = run_es(net, generations=stage['es_generations'],
                      variants=stage['es_variants'],
                      steps_per_variant=stage['es_steps'],
-                     arena_kwargs=arena_kwargs,
+                     arena_kwargs=arena_kwargs_ppo,
                      sim_kwargs=sim_kwargs)
         print(f'  ES complete in {time.time() - es_t0:.0f}s')
 
@@ -1238,7 +1247,7 @@ def train_curriculum_stage(stage_number: int, model_name: str,
         ppo = PPO(net, lr=stage['learning_rate'], ent_coef=stage['ent_coef'])
         net = run_ppo(net, ppo, steps=stage['ppo_steps'],
                       checkpoint_dir=SAVE_DIR,
-                      arena_kwargs=arena_kwargs,
+                      arena_kwargs=arena_kwargs_ppo,
                       goal_net=goal_net, goal_ppo=goal_ppo,
                       signal_scales=signal_scales,
                       sim_kwargs=sim_kwargs,
@@ -1286,10 +1295,14 @@ def train_curriculum_full(model_name: str,
                           start_stage: int = 1,
                           arena_cols: int = 25, arena_rows: int = 25,
                           num_creatures: int = 16,
+                          mappo_creatures: int = None,
+                          ppo_creatures: int = None,
                           seed: int = None):
     """Run the full curriculum from start_stage to the last stage in order.
 
     Each stage's saved model becomes the resume target for the next.
+    mappo_creatures: creature count for MAPPO phase (default: num_creatures)
+    ppo_creatures: creature count for PPO phase (default: num_creatures)
     """
     stages = _list_curriculum_stages()
     stages = [s for s in stages if s['stage_number'] >= start_stage]
@@ -1299,6 +1312,8 @@ def train_curriculum_full(model_name: str,
     print(f'\n{"#"*60}')
     print(f'FULL CURRICULUM RUN: model="{model_name}"')
     print(f'  Stages: {[s["stage_number"] for s in stages]}')
+    print(f'  MAPPO creatures: {mappo_creatures or num_creatures}')
+    print(f'  PPO creatures: {ppo_creatures or num_creatures}')
     print(f'{"#"*60}')
 
     pipeline_t0 = time.time()
@@ -1308,6 +1323,8 @@ def train_curriculum_full(model_name: str,
             model_name=model_name,
             arena_cols=arena_cols, arena_rows=arena_rows,
             num_creatures=num_creatures,
+            mappo_creatures=mappo_creatures,
+            ppo_creatures=ppo_creatures,
             seed=seed,
         )
 
