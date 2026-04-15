@@ -165,6 +165,7 @@ def main():
     from classes.tick_scheduler import TickScheduler
     tick_scheduler = TickScheduler(max_per_frame=25)
     frame_number = 0
+    first_person = False  # V toggles between top-down and first-person
 
     running = True
     while running:
@@ -267,6 +268,11 @@ def main():
                                 player.wake()
                             else:
                                 player.sleep(now)
+                        if event.key == pygame.K_v:
+                            first_person = not first_person
+                            if first_person:
+                                player.fp_x = 0.5
+                                player.fp_y = 0.5
                         if event.key in (pygame.K_EQUALS, pygame.K_PLUS, pygame.K_KP_PLUS):
                             set_zoom(get_zoom() + ZOOM_STEP)
                         if event.key in (pygame.K_MINUS, pygame.K_KP_MINUS):
@@ -288,15 +294,41 @@ def main():
             if interrupt is not None:
                 player.wake()
 
-        if save_ui is None and not paused and not player.is_sleeping and now - last_move >= MOVE_DELAY:
+        if save_ui is None and not paused and not player.is_sleeping:
             keys = pygame.key.get_pressed()
-            dx = keys[pygame.K_RIGHT] - keys[pygame.K_LEFT]
-            dy = keys[pygame.K_DOWN]  - keys[pygame.K_UP]
-            if dx != 0 or dy != 0:
-                player.move(dx, dy, cols, rows)
-                last_move = now
-            else:
-                player.play_animation('idle')
+            if first_person:
+                # First-person: left/right rotate, up/down move forward/back
+                import math as _math
+                rot_speed = 2.5 * dt  # radians per second
+                if keys[pygame.K_LEFT]:
+                    player.facing_angle -= rot_speed
+                if keys[pygame.K_RIGHT]:
+                    player.facing_angle += rot_speed
+                # Grid-based movement in faced direction
+                if now - last_move >= MOVE_DELAY:
+                    if keys[pygame.K_UP]:
+                        fdx = round(_math.cos(player.facing_angle))
+                        fdy = round(_math.sin(player.facing_angle))
+                        if fdx != 0 or fdy != 0:
+                            player.move(fdx, fdy, cols, rows)
+                            last_move = now
+                    elif keys[pygame.K_DOWN]:
+                        fdx = -round(_math.cos(player.facing_angle))
+                        fdy = -round(_math.sin(player.facing_angle))
+                        if fdx != 0 or fdy != 0:
+                            player.move(fdx, fdy, cols, rows)
+                            last_move = now
+                    else:
+                        player.play_animation('idle')
+            elif now - last_move >= MOVE_DELAY:
+                # Top-down: arrow keys move in cardinal directions
+                dx = keys[pygame.K_RIGHT] - keys[pygame.K_LEFT]
+                dy = keys[pygame.K_DOWN]  - keys[pygame.K_UP]
+                if dx != 0 or dy != 0:
+                    player.move(dx, dy, cols, rows)
+                    last_move = now
+                else:
+                    player.play_animation('idle')
 
         if save_ui is None and not paused:
             frame_number += 1
@@ -312,39 +344,44 @@ def main():
                 npc.anim.update(dt_ms)
 
         # ---- render ---------------------------------------------------------
-        bs = get_block_size()
-        th = get_tile_height()
-        cam = camera_offset(player.location, cols, rows, bs)
-
         screen.fill((30, 30, 30))
 
-        sun_dir    = game_clock.sun_direction
-        shadow_len = game_clock.shadow_length_factor
-        sun_elev   = game_clock.sun_elevation
+        if first_person:
+            from main.raycaster import render_first_person
+            render_first_person(screen, player, player.current_map,
+                                cols, rows, game_clock=game_clock)
+        else:
+            bs = get_block_size()
+            th = get_tile_height()
+            cam = camera_offset(player.location, cols, rows, bs)
 
-        # Pass 1: draw all ground tiles
-        has_parent = bool(player.map_stack)
-        for y in range(rows):
-            draw_map_row(screen, player.current_map, cols, y, bs, cam,
-                         has_parent=has_parent, time_ms=now)
+            sun_dir    = game_clock.sun_direction
+            shadow_len = game_clock.shadow_length_factor
+            sun_elev   = game_clock.sun_elevation
 
-        # Pass 2: draw sprites/structures sorted by Y (z_index breaks ties on same tile)
-        renderables = [o for o in WorldObject.on_map(player.current_map)
-                       if isinstance(o, (Creature, Structure))]
-        for obj in sorted(renderables, key=lambda o: (o.location.y, o.z_index, o.location.x, id(o))):
-            result = obj.make_surface(bs)
-            if result:
-                sprite_surf, (bdx, bdy) = result
-                sx = obj.location.x * bs - cam[0] + bdx
-                sy = obj.location.y * th - cam[1] + bdy
+            # Pass 1: draw all ground tiles
+            has_parent = bool(player.map_stack)
+            for y in range(rows):
+                draw_map_row(screen, player.current_map, cols, y, bs, cam,
+                             has_parent=has_parent, time_ms=now)
 
-                shadow = make_shadow(sprite_surf, sun_dir, shadow_len, bs)
-                if shadow:
-                    sh_surf, sh_ox, sh_oy = shadow
-                    screen.blit(sh_surf, (sx + sh_ox, sy + sh_oy))
+            # Pass 2: draw sprites/structures sorted by Y
+            renderables = [o for o in WorldObject.on_map(player.current_map)
+                           if isinstance(o, (Creature, Structure))]
+            for obj in sorted(renderables, key=lambda o: (o.location.y, o.z_index, o.location.x, id(o))):
+                result = obj.make_surface(bs)
+                if result:
+                    sprite_surf, (bdx, bdy) = result
+                    sx = obj.location.x * bs - cam[0] + bdx
+                    sy = obj.location.y * th - cam[1] + bdy
 
-                lit = apply_top_highlight(sprite_surf, sun_elev)
-                screen.blit(lit, (sx, sy))
+                    shadow = make_shadow(sprite_surf, sun_dir, shadow_len, bs)
+                    if shadow:
+                        sh_surf, sh_ox, sh_oy = shadow
+                        screen.blit(sh_surf, (sx + sh_ox, sy + sh_oy))
+
+                    lit = apply_top_highlight(sprite_surf, sun_elev)
+                    screen.blit(lit, (sx, sy))
 
         # Sleep overlay: dark translucent + "Sleeping... (Z to wake)"
         if player.is_sleeping:
@@ -388,6 +425,8 @@ def main():
         # Resolved based on which UI element is currently open.
         mode = KeybindStrip.mode_for(
             paused, save_ui, inv_menu, quest_menu, dialogue_menu)
+        if mode == 'gameplay':
+            mode = 'fp_gameplay' if first_person else 'gameplay'
         keybind_strip.draw(screen, mode)
 
         if DEBUG:

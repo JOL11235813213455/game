@@ -722,10 +722,23 @@ class KeybindStrip:
         'gameplay': [
             ('Arrows',   'move'),
             ('T',        'talk'),
+            ('Z',        'sleep'),
             ('Enter',    'use / enter'),
             ('I',        'inventory'),
             ('Q',        'quests'),
+            ('V',        '1st person'),
             ('+/-',      'zoom'),
+            ('Esc',      'menu'),
+        ],
+        'fp_gameplay': [
+            ('L/R',      'turn'),
+            ('Up/Dn',    'walk'),
+            ('T',        'talk'),
+            ('Z',        'sleep'),
+            ('Enter',    'use / enter'),
+            ('I',        'inventory'),
+            ('Q',        'quests'),
+            ('V',        'top-down'),
             ('Esc',      'menu'),
         ],
         'pause': [

@@ -264,6 +264,11 @@ class Creature(
         # Walk vs run is auto-selected by the dispatcher based on threat context.
         self.movement_mode: str = 'walk'
 
+        # First-person camera state (raycaster only, ignored in top-down)
+        self.facing_angle: float = 0.0  # radians, 0 = east, pi/2 = south
+        self.fp_x: float = 0.5         # sub-tile x (0-1 within current tile)
+        self.fp_y: float = 0.5         # sub-tile y
+
         # Sleep deprivation
         self.sleep_debt: int = 0  # days without sleep
         self._fatigue_level: int = 0  # current debuff tier (0-4)
