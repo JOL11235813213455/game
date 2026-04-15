@@ -567,6 +567,9 @@ def run_training_viewer(cell_size: int = 20):
         text(f'Phase: {phase}', C_YELLOW if not stale else C_RED)
         text(f'Step: {state["step"]}')
         text(f'Tick: {state["tick"]}')
+        clock_str = state.get('clock', '')
+        if clock_str:
+            text(f'Clock: {clock_str}')
         text(f'Alive: {state["alive"]} / {state["total"]}')
         if stale:
             text('STALE — training may have stopped', C_RED)

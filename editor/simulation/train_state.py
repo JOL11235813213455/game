@@ -65,11 +65,16 @@ def write_state(sim, phase: str = '', step: int = 0, info: dict = None):
                 'buried_gold': int(buried),
             })
 
+    _day = int(sim.game_clock.day)
+    _hr = int(sim.game_clock.hour)
+    _mn = int((sim.game_clock.hour % 1) * 60)
+
     state = {
         'timestamp': time.time(),
         'phase': phase,
         'step': step,
         'tick': sim.step_count,
+        'clock': f'{_day:02d}:{_hr:02d}:{_mn:02d}',
         'cols': sim.cols,
         'rows': sim.rows,
         'alive': sim.alive_count,
