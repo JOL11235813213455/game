@@ -37,6 +37,8 @@ class GoalMixin:
         - WorldObjects: structures, creatures, items with purpose set
           (range = sight * obj.purpose_distance)
         """
+        if self.current_map is None:
+            return
         from classes.stats import Stat
         from classes.maps import MapKey
         from classes.world_object import WorldObject

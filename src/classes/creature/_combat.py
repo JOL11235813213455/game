@@ -760,6 +760,8 @@ class CombatMixin:
     def is_alive(self) -> bool:
         if self.is_ghost:
             return self._ghost_visible
+        if self.current_map is None:
+            return False
         return self.stats.active[Stat.HP_CURR]() > 0
 
     @property
