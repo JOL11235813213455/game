@@ -144,6 +144,7 @@ class NeuralBehavior:
         context = {
             'cols': cols, 'rows': rows,
             'target': target, 'now': now,
+            'combat_enabled': getattr(creature, '_combat_enabled', True),
         }
 
         # Execute action — with LCK reroll on failure
@@ -278,4 +279,5 @@ class StatWeightedBehavior:
         dispatch(creature, chosen_action, {
             'cols': cols, 'rows': rows,
             'target': target, 'now': 0,
+            'combat_enabled': getattr(creature, '_combat_enabled', True),
         })

@@ -816,6 +816,7 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             c.behavior = NeuralBehavior(opp, temperature=1.0)
         else:
             c.behavior = StatWeightedBehavior()
+        c._combat_enabled = sim_kwargs.get('combat_enabled', True)
         c.register_tick('behavior', 500, c._do_behavior)
 
     total_reward = 0.0
@@ -1036,6 +1037,7 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
                     c.behavior = NeuralBehavior(opp, temperature=1.0)
                 else:
                     c.behavior = StatWeightedBehavior()
+                c._combat_enabled = sim_kwargs.get('combat_enabled', True)
                 c.register_tick('behavior', 500, c._do_behavior)
 
         if step % 10000 == 9999:
