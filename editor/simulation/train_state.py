@@ -65,23 +65,24 @@ def write_state(sim, phase: str = '', step: int = 0, info: dict = None):
                 'buried_gold': int(buried),
             })
 
-    # Sentiment matrix: pairwise sentiments between alive creatures
+    # Sentiment matrix: skip for large populations (O(N²) serialization)
     from classes.relationship_graph import GRAPH
     alive_uids = [c.uid for c in sim.creatures if c.is_alive]
     sentiments = []
-    for from_uid in alive_uids:
-        row = []
-        for to_uid in alive_uids:
-            if from_uid == to_uid:
-                row.append(0.0)
-            else:
-                edge = GRAPH.get_edge(from_uid, to_uid)
-                row.append(round(edge[0], 1) if edge else 0.0)
-        sentiments.append(row)
     sentiment_names = []
-    for c in sim.creatures:
-        if c.is_alive:
-            sentiment_names.append((c.name or '')[:6])
+    if len(alive_uids) <= 30:
+        for from_uid in alive_uids:
+            row = []
+            for to_uid in alive_uids:
+                if from_uid == to_uid:
+                    row.append(0.0)
+                else:
+                    edge = GRAPH.get_edge(from_uid, to_uid)
+                    row.append(round(edge[0], 1) if edge else 0.0)
+            sentiments.append(row)
+        for c in sim.creatures:
+            if c.is_alive:
+                sentiment_names.append((c.name or '')[:6])
 
     state = {
         'timestamp': time.time(),

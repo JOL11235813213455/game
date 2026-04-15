@@ -559,7 +559,7 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             _log('mappo/goal_entropy', g_info['entropy'], step)
 
         # Write state for live viewer (every 10 steps to avoid IO spam)
-        if step % 10 == 0:
+        if step % (50 if len(sim.creatures) > 30 else 10) == 0:
             from editor.simulation.train_state import write_state
             # Build trailing window counts
             trail_counts = {}
@@ -953,7 +953,7 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             _log('ppo/goal_entropy', g_info['entropy'], step)
 
         # Write state for live viewer
-        if step % 10 == 0:
+        if step % (50 if len(sim.creatures) > 30 else 10) == 0:
             from editor.simulation.train_state import write_state
             trail_counts = {}
             for _, aid in ppo_trail_actions:
