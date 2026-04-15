@@ -20,6 +20,12 @@ extensions = [
         include_dirs=[np.get_include()],
         extra_compile_args=["-O3", "-ffast-math"],
     ),
+    Extension(
+        "fast_tiles",
+        ["fast_tiles.pyx"],
+        include_dirs=[np.get_include()],
+        extra_compile_args=["-O3", "-ffast-math"],
+    ),
 ]
 
 setup(
