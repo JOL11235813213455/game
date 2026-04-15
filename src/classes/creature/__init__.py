@@ -180,11 +180,6 @@ class Creature(
         # Populated when creature visits a purpose zone or purpose tile
         self.known_locations: dict[str, list[tuple]] = {}
 
-        # Observation cache: full obs vector, invalidated on move/action
-        self._obs_cache: list | None = None
-        self._obs_cache_tick: int = -1
-        self._obs_dirty: bool = True
-
         # Goal state (hierarchical RL)
         self.current_goal: str | None = None      # purpose string e.g. 'trading'
         self.goal_target: tuple | None = None      # (map_name, x, y) destination
@@ -321,7 +316,6 @@ class Creature(
                 and hasattr(cm, 'register_creature_at')):
             cm.register_creature_at(self, new_loc.x, new_loc.y, new_loc.z)
         self._perception_cache_tick = -1
-        self._obs_dirty = True
 
     # -- Perception cache ---------------------------------------------------
     #
@@ -416,19 +410,6 @@ class Creature(
                     d, c = entry
                     result.append((i, c, d))
         return result
-
-    def get_cached_observation(self, cols: int, rows: int, tick: int,
-                               **kwargs) -> list[float]:
-        """Return observation, using cache if state hasn't changed."""
-        if (not self._obs_dirty and self._obs_cache is not None
-                and self._obs_cache_tick == tick):
-            return self._obs_cache
-        from classes.observation import build_observation
-        obs = build_observation(self, cols, rows, observation_tick=tick, **kwargs)
-        self._obs_cache = obs
-        self._obs_cache_tick = tick
-        self._obs_dirty = False
-        return obs
 
     def get_perception(self, tick: int) -> tuple[list, list]:
         """Return (visible, heard_only) lists for this creature at ``tick``.

@@ -162,6 +162,9 @@ def main():
     hud        = HUD()  # always-visible meters
     keybind_strip = KeybindStrip()  # contextual keybind hints at screen bottom
     game_clock = GameClock(start_hour=8.0)
+    from classes.tick_scheduler import TickScheduler
+    tick_scheduler = TickScheduler(max_per_frame=25)
+    frame_number = 0
 
     running = True
     while running:
@@ -296,13 +299,14 @@ def main():
                 player.play_animation('idle')
 
         if save_ui is None and not paused:
-            map_objects = WorldObject.on_map(player.current_map)
-            map_npcs = [o for o in map_objects
-                        if isinstance(o, Creature) and o is not player]
-            for npc in map_npcs:
+            frame_number += 1
+            map_npcs = [c for c in Creature.on_same_map(player.current_map)
+                        if c is not player]
+            due_npcs = tick_scheduler.due_this_frame(map_npcs, frame_number)
+            for npc in due_npcs:
                 npc.update(now, cols, rows)
 
-            # Update animations on all world objects
+            # Update animations on all world objects (every frame for smooth visuals)
             player.anim.update(dt_ms)
             for npc in map_npcs:
                 npc.anim.update(dt_ms)
