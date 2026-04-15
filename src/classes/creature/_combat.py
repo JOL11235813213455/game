@@ -699,6 +699,11 @@ class CombatMixin:
         """Ghost fades away until next haunting cycle."""
         from classes.creature import Creature
 
+        # Remove fear debuffs from all creatures this ghost spooked
+        source = f'spooked_{self.uid}'
+        for c in self.nearby(max_dist=10):
+            c.stats.remove_mods_by_source(source)
+
         self._ghost_visible = False
         Creature._uid_registry.pop(self.uid, None)
         if self._current_map and hasattr(self._current_map, 'unregister_creature_at'):
