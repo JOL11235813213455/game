@@ -121,6 +121,64 @@ cdef class CreatureHotArray:
 
             self.uid_to_index[d.uid] = i
 
+    def sync_positions(self, list creatures):
+        """Lightweight sync: update only position + alive status.
+
+        ~10x cheaper than full sync (no stat getter calls). Call every
+        frame to keep the spatial data current. Full sync only needed
+        for the subset of creatures that tick this frame.
+        """
+        cdef int i, n = len(creatures)
+        if n != self.count:
+            self.sync(creatures)
+            return
+        cdef CreatureHotData* d
+        for i in range(n):
+            c = creatures[i]
+            d = &self.data[i]
+            loc = c.location
+            d.x = loc.x
+            d.y = loc.y
+            d.z = loc.z
+            d.is_alive = 1 if c.is_alive else 0
+
+    def sync_subset(self, list creatures_to_update):
+        """Full sync on a subset of creatures (by UID match).
+
+        Use after process_ticks on the staggered subset — their stats
+        may have changed (HP, stamina, mods). Only re-syncs creatures
+        whose UIDs are in the array.
+        """
+        from classes.stats import Stat
+        from classes.creature._constants import SIZE_UNITS
+        cdef CreatureHotData* d
+        cdef int idx
+        for c in creatures_to_update:
+            idx = self.uid_to_index.get(c.uid, -1)
+            if idx < 0:
+                continue
+            d = &self.data[idx]
+            loc = c.location
+            d.x = loc.x
+            d.y = loc.y
+            d.z = loc.z
+            d.is_alive = 1 if c.is_alive else 0
+            if d.is_alive:
+                s = c.stats.active
+                d.hp_cur = s[Stat.HP_CURR]()
+                d.hp_max = max(1, s[Stat.HP_MAX]())
+                d.stealth = s[Stat.STEALTH]()
+                d.detection = s[Stat.DETECTION]()
+                d.melee_dmg = s[Stat.MELEE_DMG]()
+                d.armor = s[Stat.ARMOR]()
+                d.sight_range = max(1, s[Stat.SIGHT_RANGE]())
+                d.hearing_range = max(1, s[Stat.HEARING_RANGE]())
+                d.is_pregnant = 1 if c.is_pregnant else 0
+                d.is_sleeping = 1 if getattr(c, 'is_sleeping', False) else 0
+                d.equipment_count = len(c.equipment)
+                d.gold = float(c.gold)
+                d.piety = float(c.piety)
+
     def perception_scan(self, int self_uid, int self_x, int self_y,
                          int sight, int hearing):
         """Fast perception scan. Returns (visible, heard_only) as lists of

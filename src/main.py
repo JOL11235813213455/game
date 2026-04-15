@@ -348,6 +348,14 @@ def main():
             for npc in due_npcs:
                 npc.update(now, cols, rows)
 
+            # Partial hot array sync: positions for all, full for ticked subset
+            hot = Creature._hot_array
+            if hot is not None:
+                all_creatures = [player] + map_npcs
+                hot.sync_positions(all_creatures)
+                if due_npcs:
+                    hot.sync_subset(due_npcs)
+
             # Update animations on all world objects (every frame for smooth visuals)
             player.anim.update(dt_ms)
             for npc in map_npcs:

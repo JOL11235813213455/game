@@ -301,10 +301,20 @@ class Simulation:
 
         return results
 
-    def sync_hot_array(self):
-        """Sync the Cython creature hot array. Call before observation builds."""
-        if self._hot_creatures is not None:
+    def sync_hot_array(self, subset=None):
+        """Sync the Cython creature hot array.
+
+        subset=None: full sync (initial load or episode reset).
+        subset=list: positions for all, full sync only for the subset.
+        """
+        if self._hot_creatures is None:
+            return
+        if subset is None:
             self._hot_creatures.sync(list(self.creatures))
+        else:
+            self._hot_creatures.sync_positions(list(self.creatures))
+            if subset:
+                self._hot_creatures.sync_subset(subset)
 
     @property
     def alive_count(self) -> int:

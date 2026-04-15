@@ -2422,6 +2422,21 @@ static double __Pyx__PyObject_AsDouble(PyObject* obj);
      (value) == (error_value) :\
      (value) != (value))
 
+/* dict_getitem_default.proto */
+static PyObject* __Pyx_PyDict_GetItemDefault(PyObject* d, PyObject* key, PyObject* default_value);
+
+/* PyObjectCall2Args.proto (used by CallUnboundCMethod1) */
+static CYTHON_INLINE PyObject* __Pyx_PyObject_Call2Args(PyObject* function, PyObject* arg1, PyObject* arg2);
+
+/* CallUnboundCMethod1.proto */
+CYTHON_UNUSED
+static PyObject* __Pyx__CallUnboundCMethod1(__Pyx_CachedCFunction* cfunc, PyObject* self, PyObject* arg);
+#if CYTHON_COMPILING_IN_CPYTHON
+static CYTHON_INLINE PyObject* __Pyx_CallUnboundCMethod1(__Pyx_CachedCFunction* cfunc, PyObject* self, PyObject* arg);
+#else
+#define __Pyx_CallUnboundCMethod1(cfunc, self, arg)  __Pyx__CallUnboundCMethod1(cfunc, self, arg)
+#endif
+
 /* IncludeStdlibH.proto */
 #include <stdlib.h>
 
@@ -2444,21 +2459,6 @@ static CYTHON_INLINE int __Pyx_PyList_Append(PyObject* list, PyObject* x) {
 }
 #else
 #define __Pyx_PyList_Append(L,x) PyList_Append(L,x)
-#endif
-
-/* dict_getitem_default.proto */
-static PyObject* __Pyx_PyDict_GetItemDefault(PyObject* d, PyObject* key, PyObject* default_value);
-
-/* PyObjectCall2Args.proto (used by CallUnboundCMethod1) */
-static CYTHON_INLINE PyObject* __Pyx_PyObject_Call2Args(PyObject* function, PyObject* arg1, PyObject* arg2);
-
-/* CallUnboundCMethod1.proto */
-CYTHON_UNUSED
-static PyObject* __Pyx__CallUnboundCMethod1(__Pyx_CachedCFunction* cfunc, PyObject* self, PyObject* arg);
-#if CYTHON_COMPILING_IN_CPYTHON
-static CYTHON_INLINE PyObject* __Pyx_CallUnboundCMethod1(__Pyx_CachedCFunction* cfunc, PyObject* self, PyObject* arg);
-#else
-#define __Pyx_CallUnboundCMethod1(cfunc, self, arg)  __Pyx__CallUnboundCMethod1(cfunc, self, arg)
 #endif
 
 /* PyTypeError_Check.proto */
@@ -3048,12 +3048,14 @@ static const char __pyx_k_C_struct_array_for_creature_hot[] = "\nC struct array 
 static int __pyx_pf_14fast_creatures_16CreatureHotArray___cinit__(struct __pyx_obj_14fast_creatures_CreatureHotArray *__pyx_v_self); /* proto */
 static void __pyx_pf_14fast_creatures_16CreatureHotArray_2__dealloc__(struct __pyx_obj_14fast_creatures_CreatureHotArray *__pyx_v_self); /* proto */
 static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_4sync(struct __pyx_obj_14fast_creatures_CreatureHotArray *__pyx_v_self, PyObject *__pyx_v_creatures); /* proto */
-static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_6perception_scan(struct __pyx_obj_14fast_creatures_CreatureHotArray *__pyx_v_self, int __pyx_v_self_uid, int __pyx_v_self_x, int __pyx_v_self_y, int __pyx_v_sight, int __pyx_v_hearing); /* proto */
-static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_8get_data(struct __pyx_obj_14fast_creatures_CreatureHotArray *__pyx_v_self, int __pyx_v_index); /* proto */
-static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_10index_for_uid(struct __pyx_obj_14fast_creatures_CreatureHotArray *__pyx_v_self, int __pyx_v_uid); /* proto */
+static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_6sync_positions(struct __pyx_obj_14fast_creatures_CreatureHotArray *__pyx_v_self, PyObject *__pyx_v_creatures); /* proto */
+static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_8sync_subset(struct __pyx_obj_14fast_creatures_CreatureHotArray *__pyx_v_self, PyObject *__pyx_v_creatures_to_update); /* proto */
+static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_10perception_scan(struct __pyx_obj_14fast_creatures_CreatureHotArray *__pyx_v_self, int __pyx_v_self_uid, int __pyx_v_self_x, int __pyx_v_self_y, int __pyx_v_sight, int __pyx_v_hearing); /* proto */
+static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_12get_data(struct __pyx_obj_14fast_creatures_CreatureHotArray *__pyx_v_self, int __pyx_v_index); /* proto */
+static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_14index_for_uid(struct __pyx_obj_14fast_creatures_CreatureHotArray *__pyx_v_self, int __pyx_v_uid); /* proto */
 static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_4size___get__(struct __pyx_obj_14fast_creatures_CreatureHotArray *__pyx_v_self); /* proto */
-static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_12__reduce_cython__(CYTHON_UNUSED struct __pyx_obj_14fast_creatures_CreatureHotArray *__pyx_v_self); /* proto */
-static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_14__setstate_cython__(CYTHON_UNUSED struct __pyx_obj_14fast_creatures_CreatureHotArray *__pyx_v_self, CYTHON_UNUSED PyObject *__pyx_v___pyx_state); /* proto */
+static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_16__reduce_cython__(CYTHON_UNUSED struct __pyx_obj_14fast_creatures_CreatureHotArray *__pyx_v_self); /* proto */
+static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_18__setstate_cython__(CYTHON_UNUSED struct __pyx_obj_14fast_creatures_CreatureHotArray *__pyx_v_self, CYTHON_UNUSED PyObject *__pyx_v___pyx_state); /* proto */
 static PyObject *__pyx_tp_new_14fast_creatures_CreatureHotArray(PyTypeObject *t, PyObject *a, PyObject *k); /*proto*/
 /* #### Code section: late_includes ### */
 /* #### Code section: module_state ### */
@@ -3097,8 +3099,8 @@ typedef struct {
   __Pyx_CachedCFunction __pyx_umethod_PyDict_Type_items;
   __Pyx_CachedCFunction __pyx_umethod_PyDict_Type_pop;
   __Pyx_CachedCFunction __pyx_umethod_PyDict_Type_values;
-  PyObject *__pyx_codeobj_tab[6];
-  PyObject *__pyx_string_tab[123];
+  PyObject *__pyx_codeobj_tab[8];
+  PyObject *__pyx_string_tab[131];
   PyObject *__pyx_number_tab[3];
 /* #### Code section: module_state_contents ### */
 /* CommonTypesMetaclass.module_state_decls */
@@ -3162,107 +3164,115 @@ static __pyx_mstatetype * const __pyx_mstate_global = &__pyx_mstate_global_stati
 #define __pyx_n_u_CreatureHotArray_index_for_uid __pyx_string_tab[19]
 #define __pyx_n_u_CreatureHotArray_perception_scan __pyx_string_tab[20]
 #define __pyx_n_u_CreatureHotArray_sync __pyx_string_tab[21]
-#define __pyx_n_u_DETECTION __pyx_string_tab[22]
-#define __pyx_n_u_HEARING_RANGE __pyx_string_tab[23]
-#define __pyx_n_u_HP_CURR __pyx_string_tab[24]
-#define __pyx_n_u_HP_MAX __pyx_string_tab[25]
-#define __pyx_n_u_MELEE_DMG __pyx_string_tab[26]
-#define __pyx_n_u_Pyx_PyDict_NextRef __pyx_string_tab[27]
-#define __pyx_n_u_SIGHT_RANGE __pyx_string_tab[28]
-#define __pyx_n_u_SIZE_UNITS __pyx_string_tab[29]
-#define __pyx_n_u_STEALTH __pyx_string_tab[30]
-#define __pyx_n_u_Stat __pyx_string_tab[31]
-#define __pyx_n_u_active __pyx_string_tab[32]
-#define __pyx_n_u_age __pyx_string_tab[33]
-#define __pyx_n_u_armor __pyx_string_tab[34]
-#define __pyx_n_u_asyncio_coroutines __pyx_string_tab[35]
-#define __pyx_n_u_c __pyx_string_tab[36]
-#define __pyx_n_u_class_getitem __pyx_string_tab[37]
-#define __pyx_n_u_classes_creature__constants __pyx_string_tab[38]
-#define __pyx_n_u_classes_stats __pyx_string_tab[39]
-#define __pyx_n_u_cline_in_traceback __pyx_string_tab[40]
-#define __pyx_n_u_creatures __pyx_string_tab[41]
-#define __pyx_n_u_d __pyx_string_tab[42]
-#define __pyx_n_u_deity __pyx_string_tab[43]
-#define __pyx_n_u_deity_id __pyx_string_tab[44]
-#define __pyx_n_u_detection __pyx_string_tab[45]
-#define __pyx_n_u_eff_sight __pyx_string_tab[46]
-#define __pyx_n_u_equipment __pyx_string_tab[47]
-#define __pyx_n_u_equipment_count __pyx_string_tab[48]
-#define __pyx_n_u_fast_creatures __pyx_string_tab[49]
-#define __pyx_n_u_father_uid __pyx_string_tab[50]
-#define __pyx_n_u_func __pyx_string_tab[51]
-#define __pyx_n_u_get __pyx_string_tab[52]
-#define __pyx_n_u_get_data __pyx_string_tab[53]
-#define __pyx_n_u_getstate __pyx_string_tab[54]
-#define __pyx_n_u_gold __pyx_string_tab[55]
-#define __pyx_n_u_heard __pyx_string_tab[56]
-#define __pyx_n_u_hearing __pyx_string_tab[57]
-#define __pyx_n_u_hearing_range __pyx_string_tab[58]
-#define __pyx_n_u_hp_cur __pyx_string_tab[59]
-#define __pyx_n_u_hp_max __pyx_string_tab[60]
-#define __pyx_n_u_i __pyx_string_tab[61]
-#define __pyx_n_u_index __pyx_string_tab[62]
-#define __pyx_n_u_index_for_uid __pyx_string_tab[63]
-#define __pyx_n_u_is_alive __pyx_string_tab[64]
-#define __pyx_n_u_is_child __pyx_string_tab[65]
-#define __pyx_n_u_is_coroutine __pyx_string_tab[66]
-#define __pyx_n_u_is_pregnant __pyx_string_tab[67]
-#define __pyx_n_u_is_sleeping __pyx_string_tab[68]
-#define __pyx_n_u_items __pyx_string_tab[69]
-#define __pyx_n_u_loc __pyx_string_tab[70]
-#define __pyx_n_u_location __pyx_string_tab[71]
-#define __pyx_n_u_main __pyx_string_tab[72]
-#define __pyx_n_u_male __pyx_string_tab[73]
-#define __pyx_n_u_medium __pyx_string_tab[74]
-#define __pyx_n_u_melee_dmg __pyx_string_tab[75]
-#define __pyx_n_u_module __pyx_string_tab[76]
-#define __pyx_n_u_mother_uid __pyx_string_tab[77]
-#define __pyx_n_u_n __pyx_string_tab[78]
-#define __pyx_n_u_name __pyx_string_tab[79]
-#define __pyx_n_u_np __pyx_string_tab[80]
-#define __pyx_n_u_numpy __pyx_string_tab[81]
-#define __pyx_n_u_other __pyx_string_tab[82]
-#define __pyx_n_u_partner_uid __pyx_string_tab[83]
-#define __pyx_n_u_perception_scan __pyx_string_tab[84]
-#define __pyx_n_u_piety __pyx_string_tab[85]
-#define __pyx_n_u_pop __pyx_string_tab[86]
-#define __pyx_n_u_pyx_state __pyx_string_tab[87]
-#define __pyx_n_u_qualname __pyx_string_tab[88]
-#define __pyx_n_u_reduce __pyx_string_tab[89]
-#define __pyx_n_u_reduce_cython __pyx_string_tab[90]
-#define __pyx_n_u_reduce_ex __pyx_string_tab[91]
-#define __pyx_n_u_s __pyx_string_tab[92]
-#define __pyx_n_u_self __pyx_string_tab[93]
-#define __pyx_n_u_self_uid __pyx_string_tab[94]
-#define __pyx_n_u_self_x __pyx_string_tab[95]
-#define __pyx_n_u_self_y __pyx_string_tab[96]
-#define __pyx_n_u_set_name __pyx_string_tab[97]
-#define __pyx_n_u_setdefault __pyx_string_tab[98]
-#define __pyx_n_u_setstate __pyx_string_tab[99]
-#define __pyx_n_u_setstate_cython __pyx_string_tab[100]
-#define __pyx_n_u_sex __pyx_string_tab[101]
-#define __pyx_n_u_sight __pyx_string_tab[102]
-#define __pyx_n_u_sight_range __pyx_string_tab[103]
-#define __pyx_n_u_size __pyx_string_tab[104]
-#define __pyx_n_u_size_units __pyx_string_tab[105]
-#define __pyx_n_u_species __pyx_string_tab[106]
-#define __pyx_n_u_species_id __pyx_string_tab[107]
-#define __pyx_n_u_stats __pyx_string_tab[108]
-#define __pyx_n_u_stealth __pyx_string_tab[109]
-#define __pyx_n_u_sync __pyx_string_tab[110]
-#define __pyx_n_u_test __pyx_string_tab[111]
-#define __pyx_n_u_uid __pyx_string_tab[112]
-#define __pyx_n_u_values __pyx_string_tab[113]
-#define __pyx_n_u_visible __pyx_string_tab[114]
-#define __pyx_n_u_x __pyx_string_tab[115]
-#define __pyx_n_u_y __pyx_string_tab[116]
-#define __pyx_n_u_z __pyx_string_tab[117]
-#define __pyx_kp_b_iso88591_A_6_2S_c_Q_1_4uAQ_1F_q_E_ay_1_q __pyx_string_tab[118]
-#define __pyx_kp_b_iso88591_A_E_at1_AT_aq_uE_IS_E_1G2U_b_1G2 __pyx_string_tab[119]
-#define __pyx_kp_b_iso88591_A_S_2Rt1_q_4z_3a_t6_A_H_gQ_t_Rq __pyx_string_tab[120]
-#define __pyx_kp_b_iso88591_A_t_AV1 __pyx_string_tab[121]
-#define __pyx_kp_b_iso88591_Q __pyx_string_tab[122]
+#define __pyx_n_u_CreatureHotArray_sync_positions __pyx_string_tab[22]
+#define __pyx_n_u_CreatureHotArray_sync_subset __pyx_string_tab[23]
+#define __pyx_n_u_DETECTION __pyx_string_tab[24]
+#define __pyx_n_u_HEARING_RANGE __pyx_string_tab[25]
+#define __pyx_n_u_HP_CURR __pyx_string_tab[26]
+#define __pyx_n_u_HP_MAX __pyx_string_tab[27]
+#define __pyx_n_u_MELEE_DMG __pyx_string_tab[28]
+#define __pyx_n_u_Pyx_PyDict_NextRef __pyx_string_tab[29]
+#define __pyx_n_u_SIGHT_RANGE __pyx_string_tab[30]
+#define __pyx_n_u_SIZE_UNITS __pyx_string_tab[31]
+#define __pyx_n_u_STEALTH __pyx_string_tab[32]
+#define __pyx_n_u_Stat __pyx_string_tab[33]
+#define __pyx_n_u_active __pyx_string_tab[34]
+#define __pyx_n_u_age __pyx_string_tab[35]
+#define __pyx_n_u_armor __pyx_string_tab[36]
+#define __pyx_n_u_asyncio_coroutines __pyx_string_tab[37]
+#define __pyx_n_u_c __pyx_string_tab[38]
+#define __pyx_n_u_class_getitem __pyx_string_tab[39]
+#define __pyx_n_u_classes_creature__constants __pyx_string_tab[40]
+#define __pyx_n_u_classes_stats __pyx_string_tab[41]
+#define __pyx_n_u_cline_in_traceback __pyx_string_tab[42]
+#define __pyx_n_u_creatures __pyx_string_tab[43]
+#define __pyx_n_u_creatures_to_update __pyx_string_tab[44]
+#define __pyx_n_u_d __pyx_string_tab[45]
+#define __pyx_n_u_deity __pyx_string_tab[46]
+#define __pyx_n_u_deity_id __pyx_string_tab[47]
+#define __pyx_n_u_detection __pyx_string_tab[48]
+#define __pyx_n_u_eff_sight __pyx_string_tab[49]
+#define __pyx_n_u_equipment __pyx_string_tab[50]
+#define __pyx_n_u_equipment_count __pyx_string_tab[51]
+#define __pyx_n_u_fast_creatures __pyx_string_tab[52]
+#define __pyx_n_u_father_uid __pyx_string_tab[53]
+#define __pyx_n_u_func __pyx_string_tab[54]
+#define __pyx_n_u_get __pyx_string_tab[55]
+#define __pyx_n_u_get_data __pyx_string_tab[56]
+#define __pyx_n_u_getstate __pyx_string_tab[57]
+#define __pyx_n_u_gold __pyx_string_tab[58]
+#define __pyx_n_u_heard __pyx_string_tab[59]
+#define __pyx_n_u_hearing __pyx_string_tab[60]
+#define __pyx_n_u_hearing_range __pyx_string_tab[61]
+#define __pyx_n_u_hp_cur __pyx_string_tab[62]
+#define __pyx_n_u_hp_max __pyx_string_tab[63]
+#define __pyx_n_u_i __pyx_string_tab[64]
+#define __pyx_n_u_idx __pyx_string_tab[65]
+#define __pyx_n_u_index __pyx_string_tab[66]
+#define __pyx_n_u_index_for_uid __pyx_string_tab[67]
+#define __pyx_n_u_is_alive __pyx_string_tab[68]
+#define __pyx_n_u_is_child __pyx_string_tab[69]
+#define __pyx_n_u_is_coroutine __pyx_string_tab[70]
+#define __pyx_n_u_is_pregnant __pyx_string_tab[71]
+#define __pyx_n_u_is_sleeping __pyx_string_tab[72]
+#define __pyx_n_u_items __pyx_string_tab[73]
+#define __pyx_n_u_loc __pyx_string_tab[74]
+#define __pyx_n_u_location __pyx_string_tab[75]
+#define __pyx_n_u_main __pyx_string_tab[76]
+#define __pyx_n_u_male __pyx_string_tab[77]
+#define __pyx_n_u_medium __pyx_string_tab[78]
+#define __pyx_n_u_melee_dmg __pyx_string_tab[79]
+#define __pyx_n_u_module __pyx_string_tab[80]
+#define __pyx_n_u_mother_uid __pyx_string_tab[81]
+#define __pyx_n_u_n __pyx_string_tab[82]
+#define __pyx_n_u_name __pyx_string_tab[83]
+#define __pyx_n_u_np __pyx_string_tab[84]
+#define __pyx_n_u_numpy __pyx_string_tab[85]
+#define __pyx_n_u_other __pyx_string_tab[86]
+#define __pyx_n_u_partner_uid __pyx_string_tab[87]
+#define __pyx_n_u_perception_scan __pyx_string_tab[88]
+#define __pyx_n_u_piety __pyx_string_tab[89]
+#define __pyx_n_u_pop __pyx_string_tab[90]
+#define __pyx_n_u_pyx_state __pyx_string_tab[91]
+#define __pyx_n_u_qualname __pyx_string_tab[92]
+#define __pyx_n_u_reduce __pyx_string_tab[93]
+#define __pyx_n_u_reduce_cython __pyx_string_tab[94]
+#define __pyx_n_u_reduce_ex __pyx_string_tab[95]
+#define __pyx_n_u_s __pyx_string_tab[96]
+#define __pyx_n_u_self __pyx_string_tab[97]
+#define __pyx_n_u_self_uid __pyx_string_tab[98]
+#define __pyx_n_u_self_x __pyx_string_tab[99]
+#define __pyx_n_u_self_y __pyx_string_tab[100]
+#define __pyx_n_u_set_name __pyx_string_tab[101]
+#define __pyx_n_u_setdefault __pyx_string_tab[102]
+#define __pyx_n_u_setstate __pyx_string_tab[103]
+#define __pyx_n_u_setstate_cython __pyx_string_tab[104]
+#define __pyx_n_u_sex __pyx_string_tab[105]
+#define __pyx_n_u_sight __pyx_string_tab[106]
+#define __pyx_n_u_sight_range __pyx_string_tab[107]
+#define __pyx_n_u_size __pyx_string_tab[108]
+#define __pyx_n_u_size_units __pyx_string_tab[109]
+#define __pyx_n_u_species __pyx_string_tab[110]
+#define __pyx_n_u_species_id __pyx_string_tab[111]
+#define __pyx_n_u_stats __pyx_string_tab[112]
+#define __pyx_n_u_stealth __pyx_string_tab[113]
+#define __pyx_n_u_sync __pyx_string_tab[114]
+#define __pyx_n_u_sync_positions __pyx_string_tab[115]
+#define __pyx_n_u_sync_subset __pyx_string_tab[116]
+#define __pyx_n_u_test __pyx_string_tab[117]
+#define __pyx_n_u_uid __pyx_string_tab[118]
+#define __pyx_n_u_values __pyx_string_tab[119]
+#define __pyx_n_u_visible __pyx_string_tab[120]
+#define __pyx_n_u_x __pyx_string_tab[121]
+#define __pyx_n_u_y __pyx_string_tab[122]
+#define __pyx_n_u_z __pyx_string_tab[123]
+#define __pyx_kp_b_iso88591_A_0_E_m4q_t2Q_U_1_1_U_Q_U_Q_U_Q __pyx_string_tab[124]
+#define __pyx_kp_b_iso88591_A_1A_2S_A_Qa_E_aq_U_1_1_U_Q_U_Q __pyx_string_tab[125]
+#define __pyx_kp_b_iso88591_A_6_2S_c_Q_1_4uAQ_1F_q_E_ay_1_q __pyx_string_tab[126]
+#define __pyx_kp_b_iso88591_A_E_at1_AT_aq_uE_IS_E_1G2U_b_1G2 __pyx_string_tab[127]
+#define __pyx_kp_b_iso88591_A_S_2Rt1_q_4z_3a_t6_A_H_gQ_t_Rq __pyx_string_tab[128]
+#define __pyx_kp_b_iso88591_A_t_AV1 __pyx_string_tab[129]
+#define __pyx_kp_b_iso88591_Q __pyx_string_tab[130]
 #define __pyx_int_0 __pyx_number_tab[0]
 #define __pyx_int_neg_1 __pyx_number_tab[1]
 #define __pyx_int_3 __pyx_number_tab[2]
@@ -3298,8 +3308,8 @@ static CYTHON_SMALL_CODE int __pyx_m_clear(PyObject *m) {
   Py_CLEAR(clear_module_state->__pyx_ptype_5numpy_ufunc);
   Py_CLEAR(clear_module_state->__pyx_ptype_14fast_creatures_CreatureHotArray);
   Py_CLEAR(clear_module_state->__pyx_type_14fast_creatures_CreatureHotArray);
-  for (int i=0; i<6; ++i) { Py_CLEAR(clear_module_state->__pyx_codeobj_tab[i]); }
-  for (int i=0; i<123; ++i) { Py_CLEAR(clear_module_state->__pyx_string_tab[i]); }
+  for (int i=0; i<8; ++i) { Py_CLEAR(clear_module_state->__pyx_codeobj_tab[i]); }
+  for (int i=0; i<131; ++i) { Py_CLEAR(clear_module_state->__pyx_string_tab[i]); }
   for (int i=0; i<3; ++i) { Py_CLEAR(clear_module_state->__pyx_number_tab[i]); }
 /* #### Code section: module_state_clear_contents ### */
 /* CommonTypesMetaclass.module_state_clear */
@@ -3341,8 +3351,8 @@ static CYTHON_SMALL_CODE int __pyx_m_traverse(PyObject *m, visitproc visit, void
   Py_VISIT(traverse_module_state->__pyx_ptype_5numpy_ufunc);
   Py_VISIT(traverse_module_state->__pyx_ptype_14fast_creatures_CreatureHotArray);
   Py_VISIT(traverse_module_state->__pyx_type_14fast_creatures_CreatureHotArray);
-  for (int i=0; i<6; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_codeobj_tab[i]); }
-  for (int i=0; i<123; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_string_tab[i]); }
+  for (int i=0; i<8; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_codeobj_tab[i]); }
+  for (int i=0; i<131; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_string_tab[i]); }
   for (int i=0; i<3; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_number_tab[i]); }
 /* #### Code section: module_state_traverse_contents ### */
 /* CommonTypesMetaclass.module_state_traverse */
@@ -6363,7 +6373,7 @@ static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_4sync(struct __pyx
  * 
  *             self.uid_to_index[d.uid] = i             # <<<<<<<<<<<<<<
  * 
- *     def perception_scan(self, int self_uid, int self_x, int self_y,
+ *     def sync_positions(self, list creatures):
 */
     __pyx_t_15 = __Pyx_PyLong_From_int(__pyx_v_i); if (unlikely(!__pyx_t_15)) __PYX_ERR(0, 122, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_15);
@@ -6410,22 +6420,1185 @@ static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_4sync(struct __pyx
 /* "fast_creatures.pyx":124
  *             self.uid_to_index[d.uid] = i
  * 
- *     def perception_scan(self, int self_uid, int self_x, int self_y,             # <<<<<<<<<<<<<<
- *                          int sight, int hearing):
- *         """Fast perception scan. Returns (visible, heard_only) as lists of
+ *     def sync_positions(self, list creatures):             # <<<<<<<<<<<<<<
+ *         """Lightweight sync: update only position + alive status.
+ * 
 */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_14fast_creatures_16CreatureHotArray_7perception_scan(PyObject *__pyx_v_self, 
+static PyObject *__pyx_pw_14fast_creatures_16CreatureHotArray_7sync_positions(PyObject *__pyx_v_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
 PyObject *__pyx_args, PyObject *__pyx_kwds
 #endif
 ); /*proto*/
-PyDoc_STRVAR(__pyx_doc_14fast_creatures_16CreatureHotArray_6perception_scan, "Fast perception scan. Returns (visible, heard_only) as lists of\n        (distance, uid, index) tuples, sorted by distance.\n\n        Replaces the Python loop in get_perception() for the hot path.\n        ");
-static PyMethodDef __pyx_mdef_14fast_creatures_16CreatureHotArray_7perception_scan = {"perception_scan", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_14fast_creatures_16CreatureHotArray_7perception_scan, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_14fast_creatures_16CreatureHotArray_6perception_scan};
-static PyObject *__pyx_pw_14fast_creatures_16CreatureHotArray_7perception_scan(PyObject *__pyx_v_self, 
+PyDoc_STRVAR(__pyx_doc_14fast_creatures_16CreatureHotArray_6sync_positions, "Lightweight sync: update only position + alive status.\n\n        ~10x cheaper than full sync (no stat getter calls). Call every\n        frame to keep the spatial data current. Full sync only needed\n        for the subset of creatures that tick this frame.\n        ");
+static PyMethodDef __pyx_mdef_14fast_creatures_16CreatureHotArray_7sync_positions = {"sync_positions", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_14fast_creatures_16CreatureHotArray_7sync_positions, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_14fast_creatures_16CreatureHotArray_6sync_positions};
+static PyObject *__pyx_pw_14fast_creatures_16CreatureHotArray_7sync_positions(PyObject *__pyx_v_self, 
+#if CYTHON_METH_FASTCALL
+PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
+#else
+PyObject *__pyx_args, PyObject *__pyx_kwds
+#endif
+) {
+  PyObject *__pyx_v_creatures = 0;
+  #if !CYTHON_METH_FASTCALL
+  CYTHON_UNUSED Py_ssize_t __pyx_nargs;
+  #endif
+  CYTHON_UNUSED PyObject *const *__pyx_kwvalues;
+  PyObject* values[1] = {0};
+  int __pyx_lineno = 0;
+  const char *__pyx_filename = NULL;
+  int __pyx_clineno = 0;
+  PyObject *__pyx_r = 0;
+  __Pyx_RefNannyDeclarations
+  __Pyx_RefNannySetupContext("sync_positions (wrapper)", 0);
+  #if !CYTHON_METH_FASTCALL
+  #if CYTHON_ASSUME_SAFE_SIZE
+  __pyx_nargs = PyTuple_GET_SIZE(__pyx_args);
+  #else
+  __pyx_nargs = PyTuple_Size(__pyx_args); if (unlikely(__pyx_nargs < 0)) return NULL;
+  #endif
+  #endif
+  __pyx_kwvalues = __Pyx_KwValues_FASTCALL(__pyx_args, __pyx_nargs);
+  {
+    PyObject ** const __pyx_pyargnames[] = {&__pyx_mstate_global->__pyx_n_u_creatures,0};
+    const Py_ssize_t __pyx_kwds_len = (__pyx_kwds) ? __Pyx_NumKwargs_FASTCALL(__pyx_kwds) : 0;
+    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 124, __pyx_L3_error)
+    if (__pyx_kwds_len > 0) {
+      switch (__pyx_nargs) {
+        case  1:
+        values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 124, __pyx_L3_error)
+        CYTHON_FALLTHROUGH;
+        case  0: break;
+        default: goto __pyx_L5_argtuple_error;
+      }
+      const Py_ssize_t kwd_pos_args = __pyx_nargs;
+      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "sync_positions", 0) < (0)) __PYX_ERR(0, 124, __pyx_L3_error)
+      for (Py_ssize_t i = __pyx_nargs; i < 1; i++) {
+        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("sync_positions", 1, 1, 1, i); __PYX_ERR(0, 124, __pyx_L3_error) }
+      }
+    } else if (unlikely(__pyx_nargs != 1)) {
+      goto __pyx_L5_argtuple_error;
+    } else {
+      values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 124, __pyx_L3_error)
+    }
+    __pyx_v_creatures = ((PyObject*)values[0]);
+  }
+  goto __pyx_L6_skip;
+  __pyx_L5_argtuple_error:;
+  __Pyx_RaiseArgtupleInvalid("sync_positions", 1, 1, 1, __pyx_nargs); __PYX_ERR(0, 124, __pyx_L3_error)
+  __pyx_L6_skip:;
+  goto __pyx_L4_argument_unpacking_done;
+  __pyx_L3_error:;
+  for (Py_ssize_t __pyx_temp=0; __pyx_temp < (Py_ssize_t)(sizeof(values)/sizeof(values[0])); ++__pyx_temp) {
+    Py_XDECREF(values[__pyx_temp]);
+  }
+  __Pyx_AddTraceback("fast_creatures.CreatureHotArray.sync_positions", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __Pyx_RefNannyFinishContext();
+  return NULL;
+  __pyx_L4_argument_unpacking_done:;
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_creatures), (&PyList_Type), 1, "creatures", 1))) __PYX_ERR(0, 124, __pyx_L1_error)
+  __pyx_r = __pyx_pf_14fast_creatures_16CreatureHotArray_6sync_positions(((struct __pyx_obj_14fast_creatures_CreatureHotArray *)__pyx_v_self), __pyx_v_creatures);
+
+  /* function exit code */
+  goto __pyx_L0;
+  __pyx_L1_error:;
+  __pyx_r = NULL;
+  for (Py_ssize_t __pyx_temp=0; __pyx_temp < (Py_ssize_t)(sizeof(values)/sizeof(values[0])); ++__pyx_temp) {
+    Py_XDECREF(values[__pyx_temp]);
+  }
+  goto __pyx_L7_cleaned_up;
+  __pyx_L0:;
+  for (Py_ssize_t __pyx_temp=0; __pyx_temp < (Py_ssize_t)(sizeof(values)/sizeof(values[0])); ++__pyx_temp) {
+    Py_XDECREF(values[__pyx_temp]);
+  }
+  __pyx_L7_cleaned_up:;
+  __Pyx_RefNannyFinishContext();
+  return __pyx_r;
+}
+
+static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_6sync_positions(struct __pyx_obj_14fast_creatures_CreatureHotArray *__pyx_v_self, PyObject *__pyx_v_creatures) {
+  int __pyx_v_i;
+  int __pyx_v_n;
+  struct __pyx_t_14fast_creatures_CreatureHotData *__pyx_v_d;
+  PyObject *__pyx_v_c = NULL;
+  PyObject *__pyx_v_loc = NULL;
+  PyObject *__pyx_r = NULL;
+  __Pyx_RefNannyDeclarations
+  Py_ssize_t __pyx_t_1;
+  int __pyx_t_2;
+  PyObject *__pyx_t_3 = NULL;
+  PyObject *__pyx_t_4 = NULL;
+  size_t __pyx_t_5;
+  int __pyx_t_6;
+  int __pyx_t_7;
+  int __pyx_t_8;
+  int __pyx_t_9;
+  int __pyx_lineno = 0;
+  const char *__pyx_filename = NULL;
+  int __pyx_clineno = 0;
+  __Pyx_RefNannySetupContext("sync_positions", 0);
+
+  /* "fast_creatures.pyx":131
+ *         for the subset of creatures that tick this frame.
+ *         """
+ *         cdef int i, n = len(creatures)             # <<<<<<<<<<<<<<
+ *         if n != self.count:
+ *             self.sync(creatures)
+*/
+  if (unlikely(__pyx_v_creatures == Py_None)) {
+    PyErr_SetString(PyExc_TypeError, "object of type 'NoneType' has no len()");
+    __PYX_ERR(0, 131, __pyx_L1_error)
+  }
+  __pyx_t_1 = __Pyx_PyList_GET_SIZE(__pyx_v_creatures); if (unlikely(__pyx_t_1 == ((Py_ssize_t)-1))) __PYX_ERR(0, 131, __pyx_L1_error)
+  __pyx_v_n = __pyx_t_1;
+
+  /* "fast_creatures.pyx":132
+ *         """
+ *         cdef int i, n = len(creatures)
+ *         if n != self.count:             # <<<<<<<<<<<<<<
+ *             self.sync(creatures)
+ *             return
+*/
+  __pyx_t_2 = (__pyx_v_n != __pyx_v_self->count);
+  if (__pyx_t_2) {
+
+    /* "fast_creatures.pyx":133
+ *         cdef int i, n = len(creatures)
+ *         if n != self.count:
+ *             self.sync(creatures)             # <<<<<<<<<<<<<<
+ *             return
+ *         cdef CreatureHotData* d
+*/
+    __pyx_t_4 = ((PyObject *)__pyx_v_self);
+    __Pyx_INCREF(__pyx_t_4);
+    __pyx_t_5 = 0;
+    {
+      PyObject *__pyx_callargs[2] = {__pyx_t_4, __pyx_v_creatures};
+      __pyx_t_3 = __Pyx_PyObject_FastCallMethod((PyObject*)__pyx_mstate_global->__pyx_n_u_sync, __pyx_callargs+__pyx_t_5, (2-__pyx_t_5) | (1*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
+      __Pyx_XDECREF(__pyx_t_4); __pyx_t_4 = 0;
+      if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 133, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_3);
+    }
+    __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
+
+    /* "fast_creatures.pyx":134
+ *         if n != self.count:
+ *             self.sync(creatures)
+ *             return             # <<<<<<<<<<<<<<
+ *         cdef CreatureHotData* d
+ *         for i in range(n):
+*/
+    __Pyx_XDECREF(__pyx_r);
+    __pyx_r = Py_None; __Pyx_INCREF(Py_None);
+    goto __pyx_L0;
+
+    /* "fast_creatures.pyx":132
+ *         """
+ *         cdef int i, n = len(creatures)
+ *         if n != self.count:             # <<<<<<<<<<<<<<
+ *             self.sync(creatures)
+ *             return
+*/
+  }
+
+  /* "fast_creatures.pyx":136
+ *             return
+ *         cdef CreatureHotData* d
+ *         for i in range(n):             # <<<<<<<<<<<<<<
+ *             c = creatures[i]
+ *             d = &self.data[i]
+*/
+  __pyx_t_6 = __pyx_v_n;
+  __pyx_t_7 = __pyx_t_6;
+  for (__pyx_t_8 = 0; __pyx_t_8 < __pyx_t_7; __pyx_t_8+=1) {
+    __pyx_v_i = __pyx_t_8;
+
+    /* "fast_creatures.pyx":137
+ *         cdef CreatureHotData* d
+ *         for i in range(n):
+ *             c = creatures[i]             # <<<<<<<<<<<<<<
+ *             d = &self.data[i]
+ *             loc = c.location
+*/
+    if (unlikely(__pyx_v_creatures == Py_None)) {
+      PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
+      __PYX_ERR(0, 137, __pyx_L1_error)
+    }
+    __pyx_t_3 = __Pyx_PyList_GET_ITEM(__pyx_v_creatures, __pyx_v_i);
+    __Pyx_INCREF(__pyx_t_3);
+    __Pyx_XDECREF_SET(__pyx_v_c, __pyx_t_3);
+    __pyx_t_3 = 0;
+
+    /* "fast_creatures.pyx":138
+ *         for i in range(n):
+ *             c = creatures[i]
+ *             d = &self.data[i]             # <<<<<<<<<<<<<<
+ *             loc = c.location
+ *             d.x = loc.x
+*/
+    __pyx_v_d = (&(__pyx_v_self->data[__pyx_v_i]));
+
+    /* "fast_creatures.pyx":139
+ *             c = creatures[i]
+ *             d = &self.data[i]
+ *             loc = c.location             # <<<<<<<<<<<<<<
+ *             d.x = loc.x
+ *             d.y = loc.y
+*/
+    __pyx_t_3 = __Pyx_PyObject_GetAttrStr(__pyx_v_c, __pyx_mstate_global->__pyx_n_u_location); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 139, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_3);
+    __Pyx_XDECREF_SET(__pyx_v_loc, __pyx_t_3);
+    __pyx_t_3 = 0;
+
+    /* "fast_creatures.pyx":140
+ *             d = &self.data[i]
+ *             loc = c.location
+ *             d.x = loc.x             # <<<<<<<<<<<<<<
+ *             d.y = loc.y
+ *             d.z = loc.z
+*/
+    __pyx_t_3 = __Pyx_PyObject_GetAttrStr(__pyx_v_loc, __pyx_mstate_global->__pyx_n_u_x); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 140, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_3);
+    __pyx_t_9 = __Pyx_PyLong_As_int(__pyx_t_3); if (unlikely((__pyx_t_9 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 140, __pyx_L1_error)
+    __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
+    __pyx_v_d->x = __pyx_t_9;
+
+    /* "fast_creatures.pyx":141
+ *             loc = c.location
+ *             d.x = loc.x
+ *             d.y = loc.y             # <<<<<<<<<<<<<<
+ *             d.z = loc.z
+ *             d.is_alive = 1 if c.is_alive else 0
+*/
+    __pyx_t_3 = __Pyx_PyObject_GetAttrStr(__pyx_v_loc, __pyx_mstate_global->__pyx_n_u_y); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 141, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_3);
+    __pyx_t_9 = __Pyx_PyLong_As_int(__pyx_t_3); if (unlikely((__pyx_t_9 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 141, __pyx_L1_error)
+    __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
+    __pyx_v_d->y = __pyx_t_9;
+
+    /* "fast_creatures.pyx":142
+ *             d.x = loc.x
+ *             d.y = loc.y
+ *             d.z = loc.z             # <<<<<<<<<<<<<<
+ *             d.is_alive = 1 if c.is_alive else 0
+ * 
+*/
+    __pyx_t_3 = __Pyx_PyObject_GetAttrStr(__pyx_v_loc, __pyx_mstate_global->__pyx_n_u_z); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 142, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_3);
+    __pyx_t_9 = __Pyx_PyLong_As_int(__pyx_t_3); if (unlikely((__pyx_t_9 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 142, __pyx_L1_error)
+    __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
+    __pyx_v_d->z = __pyx_t_9;
+
+    /* "fast_creatures.pyx":143
+ *             d.y = loc.y
+ *             d.z = loc.z
+ *             d.is_alive = 1 if c.is_alive else 0             # <<<<<<<<<<<<<<
+ * 
+ *     def sync_subset(self, list creatures_to_update):
+*/
+    __pyx_t_3 = __Pyx_PyObject_GetAttrStr(__pyx_v_c, __pyx_mstate_global->__pyx_n_u_is_alive); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 143, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_3);
+    __pyx_t_2 = __Pyx_PyObject_IsTrue(__pyx_t_3); if (unlikely((__pyx_t_2 < 0))) __PYX_ERR(0, 143, __pyx_L1_error)
+    __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
+    if (__pyx_t_2) {
+      __pyx_t_9 = 1;
+    } else {
+      __pyx_t_9 = 0;
+    }
+    __pyx_v_d->is_alive = __pyx_t_9;
+  }
+
+  /* "fast_creatures.pyx":124
+ *             self.uid_to_index[d.uid] = i
+ * 
+ *     def sync_positions(self, list creatures):             # <<<<<<<<<<<<<<
+ *         """Lightweight sync: update only position + alive status.
+ * 
+*/
+
+  /* function exit code */
+  __pyx_r = Py_None; __Pyx_INCREF(Py_None);
+  goto __pyx_L0;
+  __pyx_L1_error:;
+  __Pyx_XDECREF(__pyx_t_3);
+  __Pyx_XDECREF(__pyx_t_4);
+  __Pyx_AddTraceback("fast_creatures.CreatureHotArray.sync_positions", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __pyx_r = NULL;
+  __pyx_L0:;
+  __Pyx_XDECREF(__pyx_v_c);
+  __Pyx_XDECREF(__pyx_v_loc);
+  __Pyx_XGIVEREF(__pyx_r);
+  __Pyx_RefNannyFinishContext();
+  return __pyx_r;
+}
+
+/* "fast_creatures.pyx":145
+ *             d.is_alive = 1 if c.is_alive else 0
+ * 
+ *     def sync_subset(self, list creatures_to_update):             # <<<<<<<<<<<<<<
+ *         """Full sync on a subset of creatures (by UID match).
+ * 
+*/
+
+/* Python wrapper */
+static PyObject *__pyx_pw_14fast_creatures_16CreatureHotArray_9sync_subset(PyObject *__pyx_v_self, 
+#if CYTHON_METH_FASTCALL
+PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
+#else
+PyObject *__pyx_args, PyObject *__pyx_kwds
+#endif
+); /*proto*/
+PyDoc_STRVAR(__pyx_doc_14fast_creatures_16CreatureHotArray_8sync_subset, "Full sync on a subset of creatures (by UID match).\n\n        Use after process_ticks on the staggered subset \342\200\224 their stats\n        may have changed (HP, stamina, mods). Only re-syncs creatures\n        whose UIDs are in the array.\n        ");
+static PyMethodDef __pyx_mdef_14fast_creatures_16CreatureHotArray_9sync_subset = {"sync_subset", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_14fast_creatures_16CreatureHotArray_9sync_subset, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_14fast_creatures_16CreatureHotArray_8sync_subset};
+static PyObject *__pyx_pw_14fast_creatures_16CreatureHotArray_9sync_subset(PyObject *__pyx_v_self, 
+#if CYTHON_METH_FASTCALL
+PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
+#else
+PyObject *__pyx_args, PyObject *__pyx_kwds
+#endif
+) {
+  PyObject *__pyx_v_creatures_to_update = 0;
+  #if !CYTHON_METH_FASTCALL
+  CYTHON_UNUSED Py_ssize_t __pyx_nargs;
+  #endif
+  CYTHON_UNUSED PyObject *const *__pyx_kwvalues;
+  PyObject* values[1] = {0};
+  int __pyx_lineno = 0;
+  const char *__pyx_filename = NULL;
+  int __pyx_clineno = 0;
+  PyObject *__pyx_r = 0;
+  __Pyx_RefNannyDeclarations
+  __Pyx_RefNannySetupContext("sync_subset (wrapper)", 0);
+  #if !CYTHON_METH_FASTCALL
+  #if CYTHON_ASSUME_SAFE_SIZE
+  __pyx_nargs = PyTuple_GET_SIZE(__pyx_args);
+  #else
+  __pyx_nargs = PyTuple_Size(__pyx_args); if (unlikely(__pyx_nargs < 0)) return NULL;
+  #endif
+  #endif
+  __pyx_kwvalues = __Pyx_KwValues_FASTCALL(__pyx_args, __pyx_nargs);
+  {
+    PyObject ** const __pyx_pyargnames[] = {&__pyx_mstate_global->__pyx_n_u_creatures_to_update,0};
+    const Py_ssize_t __pyx_kwds_len = (__pyx_kwds) ? __Pyx_NumKwargs_FASTCALL(__pyx_kwds) : 0;
+    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 145, __pyx_L3_error)
+    if (__pyx_kwds_len > 0) {
+      switch (__pyx_nargs) {
+        case  1:
+        values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 145, __pyx_L3_error)
+        CYTHON_FALLTHROUGH;
+        case  0: break;
+        default: goto __pyx_L5_argtuple_error;
+      }
+      const Py_ssize_t kwd_pos_args = __pyx_nargs;
+      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "sync_subset", 0) < (0)) __PYX_ERR(0, 145, __pyx_L3_error)
+      for (Py_ssize_t i = __pyx_nargs; i < 1; i++) {
+        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("sync_subset", 1, 1, 1, i); __PYX_ERR(0, 145, __pyx_L3_error) }
+      }
+    } else if (unlikely(__pyx_nargs != 1)) {
+      goto __pyx_L5_argtuple_error;
+    } else {
+      values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 145, __pyx_L3_error)
+    }
+    __pyx_v_creatures_to_update = ((PyObject*)values[0]);
+  }
+  goto __pyx_L6_skip;
+  __pyx_L5_argtuple_error:;
+  __Pyx_RaiseArgtupleInvalid("sync_subset", 1, 1, 1, __pyx_nargs); __PYX_ERR(0, 145, __pyx_L3_error)
+  __pyx_L6_skip:;
+  goto __pyx_L4_argument_unpacking_done;
+  __pyx_L3_error:;
+  for (Py_ssize_t __pyx_temp=0; __pyx_temp < (Py_ssize_t)(sizeof(values)/sizeof(values[0])); ++__pyx_temp) {
+    Py_XDECREF(values[__pyx_temp]);
+  }
+  __Pyx_AddTraceback("fast_creatures.CreatureHotArray.sync_subset", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __Pyx_RefNannyFinishContext();
+  return NULL;
+  __pyx_L4_argument_unpacking_done:;
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_creatures_to_update), (&PyList_Type), 1, "creatures_to_update", 1))) __PYX_ERR(0, 145, __pyx_L1_error)
+  __pyx_r = __pyx_pf_14fast_creatures_16CreatureHotArray_8sync_subset(((struct __pyx_obj_14fast_creatures_CreatureHotArray *)__pyx_v_self), __pyx_v_creatures_to_update);
+
+  /* function exit code */
+  goto __pyx_L0;
+  __pyx_L1_error:;
+  __pyx_r = NULL;
+  for (Py_ssize_t __pyx_temp=0; __pyx_temp < (Py_ssize_t)(sizeof(values)/sizeof(values[0])); ++__pyx_temp) {
+    Py_XDECREF(values[__pyx_temp]);
+  }
+  goto __pyx_L7_cleaned_up;
+  __pyx_L0:;
+  for (Py_ssize_t __pyx_temp=0; __pyx_temp < (Py_ssize_t)(sizeof(values)/sizeof(values[0])); ++__pyx_temp) {
+    Py_XDECREF(values[__pyx_temp]);
+  }
+  __pyx_L7_cleaned_up:;
+  __Pyx_RefNannyFinishContext();
+  return __pyx_r;
+}
+
+static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_8sync_subset(struct __pyx_obj_14fast_creatures_CreatureHotArray *__pyx_v_self, PyObject *__pyx_v_creatures_to_update) {
+  PyObject *__pyx_v_Stat = NULL;
+  CYTHON_UNUSED PyObject *__pyx_v_SIZE_UNITS = NULL;
+  struct __pyx_t_14fast_creatures_CreatureHotData *__pyx_v_d;
+  int __pyx_v_idx;
+  PyObject *__pyx_v_c = NULL;
+  PyObject *__pyx_v_loc = NULL;
+  PyObject *__pyx_v_s = NULL;
+  PyObject *__pyx_r = NULL;
+  __Pyx_RefNannyDeclarations
+  PyObject *__pyx_t_1 = NULL;
+  PyObject *__pyx_t_2 = NULL;
+  Py_ssize_t __pyx_t_3;
+  PyObject *__pyx_t_4 = NULL;
+  PyObject *__pyx_t_5 = NULL;
+  int __pyx_t_6;
+  int __pyx_t_7;
+  PyObject *__pyx_t_8 = NULL;
+  PyObject *__pyx_t_9 = NULL;
+  size_t __pyx_t_10;
+  long __pyx_t_11;
+  Py_ssize_t __pyx_t_12;
+  double __pyx_t_13;
+  int __pyx_lineno = 0;
+  const char *__pyx_filename = NULL;
+  int __pyx_clineno = 0;
+  __Pyx_RefNannySetupContext("sync_subset", 0);
+
+  /* "fast_creatures.pyx":152
+ *         whose UIDs are in the array.
+ *         """
+ *         from classes.stats import Stat             # <<<<<<<<<<<<<<
+ *         from classes.creature._constants import SIZE_UNITS
+ *         cdef CreatureHotData* d
+*/
+  {
+    PyObject* const __pyx_imported_names[] = {__pyx_mstate_global->__pyx_n_u_Stat};
+    __pyx_t_2 = __Pyx_Import(__pyx_mstate_global->__pyx_n_u_classes_stats, __pyx_imported_names, 1, NULL, 0); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 152, __pyx_L1_error)
+  }
+  __pyx_t_1 = __pyx_t_2;
+  __Pyx_GOTREF(__pyx_t_1);
+  {
+    PyObject* const __pyx_imported_names[] = {__pyx_mstate_global->__pyx_n_u_Stat};
+    __pyx_t_3 = 0; {
+      __pyx_t_4 = __Pyx_ImportFrom(__pyx_t_1, __pyx_imported_names[__pyx_t_3]); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 152, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_4);
+      switch (__pyx_t_3) {
+        case 0:
+        __Pyx_INCREF(__pyx_t_4);
+        __pyx_v_Stat = __pyx_t_4;
+        break;
+        default:;
+      }
+      __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
+    }
+  }
+  __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
+
+  /* "fast_creatures.pyx":153
+ *         """
+ *         from classes.stats import Stat
+ *         from classes.creature._constants import SIZE_UNITS             # <<<<<<<<<<<<<<
+ *         cdef CreatureHotData* d
+ *         cdef int idx
+*/
+  {
+    PyObject* const __pyx_imported_names[] = {__pyx_mstate_global->__pyx_n_u_SIZE_UNITS};
+    __pyx_t_2 = __Pyx_Import(__pyx_mstate_global->__pyx_n_u_classes_creature__constants, __pyx_imported_names, 1, NULL, 0); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 153, __pyx_L1_error)
+  }
+  __pyx_t_1 = __pyx_t_2;
+  __Pyx_GOTREF(__pyx_t_1);
+  {
+    PyObject* const __pyx_imported_names[] = {__pyx_mstate_global->__pyx_n_u_SIZE_UNITS};
+    __pyx_t_3 = 0; {
+      __pyx_t_4 = __Pyx_ImportFrom(__pyx_t_1, __pyx_imported_names[__pyx_t_3]); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 153, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_4);
+      switch (__pyx_t_3) {
+        case 0:
+        __Pyx_INCREF(__pyx_t_4);
+        __pyx_v_SIZE_UNITS = __pyx_t_4;
+        break;
+        default:;
+      }
+      __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
+    }
+  }
+  __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
+
+  /* "fast_creatures.pyx":156
+ *         cdef CreatureHotData* d
+ *         cdef int idx
+ *         for c in creatures_to_update:             # <<<<<<<<<<<<<<
+ *             idx = self.uid_to_index.get(c.uid, -1)
+ *             if idx < 0:
+*/
+  if (unlikely(__pyx_v_creatures_to_update == Py_None)) {
+    PyErr_SetString(PyExc_TypeError, "'NoneType' object is not iterable");
+    __PYX_ERR(0, 156, __pyx_L1_error)
+  }
+  __pyx_t_1 = __pyx_v_creatures_to_update; __Pyx_INCREF(__pyx_t_1);
+  __pyx_t_3 = 0;
+  for (;;) {
+    {
+      Py_ssize_t __pyx_temp = __Pyx_PyList_GET_SIZE(__pyx_t_1);
+      #if !CYTHON_ASSUME_SAFE_SIZE
+      if (unlikely((__pyx_temp < 0))) __PYX_ERR(0, 156, __pyx_L1_error)
+      #endif
+      if (__pyx_t_3 >= __pyx_temp) break;
+    }
+    __pyx_t_4 = __Pyx_PyList_GetItemRefFast(__pyx_t_1, __pyx_t_3, __Pyx_ReferenceSharing_OwnStrongReference);
+    ++__pyx_t_3;
+    if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 156, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_4);
+    __Pyx_XDECREF_SET(__pyx_v_c, __pyx_t_4);
+    __pyx_t_4 = 0;
+
+    /* "fast_creatures.pyx":157
+ *         cdef int idx
+ *         for c in creatures_to_update:
+ *             idx = self.uid_to_index.get(c.uid, -1)             # <<<<<<<<<<<<<<
+ *             if idx < 0:
+ *                 continue
+*/
+    if (unlikely(__pyx_v_self->uid_to_index == Py_None)) {
+      PyErr_Format(PyExc_AttributeError, "'NoneType' object has no attribute '%.30s'", "get");
+      __PYX_ERR(0, 157, __pyx_L1_error)
+    }
+    __pyx_t_4 = __Pyx_PyObject_GetAttrStr(__pyx_v_c, __pyx_mstate_global->__pyx_n_u_uid); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 157, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_4);
+    __pyx_t_5 = __Pyx_PyDict_GetItemDefault(__pyx_v_self->uid_to_index, __pyx_t_4, __pyx_mstate_global->__pyx_int_neg_1); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 157, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_5);
+    __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
+    __pyx_t_6 = __Pyx_PyLong_As_int(__pyx_t_5); if (unlikely((__pyx_t_6 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 157, __pyx_L1_error)
+    __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+    __pyx_v_idx = __pyx_t_6;
+
+    /* "fast_creatures.pyx":158
+ *         for c in creatures_to_update:
+ *             idx = self.uid_to_index.get(c.uid, -1)
+ *             if idx < 0:             # <<<<<<<<<<<<<<
+ *                 continue
+ *             d = &self.data[idx]
+*/
+    __pyx_t_7 = (__pyx_v_idx < 0);
+    if (__pyx_t_7) {
+
+      /* "fast_creatures.pyx":159
+ *             idx = self.uid_to_index.get(c.uid, -1)
+ *             if idx < 0:
+ *                 continue             # <<<<<<<<<<<<<<
+ *             d = &self.data[idx]
+ *             loc = c.location
+*/
+      goto __pyx_L3_continue;
+
+      /* "fast_creatures.pyx":158
+ *         for c in creatures_to_update:
+ *             idx = self.uid_to_index.get(c.uid, -1)
+ *             if idx < 0:             # <<<<<<<<<<<<<<
+ *                 continue
+ *             d = &self.data[idx]
+*/
+    }
+
+    /* "fast_creatures.pyx":160
+ *             if idx < 0:
+ *                 continue
+ *             d = &self.data[idx]             # <<<<<<<<<<<<<<
+ *             loc = c.location
+ *             d.x = loc.x
+*/
+    __pyx_v_d = (&(__pyx_v_self->data[__pyx_v_idx]));
+
+    /* "fast_creatures.pyx":161
+ *                 continue
+ *             d = &self.data[idx]
+ *             loc = c.location             # <<<<<<<<<<<<<<
+ *             d.x = loc.x
+ *             d.y = loc.y
+*/
+    __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_v_c, __pyx_mstate_global->__pyx_n_u_location); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 161, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_5);
+    __Pyx_XDECREF_SET(__pyx_v_loc, __pyx_t_5);
+    __pyx_t_5 = 0;
+
+    /* "fast_creatures.pyx":162
+ *             d = &self.data[idx]
+ *             loc = c.location
+ *             d.x = loc.x             # <<<<<<<<<<<<<<
+ *             d.y = loc.y
+ *             d.z = loc.z
+*/
+    __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_v_loc, __pyx_mstate_global->__pyx_n_u_x); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 162, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_5);
+    __pyx_t_6 = __Pyx_PyLong_As_int(__pyx_t_5); if (unlikely((__pyx_t_6 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 162, __pyx_L1_error)
+    __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+    __pyx_v_d->x = __pyx_t_6;
+
+    /* "fast_creatures.pyx":163
+ *             loc = c.location
+ *             d.x = loc.x
+ *             d.y = loc.y             # <<<<<<<<<<<<<<
+ *             d.z = loc.z
+ *             d.is_alive = 1 if c.is_alive else 0
+*/
+    __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_v_loc, __pyx_mstate_global->__pyx_n_u_y); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 163, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_5);
+    __pyx_t_6 = __Pyx_PyLong_As_int(__pyx_t_5); if (unlikely((__pyx_t_6 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 163, __pyx_L1_error)
+    __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+    __pyx_v_d->y = __pyx_t_6;
+
+    /* "fast_creatures.pyx":164
+ *             d.x = loc.x
+ *             d.y = loc.y
+ *             d.z = loc.z             # <<<<<<<<<<<<<<
+ *             d.is_alive = 1 if c.is_alive else 0
+ *             if d.is_alive:
+*/
+    __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_v_loc, __pyx_mstate_global->__pyx_n_u_z); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 164, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_5);
+    __pyx_t_6 = __Pyx_PyLong_As_int(__pyx_t_5); if (unlikely((__pyx_t_6 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 164, __pyx_L1_error)
+    __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+    __pyx_v_d->z = __pyx_t_6;
+
+    /* "fast_creatures.pyx":165
+ *             d.y = loc.y
+ *             d.z = loc.z
+ *             d.is_alive = 1 if c.is_alive else 0             # <<<<<<<<<<<<<<
+ *             if d.is_alive:
+ *                 s = c.stats.active
+*/
+    __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_v_c, __pyx_mstate_global->__pyx_n_u_is_alive); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 165, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_5);
+    __pyx_t_7 = __Pyx_PyObject_IsTrue(__pyx_t_5); if (unlikely((__pyx_t_7 < 0))) __PYX_ERR(0, 165, __pyx_L1_error)
+    __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+    if (__pyx_t_7) {
+      __pyx_t_6 = 1;
+    } else {
+      __pyx_t_6 = 0;
+    }
+    __pyx_v_d->is_alive = __pyx_t_6;
+
+    /* "fast_creatures.pyx":166
+ *             d.z = loc.z
+ *             d.is_alive = 1 if c.is_alive else 0
+ *             if d.is_alive:             # <<<<<<<<<<<<<<
+ *                 s = c.stats.active
+ *                 d.hp_cur = s[Stat.HP_CURR]()
+*/
+    __pyx_t_7 = (__pyx_v_d->is_alive != 0);
+    if (__pyx_t_7) {
+
+      /* "fast_creatures.pyx":167
+ *             d.is_alive = 1 if c.is_alive else 0
+ *             if d.is_alive:
+ *                 s = c.stats.active             # <<<<<<<<<<<<<<
+ *                 d.hp_cur = s[Stat.HP_CURR]()
+ *                 d.hp_max = max(1, s[Stat.HP_MAX]())
+*/
+      __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_v_c, __pyx_mstate_global->__pyx_n_u_stats); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 167, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_5);
+      __pyx_t_4 = __Pyx_PyObject_GetAttrStr(__pyx_t_5, __pyx_mstate_global->__pyx_n_u_active); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 167, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_4);
+      __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+      __Pyx_XDECREF_SET(__pyx_v_s, __pyx_t_4);
+      __pyx_t_4 = 0;
+
+      /* "fast_creatures.pyx":168
+ *             if d.is_alive:
+ *                 s = c.stats.active
+ *                 d.hp_cur = s[Stat.HP_CURR]()             # <<<<<<<<<<<<<<
+ *                 d.hp_max = max(1, s[Stat.HP_MAX]())
+ *                 d.stealth = s[Stat.STEALTH]()
+*/
+      __pyx_t_5 = NULL;
+      __pyx_t_8 = __Pyx_PyObject_GetAttrStr(__pyx_v_Stat, __pyx_mstate_global->__pyx_n_u_HP_CURR); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 168, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_8);
+      __pyx_t_9 = __Pyx_PyObject_GetItem(__pyx_v_s, __pyx_t_8); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 168, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_9);
+      __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
+      __pyx_t_10 = 1;
+      #if CYTHON_UNPACK_METHODS
+      if (unlikely(PyMethod_Check(__pyx_t_9))) {
+        __pyx_t_5 = PyMethod_GET_SELF(__pyx_t_9);
+        assert(__pyx_t_5);
+        PyObject* __pyx__function = PyMethod_GET_FUNCTION(__pyx_t_9);
+        __Pyx_INCREF(__pyx_t_5);
+        __Pyx_INCREF(__pyx__function);
+        __Pyx_DECREF_SET(__pyx_t_9, __pyx__function);
+        __pyx_t_10 = 0;
+      }
+      #endif
+      {
+        PyObject *__pyx_callargs[2] = {__pyx_t_5, NULL};
+        __pyx_t_4 = __Pyx_PyObject_FastCall((PyObject*)__pyx_t_9, __pyx_callargs+__pyx_t_10, (1-__pyx_t_10) | (__pyx_t_10*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
+        __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
+        __Pyx_DECREF(__pyx_t_9); __pyx_t_9 = 0;
+        if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 168, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_4);
+      }
+      __pyx_t_6 = __Pyx_PyLong_As_int(__pyx_t_4); if (unlikely((__pyx_t_6 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 168, __pyx_L1_error)
+      __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
+      __pyx_v_d->hp_cur = __pyx_t_6;
+
+      /* "fast_creatures.pyx":169
+ *                 s = c.stats.active
+ *                 d.hp_cur = s[Stat.HP_CURR]()
+ *                 d.hp_max = max(1, s[Stat.HP_MAX]())             # <<<<<<<<<<<<<<
+ *                 d.stealth = s[Stat.STEALTH]()
+ *                 d.detection = s[Stat.DETECTION]()
+*/
+      __pyx_t_9 = NULL;
+      __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_v_Stat, __pyx_mstate_global->__pyx_n_u_HP_MAX); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 169, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_5);
+      __pyx_t_8 = __Pyx_PyObject_GetItem(__pyx_v_s, __pyx_t_5); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 169, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_8);
+      __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+      __pyx_t_10 = 1;
+      #if CYTHON_UNPACK_METHODS
+      if (unlikely(PyMethod_Check(__pyx_t_8))) {
+        __pyx_t_9 = PyMethod_GET_SELF(__pyx_t_8);
+        assert(__pyx_t_9);
+        PyObject* __pyx__function = PyMethod_GET_FUNCTION(__pyx_t_8);
+        __Pyx_INCREF(__pyx_t_9);
+        __Pyx_INCREF(__pyx__function);
+        __Pyx_DECREF_SET(__pyx_t_8, __pyx__function);
+        __pyx_t_10 = 0;
+      }
+      #endif
+      {
+        PyObject *__pyx_callargs[2] = {__pyx_t_9, NULL};
+        __pyx_t_4 = __Pyx_PyObject_FastCall((PyObject*)__pyx_t_8, __pyx_callargs+__pyx_t_10, (1-__pyx_t_10) | (__pyx_t_10*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
+        __Pyx_XDECREF(__pyx_t_9); __pyx_t_9 = 0;
+        __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
+        if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 169, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_4);
+      }
+      __pyx_t_11 = 1;
+      __pyx_t_9 = __Pyx_PyLong_From_long(__pyx_t_11); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 169, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_9);
+      __pyx_t_5 = PyObject_RichCompare(__pyx_t_4, __pyx_t_9, Py_GT); __Pyx_XGOTREF(__pyx_t_5); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 169, __pyx_L1_error)
+      __Pyx_DECREF(__pyx_t_9); __pyx_t_9 = 0;
+      __pyx_t_7 = __Pyx_PyObject_IsTrue(__pyx_t_5); if (unlikely((__pyx_t_7 < 0))) __PYX_ERR(0, 169, __pyx_L1_error)
+      __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+      if (__pyx_t_7) {
+        __Pyx_INCREF(__pyx_t_4);
+        __pyx_t_8 = __pyx_t_4;
+      } else {
+        __pyx_t_5 = __Pyx_PyLong_From_long(__pyx_t_11); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 169, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_5);
+        __pyx_t_8 = __pyx_t_5;
+        __pyx_t_5 = 0;
+      }
+      __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
+      __pyx_t_6 = __Pyx_PyLong_As_int(__pyx_t_8); if (unlikely((__pyx_t_6 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 169, __pyx_L1_error)
+      __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
+      __pyx_v_d->hp_max = __pyx_t_6;
+
+      /* "fast_creatures.pyx":170
+ *                 d.hp_cur = s[Stat.HP_CURR]()
+ *                 d.hp_max = max(1, s[Stat.HP_MAX]())
+ *                 d.stealth = s[Stat.STEALTH]()             # <<<<<<<<<<<<<<
+ *                 d.detection = s[Stat.DETECTION]()
+ *                 d.melee_dmg = s[Stat.MELEE_DMG]()
+*/
+      __pyx_t_4 = NULL;
+      __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_v_Stat, __pyx_mstate_global->__pyx_n_u_STEALTH); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 170, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_5);
+      __pyx_t_9 = __Pyx_PyObject_GetItem(__pyx_v_s, __pyx_t_5); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 170, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_9);
+      __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+      __pyx_t_10 = 1;
+      #if CYTHON_UNPACK_METHODS
+      if (unlikely(PyMethod_Check(__pyx_t_9))) {
+        __pyx_t_4 = PyMethod_GET_SELF(__pyx_t_9);
+        assert(__pyx_t_4);
+        PyObject* __pyx__function = PyMethod_GET_FUNCTION(__pyx_t_9);
+        __Pyx_INCREF(__pyx_t_4);
+        __Pyx_INCREF(__pyx__function);
+        __Pyx_DECREF_SET(__pyx_t_9, __pyx__function);
+        __pyx_t_10 = 0;
+      }
+      #endif
+      {
+        PyObject *__pyx_callargs[2] = {__pyx_t_4, NULL};
+        __pyx_t_8 = __Pyx_PyObject_FastCall((PyObject*)__pyx_t_9, __pyx_callargs+__pyx_t_10, (1-__pyx_t_10) | (__pyx_t_10*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
+        __Pyx_XDECREF(__pyx_t_4); __pyx_t_4 = 0;
+        __Pyx_DECREF(__pyx_t_9); __pyx_t_9 = 0;
+        if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 170, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_8);
+      }
+      __pyx_t_6 = __Pyx_PyLong_As_int(__pyx_t_8); if (unlikely((__pyx_t_6 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 170, __pyx_L1_error)
+      __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
+      __pyx_v_d->stealth = __pyx_t_6;
+
+      /* "fast_creatures.pyx":171
+ *                 d.hp_max = max(1, s[Stat.HP_MAX]())
+ *                 d.stealth = s[Stat.STEALTH]()
+ *                 d.detection = s[Stat.DETECTION]()             # <<<<<<<<<<<<<<
+ *                 d.melee_dmg = s[Stat.MELEE_DMG]()
+ *                 d.armor = s[Stat.ARMOR]()
+*/
+      __pyx_t_9 = NULL;
+      __pyx_t_4 = __Pyx_PyObject_GetAttrStr(__pyx_v_Stat, __pyx_mstate_global->__pyx_n_u_DETECTION); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 171, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_4);
+      __pyx_t_5 = __Pyx_PyObject_GetItem(__pyx_v_s, __pyx_t_4); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 171, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_5);
+      __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
+      __pyx_t_10 = 1;
+      #if CYTHON_UNPACK_METHODS
+      if (unlikely(PyMethod_Check(__pyx_t_5))) {
+        __pyx_t_9 = PyMethod_GET_SELF(__pyx_t_5);
+        assert(__pyx_t_9);
+        PyObject* __pyx__function = PyMethod_GET_FUNCTION(__pyx_t_5);
+        __Pyx_INCREF(__pyx_t_9);
+        __Pyx_INCREF(__pyx__function);
+        __Pyx_DECREF_SET(__pyx_t_5, __pyx__function);
+        __pyx_t_10 = 0;
+      }
+      #endif
+      {
+        PyObject *__pyx_callargs[2] = {__pyx_t_9, NULL};
+        __pyx_t_8 = __Pyx_PyObject_FastCall((PyObject*)__pyx_t_5, __pyx_callargs+__pyx_t_10, (1-__pyx_t_10) | (__pyx_t_10*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
+        __Pyx_XDECREF(__pyx_t_9); __pyx_t_9 = 0;
+        __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+        if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 171, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_8);
+      }
+      __pyx_t_6 = __Pyx_PyLong_As_int(__pyx_t_8); if (unlikely((__pyx_t_6 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 171, __pyx_L1_error)
+      __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
+      __pyx_v_d->detection = __pyx_t_6;
+
+      /* "fast_creatures.pyx":172
+ *                 d.stealth = s[Stat.STEALTH]()
+ *                 d.detection = s[Stat.DETECTION]()
+ *                 d.melee_dmg = s[Stat.MELEE_DMG]()             # <<<<<<<<<<<<<<
+ *                 d.armor = s[Stat.ARMOR]()
+ *                 d.sight_range = max(1, s[Stat.SIGHT_RANGE]())
+*/
+      __pyx_t_5 = NULL;
+      __pyx_t_9 = __Pyx_PyObject_GetAttrStr(__pyx_v_Stat, __pyx_mstate_global->__pyx_n_u_MELEE_DMG); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 172, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_9);
+      __pyx_t_4 = __Pyx_PyObject_GetItem(__pyx_v_s, __pyx_t_9); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 172, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_4);
+      __Pyx_DECREF(__pyx_t_9); __pyx_t_9 = 0;
+      __pyx_t_10 = 1;
+      #if CYTHON_UNPACK_METHODS
+      if (unlikely(PyMethod_Check(__pyx_t_4))) {
+        __pyx_t_5 = PyMethod_GET_SELF(__pyx_t_4);
+        assert(__pyx_t_5);
+        PyObject* __pyx__function = PyMethod_GET_FUNCTION(__pyx_t_4);
+        __Pyx_INCREF(__pyx_t_5);
+        __Pyx_INCREF(__pyx__function);
+        __Pyx_DECREF_SET(__pyx_t_4, __pyx__function);
+        __pyx_t_10 = 0;
+      }
+      #endif
+      {
+        PyObject *__pyx_callargs[2] = {__pyx_t_5, NULL};
+        __pyx_t_8 = __Pyx_PyObject_FastCall((PyObject*)__pyx_t_4, __pyx_callargs+__pyx_t_10, (1-__pyx_t_10) | (__pyx_t_10*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
+        __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
+        __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
+        if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 172, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_8);
+      }
+      __pyx_t_6 = __Pyx_PyLong_As_int(__pyx_t_8); if (unlikely((__pyx_t_6 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 172, __pyx_L1_error)
+      __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
+      __pyx_v_d->melee_dmg = __pyx_t_6;
+
+      /* "fast_creatures.pyx":173
+ *                 d.detection = s[Stat.DETECTION]()
+ *                 d.melee_dmg = s[Stat.MELEE_DMG]()
+ *                 d.armor = s[Stat.ARMOR]()             # <<<<<<<<<<<<<<
+ *                 d.sight_range = max(1, s[Stat.SIGHT_RANGE]())
+ *                 d.hearing_range = max(1, s[Stat.HEARING_RANGE]())
+*/
+      __pyx_t_4 = NULL;
+      __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_v_Stat, __pyx_mstate_global->__pyx_n_u_ARMOR); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 173, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_5);
+      __pyx_t_9 = __Pyx_PyObject_GetItem(__pyx_v_s, __pyx_t_5); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 173, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_9);
+      __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+      __pyx_t_10 = 1;
+      #if CYTHON_UNPACK_METHODS
+      if (unlikely(PyMethod_Check(__pyx_t_9))) {
+        __pyx_t_4 = PyMethod_GET_SELF(__pyx_t_9);
+        assert(__pyx_t_4);
+        PyObject* __pyx__function = PyMethod_GET_FUNCTION(__pyx_t_9);
+        __Pyx_INCREF(__pyx_t_4);
+        __Pyx_INCREF(__pyx__function);
+        __Pyx_DECREF_SET(__pyx_t_9, __pyx__function);
+        __pyx_t_10 = 0;
+      }
+      #endif
+      {
+        PyObject *__pyx_callargs[2] = {__pyx_t_4, NULL};
+        __pyx_t_8 = __Pyx_PyObject_FastCall((PyObject*)__pyx_t_9, __pyx_callargs+__pyx_t_10, (1-__pyx_t_10) | (__pyx_t_10*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
+        __Pyx_XDECREF(__pyx_t_4); __pyx_t_4 = 0;
+        __Pyx_DECREF(__pyx_t_9); __pyx_t_9 = 0;
+        if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 173, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_8);
+      }
+      __pyx_t_6 = __Pyx_PyLong_As_int(__pyx_t_8); if (unlikely((__pyx_t_6 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 173, __pyx_L1_error)
+      __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
+      __pyx_v_d->armor = __pyx_t_6;
+
+      /* "fast_creatures.pyx":174
+ *                 d.melee_dmg = s[Stat.MELEE_DMG]()
+ *                 d.armor = s[Stat.ARMOR]()
+ *                 d.sight_range = max(1, s[Stat.SIGHT_RANGE]())             # <<<<<<<<<<<<<<
+ *                 d.hearing_range = max(1, s[Stat.HEARING_RANGE]())
+ *                 d.is_pregnant = 1 if c.is_pregnant else 0
+*/
+      __pyx_t_9 = NULL;
+      __pyx_t_4 = __Pyx_PyObject_GetAttrStr(__pyx_v_Stat, __pyx_mstate_global->__pyx_n_u_SIGHT_RANGE); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 174, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_4);
+      __pyx_t_5 = __Pyx_PyObject_GetItem(__pyx_v_s, __pyx_t_4); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 174, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_5);
+      __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
+      __pyx_t_10 = 1;
+      #if CYTHON_UNPACK_METHODS
+      if (unlikely(PyMethod_Check(__pyx_t_5))) {
+        __pyx_t_9 = PyMethod_GET_SELF(__pyx_t_5);
+        assert(__pyx_t_9);
+        PyObject* __pyx__function = PyMethod_GET_FUNCTION(__pyx_t_5);
+        __Pyx_INCREF(__pyx_t_9);
+        __Pyx_INCREF(__pyx__function);
+        __Pyx_DECREF_SET(__pyx_t_5, __pyx__function);
+        __pyx_t_10 = 0;
+      }
+      #endif
+      {
+        PyObject *__pyx_callargs[2] = {__pyx_t_9, NULL};
+        __pyx_t_8 = __Pyx_PyObject_FastCall((PyObject*)__pyx_t_5, __pyx_callargs+__pyx_t_10, (1-__pyx_t_10) | (__pyx_t_10*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
+        __Pyx_XDECREF(__pyx_t_9); __pyx_t_9 = 0;
+        __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+        if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 174, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_8);
+      }
+      __pyx_t_11 = 1;
+      __pyx_t_9 = __Pyx_PyLong_From_long(__pyx_t_11); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 174, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_9);
+      __pyx_t_4 = PyObject_RichCompare(__pyx_t_8, __pyx_t_9, Py_GT); __Pyx_XGOTREF(__pyx_t_4); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 174, __pyx_L1_error)
+      __Pyx_DECREF(__pyx_t_9); __pyx_t_9 = 0;
+      __pyx_t_7 = __Pyx_PyObject_IsTrue(__pyx_t_4); if (unlikely((__pyx_t_7 < 0))) __PYX_ERR(0, 174, __pyx_L1_error)
+      __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
+      if (__pyx_t_7) {
+        __Pyx_INCREF(__pyx_t_8);
+        __pyx_t_5 = __pyx_t_8;
+      } else {
+        __pyx_t_4 = __Pyx_PyLong_From_long(__pyx_t_11); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 174, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_4);
+        __pyx_t_5 = __pyx_t_4;
+        __pyx_t_4 = 0;
+      }
+      __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
+      __pyx_t_6 = __Pyx_PyLong_As_int(__pyx_t_5); if (unlikely((__pyx_t_6 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 174, __pyx_L1_error)
+      __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+      __pyx_v_d->sight_range = __pyx_t_6;
+
+      /* "fast_creatures.pyx":175
+ *                 d.armor = s[Stat.ARMOR]()
+ *                 d.sight_range = max(1, s[Stat.SIGHT_RANGE]())
+ *                 d.hearing_range = max(1, s[Stat.HEARING_RANGE]())             # <<<<<<<<<<<<<<
+ *                 d.is_pregnant = 1 if c.is_pregnant else 0
+ *                 d.is_sleeping = 1 if getattr(c, 'is_sleeping', False) else 0
+*/
+      __pyx_t_8 = NULL;
+      __pyx_t_4 = __Pyx_PyObject_GetAttrStr(__pyx_v_Stat, __pyx_mstate_global->__pyx_n_u_HEARING_RANGE); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 175, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_4);
+      __pyx_t_9 = __Pyx_PyObject_GetItem(__pyx_v_s, __pyx_t_4); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 175, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_9);
+      __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
+      __pyx_t_10 = 1;
+      #if CYTHON_UNPACK_METHODS
+      if (unlikely(PyMethod_Check(__pyx_t_9))) {
+        __pyx_t_8 = PyMethod_GET_SELF(__pyx_t_9);
+        assert(__pyx_t_8);
+        PyObject* __pyx__function = PyMethod_GET_FUNCTION(__pyx_t_9);
+        __Pyx_INCREF(__pyx_t_8);
+        __Pyx_INCREF(__pyx__function);
+        __Pyx_DECREF_SET(__pyx_t_9, __pyx__function);
+        __pyx_t_10 = 0;
+      }
+      #endif
+      {
+        PyObject *__pyx_callargs[2] = {__pyx_t_8, NULL};
+        __pyx_t_5 = __Pyx_PyObject_FastCall((PyObject*)__pyx_t_9, __pyx_callargs+__pyx_t_10, (1-__pyx_t_10) | (__pyx_t_10*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
+        __Pyx_XDECREF(__pyx_t_8); __pyx_t_8 = 0;
+        __Pyx_DECREF(__pyx_t_9); __pyx_t_9 = 0;
+        if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 175, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_5);
+      }
+      __pyx_t_11 = 1;
+      __pyx_t_8 = __Pyx_PyLong_From_long(__pyx_t_11); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 175, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_8);
+      __pyx_t_4 = PyObject_RichCompare(__pyx_t_5, __pyx_t_8, Py_GT); __Pyx_XGOTREF(__pyx_t_4); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 175, __pyx_L1_error)
+      __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
+      __pyx_t_7 = __Pyx_PyObject_IsTrue(__pyx_t_4); if (unlikely((__pyx_t_7 < 0))) __PYX_ERR(0, 175, __pyx_L1_error)
+      __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
+      if (__pyx_t_7) {
+        __Pyx_INCREF(__pyx_t_5);
+        __pyx_t_9 = __pyx_t_5;
+      } else {
+        __pyx_t_4 = __Pyx_PyLong_From_long(__pyx_t_11); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 175, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_4);
+        __pyx_t_9 = __pyx_t_4;
+        __pyx_t_4 = 0;
+      }
+      __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+      __pyx_t_6 = __Pyx_PyLong_As_int(__pyx_t_9); if (unlikely((__pyx_t_6 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 175, __pyx_L1_error)
+      __Pyx_DECREF(__pyx_t_9); __pyx_t_9 = 0;
+      __pyx_v_d->hearing_range = __pyx_t_6;
+
+      /* "fast_creatures.pyx":176
+ *                 d.sight_range = max(1, s[Stat.SIGHT_RANGE]())
+ *                 d.hearing_range = max(1, s[Stat.HEARING_RANGE]())
+ *                 d.is_pregnant = 1 if c.is_pregnant else 0             # <<<<<<<<<<<<<<
+ *                 d.is_sleeping = 1 if getattr(c, 'is_sleeping', False) else 0
+ *                 d.equipment_count = len(c.equipment)
+*/
+      __pyx_t_9 = __Pyx_PyObject_GetAttrStr(__pyx_v_c, __pyx_mstate_global->__pyx_n_u_is_pregnant); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 176, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_9);
+      __pyx_t_7 = __Pyx_PyObject_IsTrue(__pyx_t_9); if (unlikely((__pyx_t_7 < 0))) __PYX_ERR(0, 176, __pyx_L1_error)
+      __Pyx_DECREF(__pyx_t_9); __pyx_t_9 = 0;
+      if (__pyx_t_7) {
+        __pyx_t_6 = 1;
+      } else {
+        __pyx_t_6 = 0;
+      }
+      __pyx_v_d->is_pregnant = __pyx_t_6;
+
+      /* "fast_creatures.pyx":177
+ *                 d.hearing_range = max(1, s[Stat.HEARING_RANGE]())
+ *                 d.is_pregnant = 1 if c.is_pregnant else 0
+ *                 d.is_sleeping = 1 if getattr(c, 'is_sleeping', False) else 0             # <<<<<<<<<<<<<<
+ *                 d.equipment_count = len(c.equipment)
+ *                 d.gold = float(c.gold)
+*/
+      __pyx_t_9 = __Pyx_GetAttr3(__pyx_v_c, __pyx_mstate_global->__pyx_n_u_is_sleeping, Py_False); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 177, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_9);
+      __pyx_t_7 = __Pyx_PyObject_IsTrue(__pyx_t_9); if (unlikely((__pyx_t_7 < 0))) __PYX_ERR(0, 177, __pyx_L1_error)
+      __Pyx_DECREF(__pyx_t_9); __pyx_t_9 = 0;
+      if (__pyx_t_7) {
+        __pyx_t_6 = 1;
+      } else {
+        __pyx_t_6 = 0;
+      }
+      __pyx_v_d->is_sleeping = __pyx_t_6;
+
+      /* "fast_creatures.pyx":178
+ *                 d.is_pregnant = 1 if c.is_pregnant else 0
+ *                 d.is_sleeping = 1 if getattr(c, 'is_sleeping', False) else 0
+ *                 d.equipment_count = len(c.equipment)             # <<<<<<<<<<<<<<
+ *                 d.gold = float(c.gold)
+ *                 d.piety = float(c.piety)
+*/
+      __pyx_t_9 = __Pyx_PyObject_GetAttrStr(__pyx_v_c, __pyx_mstate_global->__pyx_n_u_equipment); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 178, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_9);
+      __pyx_t_12 = PyObject_Length(__pyx_t_9); if (unlikely(__pyx_t_12 == ((Py_ssize_t)-1))) __PYX_ERR(0, 178, __pyx_L1_error)
+      __Pyx_DECREF(__pyx_t_9); __pyx_t_9 = 0;
+      __pyx_v_d->equipment_count = __pyx_t_12;
+
+      /* "fast_creatures.pyx":179
+ *                 d.is_sleeping = 1 if getattr(c, 'is_sleeping', False) else 0
+ *                 d.equipment_count = len(c.equipment)
+ *                 d.gold = float(c.gold)             # <<<<<<<<<<<<<<
+ *                 d.piety = float(c.piety)
+ * 
+*/
+      __pyx_t_9 = __Pyx_PyObject_GetAttrStr(__pyx_v_c, __pyx_mstate_global->__pyx_n_u_gold); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 179, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_9);
+      __pyx_t_13 = __Pyx_PyObject_AsDouble(__pyx_t_9); if (unlikely(__PYX_CHECK_FLOAT_EXCEPTION(__pyx_t_13, ((double)((double)-1))) && PyErr_Occurred())) __PYX_ERR(0, 179, __pyx_L1_error)
+      __Pyx_DECREF(__pyx_t_9); __pyx_t_9 = 0;
+      __pyx_v_d->gold = __pyx_t_13;
+
+      /* "fast_creatures.pyx":180
+ *                 d.equipment_count = len(c.equipment)
+ *                 d.gold = float(c.gold)
+ *                 d.piety = float(c.piety)             # <<<<<<<<<<<<<<
+ * 
+ *     def perception_scan(self, int self_uid, int self_x, int self_y,
+*/
+      __pyx_t_9 = __Pyx_PyObject_GetAttrStr(__pyx_v_c, __pyx_mstate_global->__pyx_n_u_piety); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 180, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_9);
+      __pyx_t_13 = __Pyx_PyObject_AsDouble(__pyx_t_9); if (unlikely(__PYX_CHECK_FLOAT_EXCEPTION(__pyx_t_13, ((double)((double)-1))) && PyErr_Occurred())) __PYX_ERR(0, 180, __pyx_L1_error)
+      __Pyx_DECREF(__pyx_t_9); __pyx_t_9 = 0;
+      __pyx_v_d->piety = __pyx_t_13;
+
+      /* "fast_creatures.pyx":166
+ *             d.z = loc.z
+ *             d.is_alive = 1 if c.is_alive else 0
+ *             if d.is_alive:             # <<<<<<<<<<<<<<
+ *                 s = c.stats.active
+ *                 d.hp_cur = s[Stat.HP_CURR]()
+*/
+    }
+
+    /* "fast_creatures.pyx":156
+ *         cdef CreatureHotData* d
+ *         cdef int idx
+ *         for c in creatures_to_update:             # <<<<<<<<<<<<<<
+ *             idx = self.uid_to_index.get(c.uid, -1)
+ *             if idx < 0:
+*/
+    __pyx_L3_continue:;
+  }
+  __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
+
+  /* "fast_creatures.pyx":145
+ *             d.is_alive = 1 if c.is_alive else 0
+ * 
+ *     def sync_subset(self, list creatures_to_update):             # <<<<<<<<<<<<<<
+ *         """Full sync on a subset of creatures (by UID match).
+ * 
+*/
+
+  /* function exit code */
+  __pyx_r = Py_None; __Pyx_INCREF(Py_None);
+  goto __pyx_L0;
+  __pyx_L1_error:;
+  __Pyx_XDECREF(__pyx_t_1);
+  __Pyx_XDECREF(__pyx_t_4);
+  __Pyx_XDECREF(__pyx_t_5);
+  __Pyx_XDECREF(__pyx_t_8);
+  __Pyx_XDECREF(__pyx_t_9);
+  __Pyx_AddTraceback("fast_creatures.CreatureHotArray.sync_subset", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __pyx_r = NULL;
+  __pyx_L0:;
+  __Pyx_XDECREF(__pyx_v_Stat);
+  __Pyx_XDECREF(__pyx_v_SIZE_UNITS);
+  __Pyx_XDECREF(__pyx_v_c);
+  __Pyx_XDECREF(__pyx_v_loc);
+  __Pyx_XDECREF(__pyx_v_s);
+  __Pyx_XGIVEREF(__pyx_r);
+  __Pyx_RefNannyFinishContext();
+  return __pyx_r;
+}
+
+/* "fast_creatures.pyx":182
+ *                 d.piety = float(c.piety)
+ * 
+ *     def perception_scan(self, int self_uid, int self_x, int self_y,             # <<<<<<<<<<<<<<
+ *                          int sight, int hearing):
+ *         """Fast perception scan. Returns (visible, heard_only) as lists of
+*/
+
+/* Python wrapper */
+static PyObject *__pyx_pw_14fast_creatures_16CreatureHotArray_11perception_scan(PyObject *__pyx_v_self, 
+#if CYTHON_METH_FASTCALL
+PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
+#else
+PyObject *__pyx_args, PyObject *__pyx_kwds
+#endif
+); /*proto*/
+PyDoc_STRVAR(__pyx_doc_14fast_creatures_16CreatureHotArray_10perception_scan, "Fast perception scan. Returns (visible, heard_only) as lists of\n        (distance, uid, index) tuples, sorted by distance.\n\n        Replaces the Python loop in get_perception() for the hot path.\n        ");
+static PyMethodDef __pyx_mdef_14fast_creatures_16CreatureHotArray_11perception_scan = {"perception_scan", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_14fast_creatures_16CreatureHotArray_11perception_scan, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_14fast_creatures_16CreatureHotArray_10perception_scan};
+static PyObject *__pyx_pw_14fast_creatures_16CreatureHotArray_11perception_scan(PyObject *__pyx_v_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -6459,60 +7632,60 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   {
     PyObject ** const __pyx_pyargnames[] = {&__pyx_mstate_global->__pyx_n_u_self_uid,&__pyx_mstate_global->__pyx_n_u_self_x,&__pyx_mstate_global->__pyx_n_u_self_y,&__pyx_mstate_global->__pyx_n_u_sight,&__pyx_mstate_global->__pyx_n_u_hearing,0};
     const Py_ssize_t __pyx_kwds_len = (__pyx_kwds) ? __Pyx_NumKwargs_FASTCALL(__pyx_kwds) : 0;
-    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 124, __pyx_L3_error)
+    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 182, __pyx_L3_error)
     if (__pyx_kwds_len > 0) {
       switch (__pyx_nargs) {
         case  5:
         values[4] = __Pyx_ArgRef_FASTCALL(__pyx_args, 4);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[4])) __PYX_ERR(0, 124, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[4])) __PYX_ERR(0, 182, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  4:
         values[3] = __Pyx_ArgRef_FASTCALL(__pyx_args, 3);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[3])) __PYX_ERR(0, 124, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[3])) __PYX_ERR(0, 182, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  3:
         values[2] = __Pyx_ArgRef_FASTCALL(__pyx_args, 2);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 124, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 182, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  2:
         values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 124, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 182, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  1:
         values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 124, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 182, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  0: break;
         default: goto __pyx_L5_argtuple_error;
       }
       const Py_ssize_t kwd_pos_args = __pyx_nargs;
-      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "perception_scan", 0) < (0)) __PYX_ERR(0, 124, __pyx_L3_error)
+      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "perception_scan", 0) < (0)) __PYX_ERR(0, 182, __pyx_L3_error)
       for (Py_ssize_t i = __pyx_nargs; i < 5; i++) {
-        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("perception_scan", 1, 5, 5, i); __PYX_ERR(0, 124, __pyx_L3_error) }
+        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("perception_scan", 1, 5, 5, i); __PYX_ERR(0, 182, __pyx_L3_error) }
       }
     } else if (unlikely(__pyx_nargs != 5)) {
       goto __pyx_L5_argtuple_error;
     } else {
       values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 124, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 182, __pyx_L3_error)
       values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 124, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 182, __pyx_L3_error)
       values[2] = __Pyx_ArgRef_FASTCALL(__pyx_args, 2);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 124, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 182, __pyx_L3_error)
       values[3] = __Pyx_ArgRef_FASTCALL(__pyx_args, 3);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[3])) __PYX_ERR(0, 124, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[3])) __PYX_ERR(0, 182, __pyx_L3_error)
       values[4] = __Pyx_ArgRef_FASTCALL(__pyx_args, 4);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[4])) __PYX_ERR(0, 124, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[4])) __PYX_ERR(0, 182, __pyx_L3_error)
     }
-    __pyx_v_self_uid = __Pyx_PyLong_As_int(values[0]); if (unlikely((__pyx_v_self_uid == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 124, __pyx_L3_error)
-    __pyx_v_self_x = __Pyx_PyLong_As_int(values[1]); if (unlikely((__pyx_v_self_x == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 124, __pyx_L3_error)
-    __pyx_v_self_y = __Pyx_PyLong_As_int(values[2]); if (unlikely((__pyx_v_self_y == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 124, __pyx_L3_error)
-    __pyx_v_sight = __Pyx_PyLong_As_int(values[3]); if (unlikely((__pyx_v_sight == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 125, __pyx_L3_error)
-    __pyx_v_hearing = __Pyx_PyLong_As_int(values[4]); if (unlikely((__pyx_v_hearing == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 125, __pyx_L3_error)
+    __pyx_v_self_uid = __Pyx_PyLong_As_int(values[0]); if (unlikely((__pyx_v_self_uid == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 182, __pyx_L3_error)
+    __pyx_v_self_x = __Pyx_PyLong_As_int(values[1]); if (unlikely((__pyx_v_self_x == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 182, __pyx_L3_error)
+    __pyx_v_self_y = __Pyx_PyLong_As_int(values[2]); if (unlikely((__pyx_v_self_y == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 182, __pyx_L3_error)
+    __pyx_v_sight = __Pyx_PyLong_As_int(values[3]); if (unlikely((__pyx_v_sight == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 183, __pyx_L3_error)
+    __pyx_v_hearing = __Pyx_PyLong_As_int(values[4]); if (unlikely((__pyx_v_hearing == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 183, __pyx_L3_error)
   }
   goto __pyx_L6_skip;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("perception_scan", 1, 5, 5, __pyx_nargs); __PYX_ERR(0, 124, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("perception_scan", 1, 5, 5, __pyx_nargs); __PYX_ERR(0, 182, __pyx_L3_error)
   __pyx_L6_skip:;
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L3_error:;
@@ -6523,7 +7696,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   __Pyx_RefNannyFinishContext();
   return NULL;
   __pyx_L4_argument_unpacking_done:;
-  __pyx_r = __pyx_pf_14fast_creatures_16CreatureHotArray_6perception_scan(((struct __pyx_obj_14fast_creatures_CreatureHotArray *)__pyx_v_self), __pyx_v_self_uid, __pyx_v_self_x, __pyx_v_self_y, __pyx_v_sight, __pyx_v_hearing);
+  __pyx_r = __pyx_pf_14fast_creatures_16CreatureHotArray_10perception_scan(((struct __pyx_obj_14fast_creatures_CreatureHotArray *)__pyx_v_self), __pyx_v_self_uid, __pyx_v_self_x, __pyx_v_self_y, __pyx_v_sight, __pyx_v_hearing);
 
   /* function exit code */
   for (Py_ssize_t __pyx_temp=0; __pyx_temp < (Py_ssize_t)(sizeof(values)/sizeof(values[0])); ++__pyx_temp) {
@@ -6533,7 +7706,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   return __pyx_r;
 }
 
-static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_6perception_scan(struct __pyx_obj_14fast_creatures_CreatureHotArray *__pyx_v_self, int __pyx_v_self_uid, int __pyx_v_self_x, int __pyx_v_self_y, int __pyx_v_sight, int __pyx_v_hearing) {
+static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_10perception_scan(struct __pyx_obj_14fast_creatures_CreatureHotArray *__pyx_v_self, int __pyx_v_self_uid, int __pyx_v_self_x, int __pyx_v_self_y, int __pyx_v_sight, int __pyx_v_hearing) {
   int __pyx_v_i;
   int __pyx_v_d;
   int __pyx_v_eff_sight;
@@ -6559,31 +7732,31 @@ static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_6perception_scan(s
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("perception_scan", 0);
 
-  /* "fast_creatures.pyx":133
+  /* "fast_creatures.pyx":191
  *         cdef int i, d, eff_sight
  *         cdef CreatureHotData* other
  *         visible = []             # <<<<<<<<<<<<<<
  *         heard = []
  * 
 */
-  __pyx_t_1 = PyList_New(0); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 133, __pyx_L1_error)
+  __pyx_t_1 = PyList_New(0); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 191, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_v_visible = ((PyObject*)__pyx_t_1);
   __pyx_t_1 = 0;
 
-  /* "fast_creatures.pyx":134
+  /* "fast_creatures.pyx":192
  *         cdef CreatureHotData* other
  *         visible = []
  *         heard = []             # <<<<<<<<<<<<<<
  * 
  *         for i in range(self.count):
 */
-  __pyx_t_1 = PyList_New(0); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 134, __pyx_L1_error)
+  __pyx_t_1 = PyList_New(0); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 192, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_v_heard = ((PyObject*)__pyx_t_1);
   __pyx_t_1 = 0;
 
-  /* "fast_creatures.pyx":136
+  /* "fast_creatures.pyx":194
  *         heard = []
  * 
  *         for i in range(self.count):             # <<<<<<<<<<<<<<
@@ -6595,7 +7768,7 @@ static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_6perception_scan(s
   for (__pyx_t_4 = 0; __pyx_t_4 < __pyx_t_3; __pyx_t_4+=1) {
     __pyx_v_i = __pyx_t_4;
 
-    /* "fast_creatures.pyx":137
+    /* "fast_creatures.pyx":195
  * 
  *         for i in range(self.count):
  *             other = &self.data[i]             # <<<<<<<<<<<<<<
@@ -6604,7 +7777,7 @@ static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_6perception_scan(s
 */
     __pyx_v_other = (&(__pyx_v_self->data[__pyx_v_i]));
 
-    /* "fast_creatures.pyx":138
+    /* "fast_creatures.pyx":196
  *         for i in range(self.count):
  *             other = &self.data[i]
  *             if other.uid == self_uid or not other.is_alive:             # <<<<<<<<<<<<<<
@@ -6622,7 +7795,7 @@ static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_6perception_scan(s
     __pyx_L6_bool_binop_done:;
     if (__pyx_t_5) {
 
-      /* "fast_creatures.pyx":139
+      /* "fast_creatures.pyx":197
  *             other = &self.data[i]
  *             if other.uid == self_uid or not other.is_alive:
  *                 continue             # <<<<<<<<<<<<<<
@@ -6631,7 +7804,7 @@ static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_6perception_scan(s
 */
       goto __pyx_L3_continue;
 
-      /* "fast_creatures.pyx":138
+      /* "fast_creatures.pyx":196
  *         for i in range(self.count):
  *             other = &self.data[i]
  *             if other.uid == self_uid or not other.is_alive:             # <<<<<<<<<<<<<<
@@ -6640,18 +7813,18 @@ static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_6perception_scan(s
 */
     }
 
-    /* "fast_creatures.pyx":140
+    /* "fast_creatures.pyx":198
  *             if other.uid == self_uid or not other.is_alive:
  *                 continue
  *             d = abs(self_x - other.x) + abs(self_y - other.y)             # <<<<<<<<<<<<<<
  *             eff_sight = sight - other.stealth
  *             if d <= eff_sight:
 */
-    __pyx_t_7 = abs((__pyx_v_self_x - __pyx_v_other->x)); if (unlikely(__pyx_t_7 == ((int)-1))) __PYX_ERR(0, 140, __pyx_L1_error)
-    __pyx_t_8 = abs((__pyx_v_self_y - __pyx_v_other->y)); if (unlikely(__pyx_t_8 == ((int)-1))) __PYX_ERR(0, 140, __pyx_L1_error)
+    __pyx_t_7 = abs((__pyx_v_self_x - __pyx_v_other->x)); if (unlikely(__pyx_t_7 == ((int)-1))) __PYX_ERR(0, 198, __pyx_L1_error)
+    __pyx_t_8 = abs((__pyx_v_self_y - __pyx_v_other->y)); if (unlikely(__pyx_t_8 == ((int)-1))) __PYX_ERR(0, 198, __pyx_L1_error)
     __pyx_v_d = (__pyx_t_7 + __pyx_t_8);
 
-    /* "fast_creatures.pyx":141
+    /* "fast_creatures.pyx":199
  *                 continue
  *             d = abs(self_x - other.x) + abs(self_y - other.y)
  *             eff_sight = sight - other.stealth             # <<<<<<<<<<<<<<
@@ -6660,7 +7833,7 @@ static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_6perception_scan(s
 */
     __pyx_v_eff_sight = (__pyx_v_sight - __pyx_v_other->stealth);
 
-    /* "fast_creatures.pyx":142
+    /* "fast_creatures.pyx":200
  *             d = abs(self_x - other.x) + abs(self_y - other.y)
  *             eff_sight = sight - other.stealth
  *             if d <= eff_sight:             # <<<<<<<<<<<<<<
@@ -6670,34 +7843,34 @@ static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_6perception_scan(s
     __pyx_t_5 = (__pyx_v_d <= __pyx_v_eff_sight);
     if (__pyx_t_5) {
 
-      /* "fast_creatures.pyx":143
+      /* "fast_creatures.pyx":201
  *             eff_sight = sight - other.stealth
  *             if d <= eff_sight:
  *                 visible.append((d, other.uid, i))             # <<<<<<<<<<<<<<
  *             elif d <= hearing:
  *                 heard.append((d, other.uid, i))
 */
-      __pyx_t_1 = __Pyx_PyLong_From_int(__pyx_v_d); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 143, __pyx_L1_error)
+      __pyx_t_1 = __Pyx_PyLong_From_int(__pyx_v_d); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 201, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_1);
-      __pyx_t_9 = __Pyx_PyLong_From_int(__pyx_v_other->uid); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 143, __pyx_L1_error)
+      __pyx_t_9 = __Pyx_PyLong_From_int(__pyx_v_other->uid); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 201, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_9);
-      __pyx_t_10 = __Pyx_PyLong_From_int(__pyx_v_i); if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 143, __pyx_L1_error)
+      __pyx_t_10 = __Pyx_PyLong_From_int(__pyx_v_i); if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 201, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_10);
-      __pyx_t_11 = PyTuple_New(3); if (unlikely(!__pyx_t_11)) __PYX_ERR(0, 143, __pyx_L1_error)
+      __pyx_t_11 = PyTuple_New(3); if (unlikely(!__pyx_t_11)) __PYX_ERR(0, 201, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_11);
       __Pyx_GIVEREF(__pyx_t_1);
-      if (__Pyx_PyTuple_SET_ITEM(__pyx_t_11, 0, __pyx_t_1) != (0)) __PYX_ERR(0, 143, __pyx_L1_error);
+      if (__Pyx_PyTuple_SET_ITEM(__pyx_t_11, 0, __pyx_t_1) != (0)) __PYX_ERR(0, 201, __pyx_L1_error);
       __Pyx_GIVEREF(__pyx_t_9);
-      if (__Pyx_PyTuple_SET_ITEM(__pyx_t_11, 1, __pyx_t_9) != (0)) __PYX_ERR(0, 143, __pyx_L1_error);
+      if (__Pyx_PyTuple_SET_ITEM(__pyx_t_11, 1, __pyx_t_9) != (0)) __PYX_ERR(0, 201, __pyx_L1_error);
       __Pyx_GIVEREF(__pyx_t_10);
-      if (__Pyx_PyTuple_SET_ITEM(__pyx_t_11, 2, __pyx_t_10) != (0)) __PYX_ERR(0, 143, __pyx_L1_error);
+      if (__Pyx_PyTuple_SET_ITEM(__pyx_t_11, 2, __pyx_t_10) != (0)) __PYX_ERR(0, 201, __pyx_L1_error);
       __pyx_t_1 = 0;
       __pyx_t_9 = 0;
       __pyx_t_10 = 0;
-      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_visible, __pyx_t_11); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 143, __pyx_L1_error)
+      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_visible, __pyx_t_11); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 201, __pyx_L1_error)
       __Pyx_DECREF(__pyx_t_11); __pyx_t_11 = 0;
 
-      /* "fast_creatures.pyx":142
+      /* "fast_creatures.pyx":200
  *             d = abs(self_x - other.x) + abs(self_y - other.y)
  *             eff_sight = sight - other.stealth
  *             if d <= eff_sight:             # <<<<<<<<<<<<<<
@@ -6707,7 +7880,7 @@ static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_6perception_scan(s
       goto __pyx_L8;
     }
 
-    /* "fast_creatures.pyx":144
+    /* "fast_creatures.pyx":202
  *             if d <= eff_sight:
  *                 visible.append((d, other.uid, i))
  *             elif d <= hearing:             # <<<<<<<<<<<<<<
@@ -6717,34 +7890,34 @@ static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_6perception_scan(s
     __pyx_t_5 = (__pyx_v_d <= __pyx_v_hearing);
     if (__pyx_t_5) {
 
-      /* "fast_creatures.pyx":145
+      /* "fast_creatures.pyx":203
  *                 visible.append((d, other.uid, i))
  *             elif d <= hearing:
  *                 heard.append((d, other.uid, i))             # <<<<<<<<<<<<<<
  * 
  *         visible.sort()
 */
-      __pyx_t_11 = __Pyx_PyLong_From_int(__pyx_v_d); if (unlikely(!__pyx_t_11)) __PYX_ERR(0, 145, __pyx_L1_error)
+      __pyx_t_11 = __Pyx_PyLong_From_int(__pyx_v_d); if (unlikely(!__pyx_t_11)) __PYX_ERR(0, 203, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_11);
-      __pyx_t_10 = __Pyx_PyLong_From_int(__pyx_v_other->uid); if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 145, __pyx_L1_error)
+      __pyx_t_10 = __Pyx_PyLong_From_int(__pyx_v_other->uid); if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 203, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_10);
-      __pyx_t_9 = __Pyx_PyLong_From_int(__pyx_v_i); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 145, __pyx_L1_error)
+      __pyx_t_9 = __Pyx_PyLong_From_int(__pyx_v_i); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 203, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_9);
-      __pyx_t_1 = PyTuple_New(3); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 145, __pyx_L1_error)
+      __pyx_t_1 = PyTuple_New(3); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 203, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_1);
       __Pyx_GIVEREF(__pyx_t_11);
-      if (__Pyx_PyTuple_SET_ITEM(__pyx_t_1, 0, __pyx_t_11) != (0)) __PYX_ERR(0, 145, __pyx_L1_error);
+      if (__Pyx_PyTuple_SET_ITEM(__pyx_t_1, 0, __pyx_t_11) != (0)) __PYX_ERR(0, 203, __pyx_L1_error);
       __Pyx_GIVEREF(__pyx_t_10);
-      if (__Pyx_PyTuple_SET_ITEM(__pyx_t_1, 1, __pyx_t_10) != (0)) __PYX_ERR(0, 145, __pyx_L1_error);
+      if (__Pyx_PyTuple_SET_ITEM(__pyx_t_1, 1, __pyx_t_10) != (0)) __PYX_ERR(0, 203, __pyx_L1_error);
       __Pyx_GIVEREF(__pyx_t_9);
-      if (__Pyx_PyTuple_SET_ITEM(__pyx_t_1, 2, __pyx_t_9) != (0)) __PYX_ERR(0, 145, __pyx_L1_error);
+      if (__Pyx_PyTuple_SET_ITEM(__pyx_t_1, 2, __pyx_t_9) != (0)) __PYX_ERR(0, 203, __pyx_L1_error);
       __pyx_t_11 = 0;
       __pyx_t_10 = 0;
       __pyx_t_9 = 0;
-      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_heard, __pyx_t_1); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 145, __pyx_L1_error)
+      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_heard, __pyx_t_1); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 203, __pyx_L1_error)
       __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
 
-      /* "fast_creatures.pyx":144
+      /* "fast_creatures.pyx":202
  *             if d <= eff_sight:
  *                 visible.append((d, other.uid, i))
  *             elif d <= hearing:             # <<<<<<<<<<<<<<
@@ -6756,25 +7929,25 @@ static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_6perception_scan(s
     __pyx_L3_continue:;
   }
 
-  /* "fast_creatures.pyx":147
+  /* "fast_creatures.pyx":205
  *                 heard.append((d, other.uid, i))
  * 
  *         visible.sort()             # <<<<<<<<<<<<<<
  *         heard.sort()
  *         return visible, heard
 */
-  __pyx_t_12 = PyList_Sort(__pyx_v_visible); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 147, __pyx_L1_error)
+  __pyx_t_12 = PyList_Sort(__pyx_v_visible); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 205, __pyx_L1_error)
 
-  /* "fast_creatures.pyx":148
+  /* "fast_creatures.pyx":206
  * 
  *         visible.sort()
  *         heard.sort()             # <<<<<<<<<<<<<<
  *         return visible, heard
  * 
 */
-  __pyx_t_12 = PyList_Sort(__pyx_v_heard); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 148, __pyx_L1_error)
+  __pyx_t_12 = PyList_Sort(__pyx_v_heard); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 206, __pyx_L1_error)
 
-  /* "fast_creatures.pyx":149
+  /* "fast_creatures.pyx":207
  *         visible.sort()
  *         heard.sort()
  *         return visible, heard             # <<<<<<<<<<<<<<
@@ -6782,20 +7955,20 @@ static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_6perception_scan(s
  *     def get_data(self, int index):
 */
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_1 = PyTuple_New(2); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 149, __pyx_L1_error)
+  __pyx_t_1 = PyTuple_New(2); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 207, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __Pyx_INCREF(__pyx_v_visible);
   __Pyx_GIVEREF(__pyx_v_visible);
-  if (__Pyx_PyTuple_SET_ITEM(__pyx_t_1, 0, __pyx_v_visible) != (0)) __PYX_ERR(0, 149, __pyx_L1_error);
+  if (__Pyx_PyTuple_SET_ITEM(__pyx_t_1, 0, __pyx_v_visible) != (0)) __PYX_ERR(0, 207, __pyx_L1_error);
   __Pyx_INCREF(__pyx_v_heard);
   __Pyx_GIVEREF(__pyx_v_heard);
-  if (__Pyx_PyTuple_SET_ITEM(__pyx_t_1, 1, __pyx_v_heard) != (0)) __PYX_ERR(0, 149, __pyx_L1_error);
+  if (__Pyx_PyTuple_SET_ITEM(__pyx_t_1, 1, __pyx_v_heard) != (0)) __PYX_ERR(0, 207, __pyx_L1_error);
   __pyx_r = __pyx_t_1;
   __pyx_t_1 = 0;
   goto __pyx_L0;
 
-  /* "fast_creatures.pyx":124
- *             self.uid_to_index[d.uid] = i
+  /* "fast_creatures.pyx":182
+ *                 d.piety = float(c.piety)
  * 
  *     def perception_scan(self, int self_uid, int self_x, int self_y,             # <<<<<<<<<<<<<<
  *                          int sight, int hearing):
@@ -6818,7 +7991,7 @@ static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_6perception_scan(s
   return __pyx_r;
 }
 
-/* "fast_creatures.pyx":151
+/* "fast_creatures.pyx":209
  *         return visible, heard
  * 
  *     def get_data(self, int index):             # <<<<<<<<<<<<<<
@@ -6827,16 +8000,16 @@ static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_6perception_scan(s
 */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_14fast_creatures_16CreatureHotArray_9get_data(PyObject *__pyx_v_self, 
+static PyObject *__pyx_pw_14fast_creatures_16CreatureHotArray_13get_data(PyObject *__pyx_v_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
 PyObject *__pyx_args, PyObject *__pyx_kwds
 #endif
 ); /*proto*/
-PyDoc_STRVAR(__pyx_doc_14fast_creatures_16CreatureHotArray_8get_data, "Get a dict of hot data for creature at index (for Python consumers).");
-static PyMethodDef __pyx_mdef_14fast_creatures_16CreatureHotArray_9get_data = {"get_data", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_14fast_creatures_16CreatureHotArray_9get_data, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_14fast_creatures_16CreatureHotArray_8get_data};
-static PyObject *__pyx_pw_14fast_creatures_16CreatureHotArray_9get_data(PyObject *__pyx_v_self, 
+PyDoc_STRVAR(__pyx_doc_14fast_creatures_16CreatureHotArray_12get_data, "Get a dict of hot data for creature at index (for Python consumers).");
+static PyMethodDef __pyx_mdef_14fast_creatures_16CreatureHotArray_13get_data = {"get_data", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_14fast_creatures_16CreatureHotArray_13get_data, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_14fast_creatures_16CreatureHotArray_12get_data};
+static PyObject *__pyx_pw_14fast_creatures_16CreatureHotArray_13get_data(PyObject *__pyx_v_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -6866,32 +8039,32 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   {
     PyObject ** const __pyx_pyargnames[] = {&__pyx_mstate_global->__pyx_n_u_index,0};
     const Py_ssize_t __pyx_kwds_len = (__pyx_kwds) ? __Pyx_NumKwargs_FASTCALL(__pyx_kwds) : 0;
-    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 151, __pyx_L3_error)
+    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 209, __pyx_L3_error)
     if (__pyx_kwds_len > 0) {
       switch (__pyx_nargs) {
         case  1:
         values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 151, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 209, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  0: break;
         default: goto __pyx_L5_argtuple_error;
       }
       const Py_ssize_t kwd_pos_args = __pyx_nargs;
-      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "get_data", 0) < (0)) __PYX_ERR(0, 151, __pyx_L3_error)
+      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "get_data", 0) < (0)) __PYX_ERR(0, 209, __pyx_L3_error)
       for (Py_ssize_t i = __pyx_nargs; i < 1; i++) {
-        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("get_data", 1, 1, 1, i); __PYX_ERR(0, 151, __pyx_L3_error) }
+        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("get_data", 1, 1, 1, i); __PYX_ERR(0, 209, __pyx_L3_error) }
       }
     } else if (unlikely(__pyx_nargs != 1)) {
       goto __pyx_L5_argtuple_error;
     } else {
       values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 151, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 209, __pyx_L3_error)
     }
-    __pyx_v_index = __Pyx_PyLong_As_int(values[0]); if (unlikely((__pyx_v_index == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 151, __pyx_L3_error)
+    __pyx_v_index = __Pyx_PyLong_As_int(values[0]); if (unlikely((__pyx_v_index == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 209, __pyx_L3_error)
   }
   goto __pyx_L6_skip;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("get_data", 1, 1, 1, __pyx_nargs); __PYX_ERR(0, 151, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("get_data", 1, 1, 1, __pyx_nargs); __PYX_ERR(0, 209, __pyx_L3_error)
   __pyx_L6_skip:;
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L3_error:;
@@ -6902,7 +8075,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   __Pyx_RefNannyFinishContext();
   return NULL;
   __pyx_L4_argument_unpacking_done:;
-  __pyx_r = __pyx_pf_14fast_creatures_16CreatureHotArray_8get_data(((struct __pyx_obj_14fast_creatures_CreatureHotArray *)__pyx_v_self), __pyx_v_index);
+  __pyx_r = __pyx_pf_14fast_creatures_16CreatureHotArray_12get_data(((struct __pyx_obj_14fast_creatures_CreatureHotArray *)__pyx_v_self), __pyx_v_index);
 
   /* function exit code */
   for (Py_ssize_t __pyx_temp=0; __pyx_temp < (Py_ssize_t)(sizeof(values)/sizeof(values[0])); ++__pyx_temp) {
@@ -6912,7 +8085,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   return __pyx_r;
 }
 
-static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_8get_data(struct __pyx_obj_14fast_creatures_CreatureHotArray *__pyx_v_self, int __pyx_v_index) {
+static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_12get_data(struct __pyx_obj_14fast_creatures_CreatureHotArray *__pyx_v_self, int __pyx_v_index) {
   struct __pyx_t_14fast_creatures_CreatureHotData *__pyx_v_d;
   PyObject *__pyx_r = NULL;
   __Pyx_RefNannyDeclarations
@@ -6925,7 +8098,7 @@ static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_8get_data(struct _
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("get_data", 0);
 
-  /* "fast_creatures.pyx":153
+  /* "fast_creatures.pyx":211
  *     def get_data(self, int index):
  *         """Get a dict of hot data for creature at index (for Python consumers)."""
  *         if index < 0 or index >= self.count:             # <<<<<<<<<<<<<<
@@ -6943,7 +8116,7 @@ static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_8get_data(struct _
   __pyx_L4_bool_binop_done:;
   if (__pyx_t_1) {
 
-    /* "fast_creatures.pyx":154
+    /* "fast_creatures.pyx":212
  *         """Get a dict of hot data for creature at index (for Python consumers)."""
  *         if index < 0 or index >= self.count:
  *             return None             # <<<<<<<<<<<<<<
@@ -6954,7 +8127,7 @@ static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_8get_data(struct _
     __pyx_r = Py_None; __Pyx_INCREF(Py_None);
     goto __pyx_L0;
 
-    /* "fast_creatures.pyx":153
+    /* "fast_creatures.pyx":211
  *     def get_data(self, int index):
  *         """Get a dict of hot data for creature at index (for Python consumers)."""
  *         if index < 0 or index >= self.count:             # <<<<<<<<<<<<<<
@@ -6963,7 +8136,7 @@ static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_8get_data(struct _
 */
   }
 
-  /* "fast_creatures.pyx":155
+  /* "fast_creatures.pyx":213
  *         if index < 0 or index >= self.count:
  *             return None
  *         cdef CreatureHotData* d = &self.data[index]             # <<<<<<<<<<<<<<
@@ -6972,7 +8145,7 @@ static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_8get_data(struct _
 */
   __pyx_v_d = (&(__pyx_v_self->data[__pyx_v_index]));
 
-  /* "fast_creatures.pyx":156
+  /* "fast_creatures.pyx":214
  *             return None
  *         cdef CreatureHotData* d = &self.data[index]
  *         return {             # <<<<<<<<<<<<<<
@@ -6981,212 +8154,212 @@ static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_8get_data(struct _
 */
   __Pyx_XDECREF(__pyx_r);
 
-  /* "fast_creatures.pyx":157
+  /* "fast_creatures.pyx":215
  *         cdef CreatureHotData* d = &self.data[index]
  *         return {
  *             'uid': d.uid, 'x': d.x, 'y': d.y,             # <<<<<<<<<<<<<<
  *             'hp_cur': d.hp_cur, 'hp_max': d.hp_max,
  *             'stealth': d.stealth, 'detection': d.detection,
 */
-  __pyx_t_3 = __Pyx_PyDict_NewPresized(26); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 157, __pyx_L1_error)
+  __pyx_t_3 = __Pyx_PyDict_NewPresized(26); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 215, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_3);
-  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->uid); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 157, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->uid); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 215, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
-  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_uid, __pyx_t_4) < (0)) __PYX_ERR(0, 157, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_uid, __pyx_t_4) < (0)) __PYX_ERR(0, 215, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
-  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->x); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 157, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->x); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 215, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
-  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_x, __pyx_t_4) < (0)) __PYX_ERR(0, 157, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_x, __pyx_t_4) < (0)) __PYX_ERR(0, 215, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
-  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->y); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 157, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->y); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 215, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
-  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_y, __pyx_t_4) < (0)) __PYX_ERR(0, 157, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_y, __pyx_t_4) < (0)) __PYX_ERR(0, 215, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
 
-  /* "fast_creatures.pyx":158
+  /* "fast_creatures.pyx":216
  *         return {
  *             'uid': d.uid, 'x': d.x, 'y': d.y,
  *             'hp_cur': d.hp_cur, 'hp_max': d.hp_max,             # <<<<<<<<<<<<<<
  *             'stealth': d.stealth, 'detection': d.detection,
  *             'melee_dmg': d.melee_dmg, 'armor': d.armor,
 */
-  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->hp_cur); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 158, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->hp_cur); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 216, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
-  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_hp_cur, __pyx_t_4) < (0)) __PYX_ERR(0, 157, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_hp_cur, __pyx_t_4) < (0)) __PYX_ERR(0, 215, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
-  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->hp_max); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 158, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->hp_max); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 216, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
-  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_hp_max, __pyx_t_4) < (0)) __PYX_ERR(0, 157, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_hp_max, __pyx_t_4) < (0)) __PYX_ERR(0, 215, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
 
-  /* "fast_creatures.pyx":159
+  /* "fast_creatures.pyx":217
  *             'uid': d.uid, 'x': d.x, 'y': d.y,
  *             'hp_cur': d.hp_cur, 'hp_max': d.hp_max,
  *             'stealth': d.stealth, 'detection': d.detection,             # <<<<<<<<<<<<<<
  *             'melee_dmg': d.melee_dmg, 'armor': d.armor,
  *             'sight_range': d.sight_range, 'hearing_range': d.hearing_range,
 */
-  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->stealth); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 159, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->stealth); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 217, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
-  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_stealth, __pyx_t_4) < (0)) __PYX_ERR(0, 157, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_stealth, __pyx_t_4) < (0)) __PYX_ERR(0, 215, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
-  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->detection); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 159, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->detection); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 217, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
-  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_detection, __pyx_t_4) < (0)) __PYX_ERR(0, 157, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_detection, __pyx_t_4) < (0)) __PYX_ERR(0, 215, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
 
-  /* "fast_creatures.pyx":160
+  /* "fast_creatures.pyx":218
  *             'hp_cur': d.hp_cur, 'hp_max': d.hp_max,
  *             'stealth': d.stealth, 'detection': d.detection,
  *             'melee_dmg': d.melee_dmg, 'armor': d.armor,             # <<<<<<<<<<<<<<
  *             'sight_range': d.sight_range, 'hearing_range': d.hearing_range,
  *             'is_alive': d.is_alive, 'species_id': d.species_id,
 */
-  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->melee_dmg); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 160, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->melee_dmg); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 218, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
-  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_melee_dmg, __pyx_t_4) < (0)) __PYX_ERR(0, 157, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_melee_dmg, __pyx_t_4) < (0)) __PYX_ERR(0, 215, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
-  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->armor); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 160, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->armor); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 218, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
-  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_armor, __pyx_t_4) < (0)) __PYX_ERR(0, 157, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_armor, __pyx_t_4) < (0)) __PYX_ERR(0, 215, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
 
-  /* "fast_creatures.pyx":161
+  /* "fast_creatures.pyx":219
  *             'stealth': d.stealth, 'detection': d.detection,
  *             'melee_dmg': d.melee_dmg, 'armor': d.armor,
  *             'sight_range': d.sight_range, 'hearing_range': d.hearing_range,             # <<<<<<<<<<<<<<
  *             'is_alive': d.is_alive, 'species_id': d.species_id,
  *             'sex': d.sex, 'is_child': d.is_child,
 */
-  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->sight_range); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 161, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->sight_range); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 219, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
-  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_sight_range, __pyx_t_4) < (0)) __PYX_ERR(0, 157, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_sight_range, __pyx_t_4) < (0)) __PYX_ERR(0, 215, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
-  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->hearing_range); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 161, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->hearing_range); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 219, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
-  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_hearing_range, __pyx_t_4) < (0)) __PYX_ERR(0, 157, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_hearing_range, __pyx_t_4) < (0)) __PYX_ERR(0, 215, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
 
-  /* "fast_creatures.pyx":162
+  /* "fast_creatures.pyx":220
  *             'melee_dmg': d.melee_dmg, 'armor': d.armor,
  *             'sight_range': d.sight_range, 'hearing_range': d.hearing_range,
  *             'is_alive': d.is_alive, 'species_id': d.species_id,             # <<<<<<<<<<<<<<
  *             'sex': d.sex, 'is_child': d.is_child,
  *             'is_pregnant': d.is_pregnant, 'is_sleeping': d.is_sleeping,
 */
-  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->is_alive); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 162, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->is_alive); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 220, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
-  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_is_alive, __pyx_t_4) < (0)) __PYX_ERR(0, 157, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_is_alive, __pyx_t_4) < (0)) __PYX_ERR(0, 215, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
-  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->species_id); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 162, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->species_id); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 220, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
-  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_species_id, __pyx_t_4) < (0)) __PYX_ERR(0, 157, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_species_id, __pyx_t_4) < (0)) __PYX_ERR(0, 215, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
 
-  /* "fast_creatures.pyx":163
+  /* "fast_creatures.pyx":221
  *             'sight_range': d.sight_range, 'hearing_range': d.hearing_range,
  *             'is_alive': d.is_alive, 'species_id': d.species_id,
  *             'sex': d.sex, 'is_child': d.is_child,             # <<<<<<<<<<<<<<
  *             'is_pregnant': d.is_pregnant, 'is_sleeping': d.is_sleeping,
  *             'equipment_count': d.equipment_count, 'size_units': d.size_units,
 */
-  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->sex); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 163, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->sex); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 221, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
-  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_sex, __pyx_t_4) < (0)) __PYX_ERR(0, 157, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_sex, __pyx_t_4) < (0)) __PYX_ERR(0, 215, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
-  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->is_child); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 163, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->is_child); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 221, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
-  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_is_child, __pyx_t_4) < (0)) __PYX_ERR(0, 157, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_is_child, __pyx_t_4) < (0)) __PYX_ERR(0, 215, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
 
-  /* "fast_creatures.pyx":164
+  /* "fast_creatures.pyx":222
  *             'is_alive': d.is_alive, 'species_id': d.species_id,
  *             'sex': d.sex, 'is_child': d.is_child,
  *             'is_pregnant': d.is_pregnant, 'is_sleeping': d.is_sleeping,             # <<<<<<<<<<<<<<
  *             'equipment_count': d.equipment_count, 'size_units': d.size_units,
  *             'age': d.age, 'partner_uid': d.partner_uid,
 */
-  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->is_pregnant); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 164, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->is_pregnant); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 222, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
-  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_is_pregnant, __pyx_t_4) < (0)) __PYX_ERR(0, 157, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_is_pregnant, __pyx_t_4) < (0)) __PYX_ERR(0, 215, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
-  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->is_sleeping); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 164, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->is_sleeping); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 222, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
-  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_is_sleeping, __pyx_t_4) < (0)) __PYX_ERR(0, 157, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_is_sleeping, __pyx_t_4) < (0)) __PYX_ERR(0, 215, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
 
-  /* "fast_creatures.pyx":165
+  /* "fast_creatures.pyx":223
  *             'sex': d.sex, 'is_child': d.is_child,
  *             'is_pregnant': d.is_pregnant, 'is_sleeping': d.is_sleeping,
  *             'equipment_count': d.equipment_count, 'size_units': d.size_units,             # <<<<<<<<<<<<<<
  *             'age': d.age, 'partner_uid': d.partner_uid,
  *             'mother_uid': d.mother_uid, 'father_uid': d.father_uid,
 */
-  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->equipment_count); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 165, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->equipment_count); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 223, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
-  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_equipment_count, __pyx_t_4) < (0)) __PYX_ERR(0, 157, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_equipment_count, __pyx_t_4) < (0)) __PYX_ERR(0, 215, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
-  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->size_units); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 165, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->size_units); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 223, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
-  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_size_units, __pyx_t_4) < (0)) __PYX_ERR(0, 157, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_size_units, __pyx_t_4) < (0)) __PYX_ERR(0, 215, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
 
-  /* "fast_creatures.pyx":166
+  /* "fast_creatures.pyx":224
  *             'is_pregnant': d.is_pregnant, 'is_sleeping': d.is_sleeping,
  *             'equipment_count': d.equipment_count, 'size_units': d.size_units,
  *             'age': d.age, 'partner_uid': d.partner_uid,             # <<<<<<<<<<<<<<
  *             'mother_uid': d.mother_uid, 'father_uid': d.father_uid,
  *             'deity_id': d.deity_id, 'gold': d.gold, 'piety': d.piety,
 */
-  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->age); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 166, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->age); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 224, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
-  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_age, __pyx_t_4) < (0)) __PYX_ERR(0, 157, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_age, __pyx_t_4) < (0)) __PYX_ERR(0, 215, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
-  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->partner_uid); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 166, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->partner_uid); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 224, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
-  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_partner_uid, __pyx_t_4) < (0)) __PYX_ERR(0, 157, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_partner_uid, __pyx_t_4) < (0)) __PYX_ERR(0, 215, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
 
-  /* "fast_creatures.pyx":167
+  /* "fast_creatures.pyx":225
  *             'equipment_count': d.equipment_count, 'size_units': d.size_units,
  *             'age': d.age, 'partner_uid': d.partner_uid,
  *             'mother_uid': d.mother_uid, 'father_uid': d.father_uid,             # <<<<<<<<<<<<<<
  *             'deity_id': d.deity_id, 'gold': d.gold, 'piety': d.piety,
  *         }
 */
-  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->mother_uid); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 167, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->mother_uid); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 225, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
-  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_mother_uid, __pyx_t_4) < (0)) __PYX_ERR(0, 157, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_mother_uid, __pyx_t_4) < (0)) __PYX_ERR(0, 215, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
-  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->father_uid); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 167, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->father_uid); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 225, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
-  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_father_uid, __pyx_t_4) < (0)) __PYX_ERR(0, 157, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_father_uid, __pyx_t_4) < (0)) __PYX_ERR(0, 215, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
 
-  /* "fast_creatures.pyx":168
+  /* "fast_creatures.pyx":226
  *             'age': d.age, 'partner_uid': d.partner_uid,
  *             'mother_uid': d.mother_uid, 'father_uid': d.father_uid,
  *             'deity_id': d.deity_id, 'gold': d.gold, 'piety': d.piety,             # <<<<<<<<<<<<<<
  *         }
  * 
 */
-  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->deity_id); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 168, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_d->deity_id); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 226, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
-  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_deity_id, __pyx_t_4) < (0)) __PYX_ERR(0, 157, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_deity_id, __pyx_t_4) < (0)) __PYX_ERR(0, 215, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
-  __pyx_t_4 = PyFloat_FromDouble(__pyx_v_d->gold); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 168, __pyx_L1_error)
+  __pyx_t_4 = PyFloat_FromDouble(__pyx_v_d->gold); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 226, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
-  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_gold, __pyx_t_4) < (0)) __PYX_ERR(0, 157, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_gold, __pyx_t_4) < (0)) __PYX_ERR(0, 215, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
-  __pyx_t_4 = PyFloat_FromDouble(__pyx_v_d->piety); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 168, __pyx_L1_error)
+  __pyx_t_4 = PyFloat_FromDouble(__pyx_v_d->piety); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 226, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
-  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_piety, __pyx_t_4) < (0)) __PYX_ERR(0, 157, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_mstate_global->__pyx_n_u_piety, __pyx_t_4) < (0)) __PYX_ERR(0, 215, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
   __pyx_r = __pyx_t_3;
   __pyx_t_3 = 0;
   goto __pyx_L0;
 
-  /* "fast_creatures.pyx":151
+  /* "fast_creatures.pyx":209
  *         return visible, heard
  * 
  *     def get_data(self, int index):             # <<<<<<<<<<<<<<
@@ -7206,7 +8379,7 @@ static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_8get_data(struct _
   return __pyx_r;
 }
 
-/* "fast_creatures.pyx":171
+/* "fast_creatures.pyx":229
  *         }
  * 
  *     def index_for_uid(self, int uid):             # <<<<<<<<<<<<<<
@@ -7215,16 +8388,16 @@ static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_8get_data(struct _
 */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_14fast_creatures_16CreatureHotArray_11index_for_uid(PyObject *__pyx_v_self, 
+static PyObject *__pyx_pw_14fast_creatures_16CreatureHotArray_15index_for_uid(PyObject *__pyx_v_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
 PyObject *__pyx_args, PyObject *__pyx_kwds
 #endif
 ); /*proto*/
-PyDoc_STRVAR(__pyx_doc_14fast_creatures_16CreatureHotArray_10index_for_uid, "Get array index for a creature UID, or -1.");
-static PyMethodDef __pyx_mdef_14fast_creatures_16CreatureHotArray_11index_for_uid = {"index_for_uid", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_14fast_creatures_16CreatureHotArray_11index_for_uid, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_14fast_creatures_16CreatureHotArray_10index_for_uid};
-static PyObject *__pyx_pw_14fast_creatures_16CreatureHotArray_11index_for_uid(PyObject *__pyx_v_self, 
+PyDoc_STRVAR(__pyx_doc_14fast_creatures_16CreatureHotArray_14index_for_uid, "Get array index for a creature UID, or -1.");
+static PyMethodDef __pyx_mdef_14fast_creatures_16CreatureHotArray_15index_for_uid = {"index_for_uid", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_14fast_creatures_16CreatureHotArray_15index_for_uid, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_14fast_creatures_16CreatureHotArray_14index_for_uid};
+static PyObject *__pyx_pw_14fast_creatures_16CreatureHotArray_15index_for_uid(PyObject *__pyx_v_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -7254,32 +8427,32 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   {
     PyObject ** const __pyx_pyargnames[] = {&__pyx_mstate_global->__pyx_n_u_uid,0};
     const Py_ssize_t __pyx_kwds_len = (__pyx_kwds) ? __Pyx_NumKwargs_FASTCALL(__pyx_kwds) : 0;
-    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 171, __pyx_L3_error)
+    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 229, __pyx_L3_error)
     if (__pyx_kwds_len > 0) {
       switch (__pyx_nargs) {
         case  1:
         values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 171, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 229, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  0: break;
         default: goto __pyx_L5_argtuple_error;
       }
       const Py_ssize_t kwd_pos_args = __pyx_nargs;
-      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "index_for_uid", 0) < (0)) __PYX_ERR(0, 171, __pyx_L3_error)
+      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "index_for_uid", 0) < (0)) __PYX_ERR(0, 229, __pyx_L3_error)
       for (Py_ssize_t i = __pyx_nargs; i < 1; i++) {
-        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("index_for_uid", 1, 1, 1, i); __PYX_ERR(0, 171, __pyx_L3_error) }
+        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("index_for_uid", 1, 1, 1, i); __PYX_ERR(0, 229, __pyx_L3_error) }
       }
     } else if (unlikely(__pyx_nargs != 1)) {
       goto __pyx_L5_argtuple_error;
     } else {
       values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 171, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 229, __pyx_L3_error)
     }
-    __pyx_v_uid = __Pyx_PyLong_As_int(values[0]); if (unlikely((__pyx_v_uid == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 171, __pyx_L3_error)
+    __pyx_v_uid = __Pyx_PyLong_As_int(values[0]); if (unlikely((__pyx_v_uid == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 229, __pyx_L3_error)
   }
   goto __pyx_L6_skip;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("index_for_uid", 1, 1, 1, __pyx_nargs); __PYX_ERR(0, 171, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("index_for_uid", 1, 1, 1, __pyx_nargs); __PYX_ERR(0, 229, __pyx_L3_error)
   __pyx_L6_skip:;
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L3_error:;
@@ -7290,7 +8463,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   __Pyx_RefNannyFinishContext();
   return NULL;
   __pyx_L4_argument_unpacking_done:;
-  __pyx_r = __pyx_pf_14fast_creatures_16CreatureHotArray_10index_for_uid(((struct __pyx_obj_14fast_creatures_CreatureHotArray *)__pyx_v_self), __pyx_v_uid);
+  __pyx_r = __pyx_pf_14fast_creatures_16CreatureHotArray_14index_for_uid(((struct __pyx_obj_14fast_creatures_CreatureHotArray *)__pyx_v_self), __pyx_v_uid);
 
   /* function exit code */
   for (Py_ssize_t __pyx_temp=0; __pyx_temp < (Py_ssize_t)(sizeof(values)/sizeof(values[0])); ++__pyx_temp) {
@@ -7300,7 +8473,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   return __pyx_r;
 }
 
-static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_10index_for_uid(struct __pyx_obj_14fast_creatures_CreatureHotArray *__pyx_v_self, int __pyx_v_uid) {
+static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_14index_for_uid(struct __pyx_obj_14fast_creatures_CreatureHotArray *__pyx_v_self, int __pyx_v_uid) {
   PyObject *__pyx_r = NULL;
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
@@ -7310,7 +8483,7 @@ static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_10index_for_uid(st
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("index_for_uid", 0);
 
-  /* "fast_creatures.pyx":173
+  /* "fast_creatures.pyx":231
  *     def index_for_uid(self, int uid):
  *         """Get array index for a creature UID, or -1."""
  *         return self.uid_to_index.get(uid, -1)             # <<<<<<<<<<<<<<
@@ -7320,18 +8493,18 @@ static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_10index_for_uid(st
   __Pyx_XDECREF(__pyx_r);
   if (unlikely(__pyx_v_self->uid_to_index == Py_None)) {
     PyErr_Format(PyExc_AttributeError, "'NoneType' object has no attribute '%.30s'", "get");
-    __PYX_ERR(0, 173, __pyx_L1_error)
+    __PYX_ERR(0, 231, __pyx_L1_error)
   }
-  __pyx_t_1 = __Pyx_PyLong_From_int(__pyx_v_uid); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 173, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyLong_From_int(__pyx_v_uid); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 231, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
-  __pyx_t_2 = __Pyx_PyDict_GetItemDefault(__pyx_v_self->uid_to_index, __pyx_t_1, __pyx_mstate_global->__pyx_int_neg_1); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 173, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_PyDict_GetItemDefault(__pyx_v_self->uid_to_index, __pyx_t_1, __pyx_mstate_global->__pyx_int_neg_1); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 231, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
   __pyx_r = __pyx_t_2;
   __pyx_t_2 = 0;
   goto __pyx_L0;
 
-  /* "fast_creatures.pyx":171
+  /* "fast_creatures.pyx":229
  *         }
  * 
  *     def index_for_uid(self, int uid):             # <<<<<<<<<<<<<<
@@ -7351,7 +8524,7 @@ static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_10index_for_uid(st
   return __pyx_r;
 }
 
-/* "fast_creatures.pyx":175
+/* "fast_creatures.pyx":233
  *         return self.uid_to_index.get(uid, -1)
  * 
  *     @property             # <<<<<<<<<<<<<<
@@ -7383,19 +8556,19 @@ static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_4size___get__(stru
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("__get__", 0);
 
-  /* "fast_creatures.pyx":177
+  /* "fast_creatures.pyx":235
  *     @property
  *     def size(self):
  *         return self.count             # <<<<<<<<<<<<<<
 */
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_1 = __Pyx_PyLong_From_int(__pyx_v_self->count); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 177, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyLong_From_int(__pyx_v_self->count); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 235, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_r = __pyx_t_1;
   __pyx_t_1 = 0;
   goto __pyx_L0;
 
-  /* "fast_creatures.pyx":175
+  /* "fast_creatures.pyx":233
  *         return self.uid_to_index.get(uid, -1)
  * 
  *     @property             # <<<<<<<<<<<<<<
@@ -7421,15 +8594,15 @@ static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_4size___get__(stru
 */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_14fast_creatures_16CreatureHotArray_13__reduce_cython__(PyObject *__pyx_v_self, 
+static PyObject *__pyx_pw_14fast_creatures_16CreatureHotArray_17__reduce_cython__(PyObject *__pyx_v_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
 PyObject *__pyx_args, PyObject *__pyx_kwds
 #endif
 ); /*proto*/
-static PyMethodDef __pyx_mdef_14fast_creatures_16CreatureHotArray_13__reduce_cython__ = {"__reduce_cython__", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_14fast_creatures_16CreatureHotArray_13__reduce_cython__, __Pyx_METH_FASTCALL|METH_KEYWORDS, 0};
-static PyObject *__pyx_pw_14fast_creatures_16CreatureHotArray_13__reduce_cython__(PyObject *__pyx_v_self, 
+static PyMethodDef __pyx_mdef_14fast_creatures_16CreatureHotArray_17__reduce_cython__ = {"__reduce_cython__", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_14fast_creatures_16CreatureHotArray_17__reduce_cython__, __Pyx_METH_FASTCALL|METH_KEYWORDS, 0};
+static PyObject *__pyx_pw_14fast_creatures_16CreatureHotArray_17__reduce_cython__(PyObject *__pyx_v_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -7455,14 +8628,14 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   const Py_ssize_t __pyx_kwds_len = unlikely(__pyx_kwds) ? __Pyx_NumKwargs_FASTCALL(__pyx_kwds) : 0;
   if (unlikely(__pyx_kwds_len < 0)) return NULL;
   if (unlikely(__pyx_kwds_len > 0)) {__Pyx_RejectKeywords("__reduce_cython__", __pyx_kwds); return NULL;}
-  __pyx_r = __pyx_pf_14fast_creatures_16CreatureHotArray_12__reduce_cython__(((struct __pyx_obj_14fast_creatures_CreatureHotArray *)__pyx_v_self));
+  __pyx_r = __pyx_pf_14fast_creatures_16CreatureHotArray_16__reduce_cython__(((struct __pyx_obj_14fast_creatures_CreatureHotArray *)__pyx_v_self));
 
   /* function exit code */
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
 
-static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_12__reduce_cython__(CYTHON_UNUSED struct __pyx_obj_14fast_creatures_CreatureHotArray *__pyx_v_self) {
+static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_16__reduce_cython__(CYTHON_UNUSED struct __pyx_obj_14fast_creatures_CreatureHotArray *__pyx_v_self) {
   PyObject *__pyx_r = NULL;
   __Pyx_RefNannyDeclarations
   int __pyx_lineno = 0;
@@ -7502,15 +8675,15 @@ static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_12__reduce_cython_
 */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_14fast_creatures_16CreatureHotArray_15__setstate_cython__(PyObject *__pyx_v_self, 
+static PyObject *__pyx_pw_14fast_creatures_16CreatureHotArray_19__setstate_cython__(PyObject *__pyx_v_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
 PyObject *__pyx_args, PyObject *__pyx_kwds
 #endif
 ); /*proto*/
-static PyMethodDef __pyx_mdef_14fast_creatures_16CreatureHotArray_15__setstate_cython__ = {"__setstate_cython__", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_14fast_creatures_16CreatureHotArray_15__setstate_cython__, __Pyx_METH_FASTCALL|METH_KEYWORDS, 0};
-static PyObject *__pyx_pw_14fast_creatures_16CreatureHotArray_15__setstate_cython__(PyObject *__pyx_v_self, 
+static PyMethodDef __pyx_mdef_14fast_creatures_16CreatureHotArray_19__setstate_cython__ = {"__setstate_cython__", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_14fast_creatures_16CreatureHotArray_19__setstate_cython__, __Pyx_METH_FASTCALL|METH_KEYWORDS, 0};
+static PyObject *__pyx_pw_14fast_creatures_16CreatureHotArray_19__setstate_cython__(PyObject *__pyx_v_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -7576,7 +8749,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   __Pyx_RefNannyFinishContext();
   return NULL;
   __pyx_L4_argument_unpacking_done:;
-  __pyx_r = __pyx_pf_14fast_creatures_16CreatureHotArray_14__setstate_cython__(((struct __pyx_obj_14fast_creatures_CreatureHotArray *)__pyx_v_self), __pyx_v___pyx_state);
+  __pyx_r = __pyx_pf_14fast_creatures_16CreatureHotArray_18__setstate_cython__(((struct __pyx_obj_14fast_creatures_CreatureHotArray *)__pyx_v_self), __pyx_v___pyx_state);
 
   /* function exit code */
   for (Py_ssize_t __pyx_temp=0; __pyx_temp < (Py_ssize_t)(sizeof(values)/sizeof(values[0])); ++__pyx_temp) {
@@ -7586,7 +8759,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   return __pyx_r;
 }
 
-static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_14__setstate_cython__(CYTHON_UNUSED struct __pyx_obj_14fast_creatures_CreatureHotArray *__pyx_v_self, CYTHON_UNUSED PyObject *__pyx_v___pyx_state) {
+static PyObject *__pyx_pf_14fast_creatures_16CreatureHotArray_18__setstate_cython__(CYTHON_UNUSED struct __pyx_obj_14fast_creatures_CreatureHotArray *__pyx_v_self, CYTHON_UNUSED PyObject *__pyx_v___pyx_state) {
   PyObject *__pyx_r = NULL;
   __Pyx_RefNannyDeclarations
   int __pyx_lineno = 0;
@@ -7694,11 +8867,13 @@ static PyObject *__pyx_getprop_14fast_creatures_16CreatureHotArray_size(PyObject
 
 static PyMethodDef __pyx_methods_14fast_creatures_CreatureHotArray[] = {
   {"sync", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_14fast_creatures_16CreatureHotArray_5sync, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_14fast_creatures_16CreatureHotArray_4sync},
-  {"perception_scan", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_14fast_creatures_16CreatureHotArray_7perception_scan, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_14fast_creatures_16CreatureHotArray_6perception_scan},
-  {"get_data", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_14fast_creatures_16CreatureHotArray_9get_data, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_14fast_creatures_16CreatureHotArray_8get_data},
-  {"index_for_uid", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_14fast_creatures_16CreatureHotArray_11index_for_uid, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_14fast_creatures_16CreatureHotArray_10index_for_uid},
-  {"__reduce_cython__", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_14fast_creatures_16CreatureHotArray_13__reduce_cython__, __Pyx_METH_FASTCALL|METH_KEYWORDS, 0},
-  {"__setstate_cython__", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_14fast_creatures_16CreatureHotArray_15__setstate_cython__, __Pyx_METH_FASTCALL|METH_KEYWORDS, 0},
+  {"sync_positions", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_14fast_creatures_16CreatureHotArray_7sync_positions, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_14fast_creatures_16CreatureHotArray_6sync_positions},
+  {"sync_subset", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_14fast_creatures_16CreatureHotArray_9sync_subset, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_14fast_creatures_16CreatureHotArray_8sync_subset},
+  {"perception_scan", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_14fast_creatures_16CreatureHotArray_11perception_scan, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_14fast_creatures_16CreatureHotArray_10perception_scan},
+  {"get_data", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_14fast_creatures_16CreatureHotArray_13get_data, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_14fast_creatures_16CreatureHotArray_12get_data},
+  {"index_for_uid", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_14fast_creatures_16CreatureHotArray_15index_for_uid, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_14fast_creatures_16CreatureHotArray_14index_for_uid},
+  {"__reduce_cython__", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_14fast_creatures_16CreatureHotArray_17__reduce_cython__, __Pyx_METH_FASTCALL|METH_KEYWORDS, 0},
+  {"__setstate_cython__", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_14fast_creatures_16CreatureHotArray_19__setstate_cython__, __Pyx_METH_FASTCALL|METH_KEYWORDS, 0},
   {0, 0, 0, 0}
 };
 
@@ -8372,46 +9547,76 @@ __Pyx_RefNannySetupContext("PyInit_fast_creatures", 0);
   /* "fast_creatures.pyx":124
  *             self.uid_to_index[d.uid] = i
  * 
- *     def perception_scan(self, int self_uid, int self_x, int self_y,             # <<<<<<<<<<<<<<
- *                          int sight, int hearing):
- *         """Fast perception scan. Returns (visible, heard_only) as lists of
+ *     def sync_positions(self, list creatures):             # <<<<<<<<<<<<<<
+ *         """Lightweight sync: update only position + alive status.
+ * 
 */
-  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_14fast_creatures_16CreatureHotArray_7perception_scan, __Pyx_CYFUNCTION_CCLASS, __pyx_mstate_global->__pyx_n_u_CreatureHotArray_perception_scan, NULL, __pyx_mstate_global->__pyx_n_u_fast_creatures, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[1])); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 124, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_14fast_creatures_16CreatureHotArray_7sync_positions, __Pyx_CYFUNCTION_CCLASS, __pyx_mstate_global->__pyx_n_u_CreatureHotArray_sync_positions, NULL, __pyx_mstate_global->__pyx_n_u_fast_creatures, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[1])); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 124, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
   PyUnstable_Object_EnableDeferredRefcount(__pyx_t_2);
   #endif
-  if (__Pyx_SetItemOnTypeDict(__pyx_mstate_global->__pyx_ptype_14fast_creatures_CreatureHotArray, __pyx_mstate_global->__pyx_n_u_perception_scan, __pyx_t_2) < (0)) __PYX_ERR(0, 124, __pyx_L1_error)
+  if (__Pyx_SetItemOnTypeDict(__pyx_mstate_global->__pyx_ptype_14fast_creatures_CreatureHotArray, __pyx_mstate_global->__pyx_n_u_sync_positions, __pyx_t_2) < (0)) __PYX_ERR(0, 124, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
 
-  /* "fast_creatures.pyx":151
+  /* "fast_creatures.pyx":145
+ *             d.is_alive = 1 if c.is_alive else 0
+ * 
+ *     def sync_subset(self, list creatures_to_update):             # <<<<<<<<<<<<<<
+ *         """Full sync on a subset of creatures (by UID match).
+ * 
+*/
+  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_14fast_creatures_16CreatureHotArray_9sync_subset, __Pyx_CYFUNCTION_CCLASS, __pyx_mstate_global->__pyx_n_u_CreatureHotArray_sync_subset, NULL, __pyx_mstate_global->__pyx_n_u_fast_creatures, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[2])); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 145, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_2);
+  #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
+  PyUnstable_Object_EnableDeferredRefcount(__pyx_t_2);
+  #endif
+  if (__Pyx_SetItemOnTypeDict(__pyx_mstate_global->__pyx_ptype_14fast_creatures_CreatureHotArray, __pyx_mstate_global->__pyx_n_u_sync_subset, __pyx_t_2) < (0)) __PYX_ERR(0, 145, __pyx_L1_error)
+  __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
+
+  /* "fast_creatures.pyx":182
+ *                 d.piety = float(c.piety)
+ * 
+ *     def perception_scan(self, int self_uid, int self_x, int self_y,             # <<<<<<<<<<<<<<
+ *                          int sight, int hearing):
+ *         """Fast perception scan. Returns (visible, heard_only) as lists of
+*/
+  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_14fast_creatures_16CreatureHotArray_11perception_scan, __Pyx_CYFUNCTION_CCLASS, __pyx_mstate_global->__pyx_n_u_CreatureHotArray_perception_scan, NULL, __pyx_mstate_global->__pyx_n_u_fast_creatures, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[3])); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 182, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_2);
+  #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
+  PyUnstable_Object_EnableDeferredRefcount(__pyx_t_2);
+  #endif
+  if (__Pyx_SetItemOnTypeDict(__pyx_mstate_global->__pyx_ptype_14fast_creatures_CreatureHotArray, __pyx_mstate_global->__pyx_n_u_perception_scan, __pyx_t_2) < (0)) __PYX_ERR(0, 182, __pyx_L1_error)
+  __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
+
+  /* "fast_creatures.pyx":209
  *         return visible, heard
  * 
  *     def get_data(self, int index):             # <<<<<<<<<<<<<<
  *         """Get a dict of hot data for creature at index (for Python consumers)."""
  *         if index < 0 or index >= self.count:
 */
-  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_14fast_creatures_16CreatureHotArray_9get_data, __Pyx_CYFUNCTION_CCLASS, __pyx_mstate_global->__pyx_n_u_CreatureHotArray_get_data, NULL, __pyx_mstate_global->__pyx_n_u_fast_creatures, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[2])); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 151, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_14fast_creatures_16CreatureHotArray_13get_data, __Pyx_CYFUNCTION_CCLASS, __pyx_mstate_global->__pyx_n_u_CreatureHotArray_get_data, NULL, __pyx_mstate_global->__pyx_n_u_fast_creatures, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[4])); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 209, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
   PyUnstable_Object_EnableDeferredRefcount(__pyx_t_2);
   #endif
-  if (__Pyx_SetItemOnTypeDict(__pyx_mstate_global->__pyx_ptype_14fast_creatures_CreatureHotArray, __pyx_mstate_global->__pyx_n_u_get_data, __pyx_t_2) < (0)) __PYX_ERR(0, 151, __pyx_L1_error)
+  if (__Pyx_SetItemOnTypeDict(__pyx_mstate_global->__pyx_ptype_14fast_creatures_CreatureHotArray, __pyx_mstate_global->__pyx_n_u_get_data, __pyx_t_2) < (0)) __PYX_ERR(0, 209, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
 
-  /* "fast_creatures.pyx":171
+  /* "fast_creatures.pyx":229
  *         }
  * 
  *     def index_for_uid(self, int uid):             # <<<<<<<<<<<<<<
  *         """Get array index for a creature UID, or -1."""
  *         return self.uid_to_index.get(uid, -1)
 */
-  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_14fast_creatures_16CreatureHotArray_11index_for_uid, __Pyx_CYFUNCTION_CCLASS, __pyx_mstate_global->__pyx_n_u_CreatureHotArray_index_for_uid, NULL, __pyx_mstate_global->__pyx_n_u_fast_creatures, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[3])); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 171, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_14fast_creatures_16CreatureHotArray_15index_for_uid, __Pyx_CYFUNCTION_CCLASS, __pyx_mstate_global->__pyx_n_u_CreatureHotArray_index_for_uid, NULL, __pyx_mstate_global->__pyx_n_u_fast_creatures, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[5])); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 229, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
   PyUnstable_Object_EnableDeferredRefcount(__pyx_t_2);
   #endif
-  if (__Pyx_SetItemOnTypeDict(__pyx_mstate_global->__pyx_ptype_14fast_creatures_CreatureHotArray, __pyx_mstate_global->__pyx_n_u_index_for_uid, __pyx_t_2) < (0)) __PYX_ERR(0, 171, __pyx_L1_error)
+  if (__Pyx_SetItemOnTypeDict(__pyx_mstate_global->__pyx_ptype_14fast_creatures_CreatureHotArray, __pyx_mstate_global->__pyx_n_u_index_for_uid, __pyx_t_2) < (0)) __PYX_ERR(0, 229, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
 
   /* "(tree fragment)":1
@@ -8419,7 +9624,7 @@ __Pyx_RefNannySetupContext("PyInit_fast_creatures", 0);
  *     raise TypeError, "no default __reduce__ due to non-trivial __cinit__"
  * def __setstate_cython__(self, __pyx_state):
 */
-  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_14fast_creatures_16CreatureHotArray_13__reduce_cython__, __Pyx_CYFUNCTION_CCLASS, __pyx_mstate_global->__pyx_n_u_CreatureHotArray___reduce_cython, NULL, __pyx_mstate_global->__pyx_n_u_fast_creatures, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[4])); if (unlikely(!__pyx_t_2)) __PYX_ERR(2, 1, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_14fast_creatures_16CreatureHotArray_17__reduce_cython__, __Pyx_CYFUNCTION_CCLASS, __pyx_mstate_global->__pyx_n_u_CreatureHotArray___reduce_cython, NULL, __pyx_mstate_global->__pyx_n_u_fast_creatures, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[6])); if (unlikely(!__pyx_t_2)) __PYX_ERR(2, 1, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
   PyUnstable_Object_EnableDeferredRefcount(__pyx_t_2);
@@ -8433,7 +9638,7 @@ __Pyx_RefNannySetupContext("PyInit_fast_creatures", 0);
  * def __setstate_cython__(self, __pyx_state):             # <<<<<<<<<<<<<<
  *     raise TypeError, "no default __reduce__ due to non-trivial __cinit__"
 */
-  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_14fast_creatures_16CreatureHotArray_15__setstate_cython__, __Pyx_CYFUNCTION_CCLASS, __pyx_mstate_global->__pyx_n_u_CreatureHotArray___setstate_cyth, NULL, __pyx_mstate_global->__pyx_n_u_fast_creatures, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[5])); if (unlikely(!__pyx_t_2)) __PYX_ERR(2, 3, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_14fast_creatures_16CreatureHotArray_19__setstate_cython__, __Pyx_CYFUNCTION_CCLASS, __pyx_mstate_global->__pyx_n_u_CreatureHotArray___setstate_cyth, NULL, __pyx_mstate_global->__pyx_n_u_fast_creatures, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[7])); if (unlikely(!__pyx_t_2)) __PYX_ERR(2, 3, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
   PyUnstable_Object_EnableDeferredRefcount(__pyx_t_2);
@@ -8513,31 +9718,31 @@ static int __Pyx_InitCachedConstants(__pyx_mstatetype *__pyx_mstate) {
 static int __Pyx_InitConstants(__pyx_mstatetype *__pyx_mstate) {
   CYTHON_UNUSED_VAR(__pyx_mstate);
   {
-    const struct { const unsigned int length: 10; } index[] = {{1},{179},{0},{1},{8},{7},{6},{18},{2},{9},{50},{39},{34},{14},{5},{16},{34},{36},{25},{30},{32},{21},{9},{13},{7},{6},{9},{20},{11},{10},{7},{4},{6},{3},{5},{18},{1},{17},{27},{13},{18},{9},{1},{5},{8},{9},{9},{9},{15},{14},{10},{8},{3},{8},{12},{4},{5},{7},{13},{6},{6},{1},{5},{13},{8},{8},{13},{11},{11},{5},{3},{8},{8},{4},{6},{9},{10},{10},{1},{8},{2},{5},{5},{11},{15},{5},{3},{11},{12},{10},{17},{13},{1},{4},{8},{6},{6},{12},{10},{12},{19},{3},{5},{11},{4},{10},{7},{10},{5},{7},{4},{8},{3},{6},{7},{1},{1},{1},{212},{169},{649},{17},{9}};
-    #if (CYTHON_COMPRESS_STRINGS) == 2 /* compression: bz2 (1573 bytes) */
-const char* const cstring = "BZh91AY&SY\034\271\353\024\000\000\276\177\377\357\377\377\377\377\277\277\337\277\357\377\367\277\377\377\364\300@@@@@@@@@@@@\000@\000P\005~\027ks\034\315i\246-\234\003\006\246DJ<Q\340\223&`\322\236zS\023D\320\364FO$\014\214#\324\364\217(m\021\241\352='\220\236S\302\207\20454\032 LM\000\325=&iO$\320\00042\001\240\000\000\000\000\000\032\000\000\000h\010$\323\024\311\224\036\243\032\207\250\000\003@h\000\000\000\000\003@\000\000\000A\200\023\000\000\000\230\000L\000\000\002`\004\320\300\000\000\000\000\001$B\032\025?)\350\2325<\232\236\246\247\244\365\032\014@i\221\241\352\014 \03124\310\310\001\246L d\311\240\365)\302\336\210w\273\314\277\236\371\341~\377\364;xJT\025\037\353\203\324\351\207\220\3447dn\214\230eE\352\253\361L\234\t\324\211\260\231\2007Z+]\260Ev\272\200\315\013\250\025L\2203\"R`z\226\204\"\322\332\302w\311I\260\335\225\024\337e\322\276\001\2466\027\021\265Fu\223\270\224\212\225\020+\250y\016\266G\276\016P\356\230jK\346)A\222B\014\221aW\357O\275uZ\366Y\277>-\276v\003\234&\340\256)\205\014/z\3116A\023.\336\343^+\345\200``\313\2343<\353\242\032\345F%\220\346\262\t?\216c\205\331\177\2423l\205wn\370\365\307c,\\\2038\317\3100)\261\314@\341Z\206\346BD\232\207\2237\216\346\244\235\256\301\246\235\016J\210\034\240\232#\275\305N>L-\334\322\366\374\200\372\371\262\"\221HP+#[\327\235q\346\207\n0N\245f\020\273\232\323\350/\007\355\307Q\312\271+\025~,\226\316\263\353q\206S\254\227\311G\030\260N\322\302]\032&\306E+F\203\030\324\302k.p\207\226\367\2663cX\217\253\326\335,\3206^\232\233\203FFcI\327\354\245)`\0103\315[E5\326+\323[+v9\326]\2025\n\234\246eh_km\021]\0003\n\322\226D\246\342P\354S!\204\305\264\271\373l7 \240a\304\035@P\247\241\305\367\323&\235\3402\321\016\337\341'\213R\256\260\262\206\313\025\024\t\024\250\220\010\014D@9\211\243[a\023(\252\0071K \264\014\206K\245\006\303pA\326\204\021\017\023\207\325\275\221\210\271\366:=_\326\217\356\325\271\223Z\363\330\204\257\2507\231\017e\032\204\354\326*\0240\225\221U\244@\214\200\341\360\026\332\\\005\266F;D\365\2144""\246\311Y^\256v\030\334\272h\233\231\254\032\235\364\241\240g\007 \014\2433\374\235\001\341\246\222\023\211\351\262v\023F\013\356\017\235vd\350\344I\274\235\025I(\225\01022\t\2554\336\027M\213&\230\026\023\";\215\202\204\240\322\2039\321O\361\353\224\256y\020\216@u\375R-5*\344\016\223\033\003\276\025\255[V\r\032\300Y\211\035Mj\000\352\013%\207b\240%\241\007)\305\211\025P\247W\"\201\212\020\020f\027yD\235\265V\336\326Y\226\265\230\205\323ua&\323\247\036V\333\322\347\211eJ\030\323Y\007\231 \307\252\316\031\331\024\345u\226\024SV\325\227\304\306\001\233\305\314*\360\330\031h\202]\031#;\004\263\0039\202HJ+\201\327\003ZYTUb\030\030\241\tk\026\261\371\326 \205X*@\305!\270\3444\220\221 \324\220\006pG\231\343\0076%\317c\213!\n\216aJ7\347R\272)\200\222BCad\205\231o0\346\201k\221\023%\003\001\210\225\231\017Q\266\002E\005:\203\220\300|\302\231g\311\220\311\206`E\327\006\244\004\214\302)1\232\354\014\275h\214\002'P\266\326\274\355\244%0\032\262\035=-\003_\205\343l\245\003~9\r\270\264Gj131\232d!\210\r\2076\036#%\255\304I\226:\276\026c>ZB\332\306\032\262\307\363\022\203\266;%F\365\321\004\356\351\255\">\235\366}\252\252`\272a\250\323\225p\246#\346\337\314\274\213\004\251\031\315\020\024c\014\322M\3610\345\343~,!\0262\353H\253\301\026OY\206\224\036I\3152\0170\264(\202\252\254\204c;\253\030X\001\310e\020\244\260\006\320\003\242sA`\240\205\252\207\001\343*\253J\301\222\034\234\343\260\266r\030\277\313\215\350\261\315/\026Dw\206\214\327\340\264\316\323BF\253\230\033\026\31451b<\274\371\023\030\236\346R\206F3\014\217B\214\013\024\262\301mc\ndi\200\365\360z\362\003\363\221g>\025.\306\365A\277\353\026\214#\3444\211\003\332\344\220.Kw\254=\210\010\0255\376d\202G\001R\216\302La\370\t\252,\260\022-y9Q;\355\226l\227\275\n\271Y\240D\334\376 \24231\017\207\361\n$6h\3630\031\211a\244\321\006Ik\214\023I\304T\224\304X\325c\245$%\304\256\311\3066\271A\026\361\343\344\030\224.\310\321\262\224\213d-\250\201\221-D(\226\"BR\\\031\313\221\347\007\265us\344\212\007\2335t\013U\004\253\213ux\302e\020(-""\217\006\244\224\227\361a\314v\325\251\271@Hl\205\240\260\271\327\333\222\275[\365\245m\022\344\243\365;\002f\n\263\345\313\301x\366u\253|s\364&K\302C\274\237\024\376\236\217\257l\276\365:\0059\223\006\t\217\344\267)\252\261\362\"nS\207\026\270\202\343\237\277\2317)b\020\321\201\273\261\003\036?\364\021\345\353\255\260\277S\315:{cwc\373\323\267\303\220\215\221\2464\035\277\227y)q\244e\234;! \210v\272\252d\330c|\324\250\346\361Y\032\242\"\301\031\235\020*\244\217F\351$\204\032-);*\305\003\230Wx\261\177\305\334\221N\024$\007.z\305\000";
-    PyObject *data = __Pyx_DecompressString(cstring, 1573, 2);
+    const struct { const unsigned int length: 10; } index[] = {{1},{179},{0},{1},{8},{7},{6},{18},{2},{9},{50},{39},{34},{14},{5},{16},{34},{36},{25},{30},{32},{21},{31},{28},{9},{13},{7},{6},{9},{20},{11},{10},{7},{4},{6},{3},{5},{18},{1},{17},{27},{13},{18},{9},{19},{1},{5},{8},{9},{9},{9},{15},{14},{10},{8},{3},{8},{12},{4},{5},{7},{13},{6},{6},{1},{3},{5},{13},{8},{8},{13},{11},{11},{5},{3},{8},{8},{4},{6},{9},{10},{10},{1},{8},{2},{5},{5},{11},{15},{5},{3},{11},{12},{10},{17},{13},{1},{4},{8},{6},{6},{12},{10},{12},{19},{3},{5},{11},{4},{10},{7},{10},{5},{7},{4},{14},{11},{8},{3},{6},{7},{1},{1},{1},{341},{116},{212},{169},{649},{17},{9}};
+    #if (CYTHON_COMPRESS_STRINGS) == 2 /* compression: bz2 (1725 bytes) */
+const char* const cstring = "BZh91AY&SY\271\314\023\202\000\001\016\377\377\357\377\377\377\377\277\377\337\277\357\377\367\277\377\377\364\300@@@@@@@@@@@@\000@\000`\006=\360\203\215\233)\031,\031\300\034\tDD\2204\320\320\017H\3141\032\n\032\036\243&e\006\206\214\217(~\250\304\365\036\240\3656\240\032y\032CjmL\324\320h\211\202h\006\221\246\202\236M@\000\006\200\000\000\000\000\000\032\003@\000\000 \300\0010\000\023\004\300\000\000\000\0010\t\200\206\000\000\214\000\000\004\240M\"&\214\247\223T\362&\236I\232\000L\214A\232L\010`\000C\0042\032d\310\030\320\323D\300\203\000\004\300\000L\023\000\000\000\000\004\300&\002\030\000\0020\000\000\022B#\021M\241\023\325='\262\032\241\246\2002\000\000\000\000\000\000\000\000\000\000z\224\255\354\027\233\361\017?\235\0254\317B\036\246\364zQ\205=ITe\254%}\220\342;C\241\356rW\216H\225\313\22100\312\343@\250g\336\251XU\242J\254\220\314\220r4\201\315\361\364\241Y\336\363\031\302$3O1A\025a$\314\211\251\260\236\242\266\304\222\305>\010\256S\024\330\303E\334\227\2752\304/\236P\034R\300\314K\020\222\255\225s\023\232\240\256\202\324\036e!m \312\351@^;\203\014P\312\270D\025Q\006T?\230\323\322\321\322\362G\037\374\235=\034\357\027\377B\346\243U|qH5/\336v\221Vr/\340L\2611\206jk\032\010#\340U\\\311a\225\314\375\315\226 g\022\314=\250\305\303KF\210\3777\272\247w\004\337\305\213\370\314\031L\330a\325\205F\3215En\266\025\302\016\211u\007\341\343(\024U*\264QM\240\306\002\203F)\213[\247\313t\221l\226\327\256?\270nN|\336\303\262\374\273\302\365\373\266 X\026\005\303(\031\234\313\313\207\305\275+\014\013wk\200\307\303M\231\362\311\014T\201S\243\220D=9\307\346\362Y\245Ft=\331@\265\367\251Iz\007\234\344J\222\352\347\227!\000\366\214\365\255\251\222Xbp\022yl\366\327.b\205~\257[tr\310k\262Z0\006\213\232\363h\016\026\302\204\204\250\020A\236j\024\321EU\n\261\335{v\0338`\277[g\024\306\024\314\231\366\271\272\226\364\360\021%#'1\223\271\216\227\264\324\202\250\332\306\343\351\377%\267M\320\033zRn\016:\353v:\2336\332RO\235\231ozZ\335\r\253\321\346\373\233c%(\214\351mA\205$\222\212X""\321z\n\252U\330\274K\031\024b\350\250gQ\256\324g\241\277Bb\356\331!\301l6}b\3665\202\037c~\363\336\277\324\205\277\242\311\307\001*\235\240KtpHP\034\373\003D\321\242xMXJ\tLG\027;\230\034\324.b\346\304\336dA]F\2164\316r\254[{\201\220\306\274\327\242\256t8\r\177\014\343`\325*\341\306\314\321\375=2,U\244Ba0\242\rY4_\265\303\003\326\272\355\314jN2\216\344Lhz\020dd\023\004\212\005\343^\347\017/V+c mmq\224;C\263f|\377\355\247\202\327a+\365\023\217\357\023\t\030\304\320\330\261\317mDK\r\310\221+\362\010\251F\315,.\033152\2749\021A\315\347Z\026b\231\342uL(\201\211\320\020f\025dD\235\2557l\324\303*\212\370L\316A<(\361\343\205\343\322c@\312\366\222`F\364\241\301@B\263@\030\014\203/!E\205\024S\264]\242S\000\316g\214\014*\260\3002\350\2251\326\3012\204r\2039\002H\243\025<\352y\251+\246\270\303\200z\225\241{\"Lss{\252d1j\3601\361UmZ\253\241W\026\032EYjZ\270\n,#\346\342/\314\344\255\243\245q\350\\\312\211gPkY\031`\301i\213_uDs@\261\310\270e\0200\026\207\256\354q\033J@\310\204N\240\330`Fr\212_5\2542a\230+\216\302\032\220\022\006\270\200fCT\002\357X+\220\"h(Yu\317;\264\204\246Qq(25U\314\315\311\233\256D\035\014\361\20760\260\014,\341USYh\357\204CK\232\336C \325\316@\301\273O1\230\340\337\275\030\330a\254`\374\364\020\355\273\204\356\345\2727\344\242\034fm\302c\361p\360tt\243\006[K\006\226\265\330E3\023#^\334\r\004\230'C;\300\360I\215\231_\227\344\305\305n:\006\272\334|F\3025S^\224\017\273\206\365\322\303K\016\261\262\216\301\221f&\362DC\303P\276\372\345\027\335\234\032\206\324b\265\222\3305\261-h3\230#\0231\337\316\372\345g\2600\223\225\254\266\007E\312*\375\314\005\240\240\342-\002\204R\214W\347\244\261\272C<@\212\264\nF\031\034\005\025T5x.\021\212\220\331\220K\212\341\213\340\310\263WH\220\211W\222Z\030\000\305\014p\246\241L\360\200Ah\205\2764}*:\016W\365&\211U.\014\021,%%\022$\341\nOT)\335\241\304F\246\"\"%t\316\366\252\003\030\226\026$\2268\326\033z\211\325\365\272\310\340\341o\335\334\373\240S\217\360Va\"\232\200\345[\277\217\213\310\253;\037\344|\335cX\302M\221\334\2112#""\021\177Q\3221%>\262\306\221\014V\217<}\205G\257\272\253\246\343\244\244z\324\306\215R\214\201\370\314%\262Q\254\n\244\246&\rb\373\211tx\311\270\326\206\302\246\303\2121U\037\034T\362\255\365A\243T\260O\226\372\347\2144\r\227\326\244\322\260\310)\017\025\274\354\234\212\356c\374\032C\001\260\250.1\002ee\315h\277\247\316\004\262\0072\364j\205\267\346\n0}\007\363o@M|\354mZ\204\360\252?4.f\237\306\320,\323\206\033\306\313\017\005B\325\212\024g\303\266\251\324i\331\336*.\355\236\202\352\327\335\017D\363\311@\274nQ8\360\314\235'U\356NG\217K\036G\320\347anecR\346@\234\363'\026,\374\\\006\017\364s;\207\0010\202\261\211\327\323\361\021w\366\267\216_\351\255\3741\211\312>\223u\223\210\333i;\327\350\031v\351\253\007\021U6\002\313[B\245\\\252V;N\316\322\264\227\261]\231\236F \212\0140\343\214X\272\024g\261\311$\241\025\241ef\035\350\306L\261\0236R\210{\305\334\221N\024$.s\004\340\200";
+    PyObject *data = __Pyx_DecompressString(cstring, 1725, 2);
     if (unlikely(!data)) __PYX_ERR(0, 1, __pyx_L1_error)
     const char* const bytes = __Pyx_PyBytes_AsString(data);
     #if !CYTHON_ASSUME_SAFE_MACROS
     if (likely(bytes)); else { Py_DECREF(data); __PYX_ERR(0, 1, __pyx_L1_error) }
     #endif
-    #elif (CYTHON_COMPRESS_STRINGS) != 0 /* compression: zlib (1482 bytes) */
-const char* const cstring = "x\332}T\315S\0337\024\217'_@M\301|$$\320f\235\217f\232\006gLh\232i\233v\266\340\200\247\201`\003\241\355\244\325\210]\331V\263\336\265w\265\304f:\223\034}\324QG\035u\334\243\217\034s\364\321G\376\204\374\t}\332\265\363\005\355\214W\322\223\236\364\336\373\375~\317\271M\217\021\203\32503V\332\254\346\271\006\r\014\2338t\237\370\230\021\247m\004\314\247\026#\276vr\215\255\302\326\342\362\303e\003\273\266\341\223\277\211\305\002#\010\367-\007\007\001\t\014\257b\354\207\324a\3245X\273A\202\234Q\254\030m/4\\Bl\203yF\003\374>\274\300j\3045\002\302\364\302\270\215]\327c\230Q\317Ep\235\272\325\333\206M}\010B\017\210\276\375\030;\001\311\375\214m\033\201#\261i\200\367\035B\\=Vp\300\220\345\023\314B\037\0027\332\255\252E\203\344\314v=(\252\202C\207\031\010\371\304\016-\202\220a\207\361\253\256\347.B\221\007\024;pjQ\2272\204\334\260\336h\347\220\345\371$W\207{\024\373>n\033\025L\235\244\022Zox>\373\320-\254cV;\341\361\243\006\320\255\006^\350[\344'\263\274\361\264\2742\310r\335c\246~\365S;\367.G+\346\004\241S<\000\264\000\260\372\037\237*a\310\306\014\2378\240\256MZ\250\342\371(\244\366\211\323\006\201D\0331\t\201\205\335\023\347A\333\265V\013;\205\225\235\342\323\315\365\202Y.n\256\241\262\271\271VX\337B+\273\3452L\033\346o\033\205'\205\002Z\335XCh\253\335\202o\025d\2046I\213\225Ie\273\270\266\276\223\\\332.\376Q@\273\233\305\235\355\355\235\202\371dg}\033\252\3021\345\270J\260_\367|\254CR/\007({!h\213\004\026\360\244\025\204\240F\312H}`\002\357C\005hN\\\000\310e\301\360H\303\005\006\334G\024\004\346c\213\354c\353\305;\315\3306\241\254\035\017\210\202\301\264\360<\227T*(\240\325\032#\315\2206\352\304}\277\200\030\241\313>V^\005D@bd\021\252\204.d\n9\016\251\210\215\2046T\365\034\273\006\005\306\003(d0!\037\273URk +\364a\254\343\026\215\371\372\2104\032 \354\000B0[5\352\330H/\206\350\300\272\341\223\252\013\265\3032\200\006\321\255\244a\n\034\317\202_\322a\3604\215G\207\324\241\225\302z\235\200+\262\353U\330\364\354\320!z\036\026\003\236.\256\303\226\333\2105\037\03740t@r\376""\211j\032\224@\007{\r\204\240\021\321\240\342f\210\235\344\221\367MxB\352\3576\240Z\004\2749\025\375\351\020\361\334\212\307v\254\377AF\260\0324\367\007]\201N\351\220\200\264b\"\343!\3019\240\207\361\207B\350\372 h\020\213\222\341\004\"\210%\0230\202\035V\323\"D\210\021 [gs\200\235\220\004\0074\240\360\007\323j\037\2766\217G>\353<\340S|\211o\213\013\302\2223\262\324OO\363|\177\344\272\314\312e\031*S\225\372#\243\361&\177,n\211\246<'\013*\243\262\375\364%\216y[\216\251\254\312\367\323\227yS\214\311E\325\214R\375\364\025\221\021w%M\214y\221\027\233\275;?t\363]\263\237\236\023)1/7\243l\224\037>zWb\331\034\370\251{\335L\027\336\276&\232=c)\312\035\245\2162C\277{I\330\253\"+\036\251\317#\0345\207\317\255C\232{Q\261[\352\342\327\346\333\2513\243\323<\333\037\231\344\251\343\221t\247\300g!Q& \336\0147\371\216\230\025X\300\325\211N\310\013bZ\024\345\266:\247\nQ\246?\t\241&\371Y\010\266&\226\304\256\274)\367\325Y\225Wk\321R\264\253\263\232\003\220\366\345y\r\322D\307\347\323\334\354O^\346/a\357\254\374V]P\270\237\231\346\3679\356O\316\362=\361\013\000:++\nP\326\261\314\376\310xgW'6\321i\213\024$\232>3z\t\200O\211L\037xX\352\224;\014\240\207\024&\000\346\263\000\377a4\025\335\217\260\216\306\370\003\310\025\342\315\360\365\336BNU\243R\177fN\\\024L~\257\312\252y<<\250D\246>\030\223\327%DLw\212\034\010L\367\322\013\302|;rft|\200GS\307\031\005\236\262z\221\3423|\027p\205\350\343\235=@\t*\234\342Y\036\333\273\374\206\266O[<\217\301|\245\3601\244\330\344)\235\236\311\237\301;\223\263\275\331;@\327d\206_\005bM\261#\257$\346\027p#\000u\345\345\252\032\001\201\300\326<\234\227\204-\277\006%\r<\264\316~U\315S\314+:O\261*/Jm\36627\340\245\025\331T)5\243\376\354f\343\275[\262$--\027\265\254^u\261\276\366% \225\227\246\374]Y\321LT\216\342\267.\213\363\020\230\310\373\322\211\342\344\026\200\366\333p\361\206z\336]8*\351\255k\232\360\336W\017\273\251\241\265\007r\333\216&\272\377\274\311\307\321n\016\342g\342\252\007\216_\212CH\250\244\211\212\254\356\334\321\374\0333\211x1&\367\273\004""\214k2\325\313\346\243L\264\330}y\364\242W*'W_BK\004*\327\275\320\265\217\262\377\261\265\000\220f\000\307\207jI\375\005\315\265\361F+\230\317%\372\226\251\004+\335\261)\2319Nx\030\320q\014\224\217C\341X\264d\363u\254O\306\037\001\304\246|\246\362\257S\375sc\235ox\351_\010\034\266\307";
-    PyObject *data = __Pyx_DecompressString(cstring, 1482, 1);
+    #elif (CYTHON_COMPRESS_STRINGS) != 0 /* compression: zlib (1587 bytes) */
+const char* const cstring = "x\332\315T\315s\323F\024\217'\001\222\324!1IH\200\024d>\312\224\022S\007J\231\266\264\243&&\361\224\004l'\244\355\320\356l\244\265\275E\226d\355\nl\2463p\364QG\035\367\270G\035}\314\221\243\217>\346O\340O\350[\311\346+)3L/\235\261\367\353\275\335\367\336\357\367{\312m9\234h\274\216\271\266\332\346u\307\326(\323Lb\321=\342aN\254\266\306\270G\rN<\345dk\017\013\017\227o\335\271\245a\333\324<\362\02718\323\230\277gX\2301\3024\247\252\355\371\324\342\324\326x\333%,\247\025\253Z\333\3615\233\020S\343\216\346\202\337\273\027x\235\330\032#\\-\264\253\330\266\035\2169ul\004\327\251]\273\252\231\324\203 \364)Q\267\357a\213\221\334O\3304\0218\022\2232\274g\021b\253\261\212\031G\206G0\367=\010\354\266[5\203\262\304f\332\016\024U\305\276\3055\204<b\372\006AH3\375\370U\333\261\227\241\310\247\024[`5\250M9B\266\337p\3339d8\036\3115\340\036\305\236\207\333Z\025S+\251\2046\\\307\343\357\272\371\r\314\353\207<~P\000\3325\346\370\236A~\324\313\233\017\312\253\203,7\034\256\253W?\334\347\336\344h\304\234 t\204\007\200\306\000\253\217\370\324\010G&\346\370\220\201\332&i\241\252\343!\237\232\207\254.\201D\335\230\004f`\373\220\235\265m\343\310C\344:\214\252{\354h3\320\016I\257\025\266\013\253\333\305\007[\033\005\275\\\334ZGe}k\275\260\361\020\255\356\224\3130m\352\277n\026\356\027\nhms\035\241\207\355\026\374\327@\201h\213\264x\231T+\305\365\215\355\344R\245\370{\001\355l\025\267+\225\355\202~\177{\243\002\200\340X-\270F\260\327p<\254\"S'\007\0049>\310\2220\003(V\342C\000\017\345\2441\330\202d\206\342Qt\332\200\255\315\331\320\244\220\206\r\334G\024\264\351a\203\354a\343\311\033\271\275Y \356 \337\005\324\211i\022\312\333\361\200(l\270\222\261c\223j\0251Z\253s\322\364\251\333 \366\333\005\204\365m\376\276\216\253 )\022\363\204P\325\007\020U\332Cb\343M\"\002Ts,\263\0165\307\003\350m0!\017\3335Rw\221\341{06p\213R\263\025\013\340=\025P\206\260\005\270\301l\324\251e\"\265\030b\006k\327#5\033\020\201%\203\216S\275\251\300c\226c\300/iYx\235\306\243E\032\320\233~\243A\300\025\231\215\032\034:""\246o\0215\017\353\001O\0337\340\310v\343&\212\r.\206\226J\354\037\310\320\245\004>\t\216\213\020t6\032\024\335\364\261\225<\362\266\253\017\365\316\233\003\250\026\001\233VU\375U\210xn\305c;n\250AF\260\032|-\336i3tD\3131\322\212\271\214\207\004jF\237\307\177\344\303g\2041\227\030\224\014'\320A,$\306\t\266x]I\363\375\276y\247M\020\342\004\204\240\322|\212-\237\260\247\224Q\370\224\265\332\317_\352\257O\216L\234\354M]\024\331\376\370To\352\353(\365\372\370\310\304T\247\020d\372\351S\301\345\240!n\211\246L\311\205(\325OOwx\260\022\224\3723`\234\tR\301\\\260\023f\303\274\362\314\0060Muv\202K`?r\3618\234\017q\370Bb\365N3H\365g\346\002=x\004\327g2\301\3310\037\352\341\2668#\263j\3739x2\221\025y\261&\307!2\034\235\003{)4\305\2272?\364h\2121\361\213l\036\261=\243\322\n\327\304\t\241\266\275\314%xi5\256cN\376\321\315\306gWDI\0302#\263\362\226|\321\305\352\332\005qL\224z_\334\351\246\206\273]\251\313J4\335\375\373U>\276ty\360LF9,\306\0255E*\tyE-E&\001\365L8\252J\352\217\177\326Y\351T\202\261@W\220\035\013J\001\324?u0\236\006\210\347\003\0344\325\361D\230\t\263\377\005\322\227\372\001\004\272\035\234\002z*\341\361\320\020s\002<f\341\205q\340\0268\364\241\220R\177|\">\014\356\305\311\216\211\202\252\277\237>\r\211\264\305$@\001\021\027\202f8)\226eS1~\0062\273.h\2629\007\025m\365\256}\337\315w\241\232\3050\025\236\023[Q6\312\017\037\275.0\000\236\370\311\033\335\014 \235\276\0206{\332J\224\333O\355g\206~7\222\260g\241\322\273\362d\204\243\346\360\271\rHs7*vK]\250\351\365\251\221\211\331\000\224\t\300\274E\214+t\224t\266\023\370\225\234\374\240\020\316\206EQ\221c\262\020e\006\002\035\205`\353\341J\270#.\213=9*\363r=Z\211vTV\213\000\322\236b[\335\366\202Y\240gf!x\006g\243\342\033y\034D\232\231\rn\002W3\363\301n\3703\000:/\252\022PV\261\200UE\002$6\335i\207)H4=2q\032\200O\205\231\204\36024J^\2450\r0\217\002\374\317\243S\321\315\010'-t\033r\325\225\3747zK9Y\213J\375\271\305\360D\310\305w\262,\233\007CC5\322\225aR\\\024\0201\335)\002\351\343\351^z)\324_\217'M\372Q\005Muv\001\245""\322'J\351\340Pw\316\367\346\257%m\371\377\350\322\363\200T^\350\3427iDsQ9\212\337Z\010\217A`\"n\n+\212\223[\002\332\257\302\305K\362qwi\277\364\311\355\rU\017\034\317\207\317!\241\222\"*2\272\213\373\347^\351I\304\0231\271\337&`\\\020\251^6\037e\242\345\356\263\375'\275R9\271\372\014Z\202\311\\\367x\327\334\317\376\313\321\022@\232\001\034\357\310\025\371'4\327\346\253\217|^\016\022\036\006t\034\000\345SP8\016[\242\3712\326'\017\356\002\304\272x$\363/S\375\261\311\316WA\351\037\227\033\217\351";
+    PyObject *data = __Pyx_DecompressString(cstring, 1587, 1);
     if (unlikely(!data)) __PYX_ERR(0, 1, __pyx_L1_error)
     const char* const bytes = __Pyx_PyBytes_AsString(data);
     #if !CYTHON_ASSUME_SAFE_MACROS
     if (likely(bytes)); else { Py_DECREF(data); __PYX_ERR(0, 1, __pyx_L1_error) }
     #endif
-    #else /* compression: none (2410 bytes) */
-const char* const bytes = ".Note that Cython is deliberately stricter than PEP-484 and rejects subclasses of builtin types. If you need to pass subclasses then set the 'annotation_typing' directive to False.?add_notedisableenablefast_creatures.pyxgcisenabledno default __reduce__ due to non-trivial __cinit__numpy._core.multiarray failed to importnumpy._core.umath failed to import<stringsource>ARMORCreatureHotArrayCreatureHotArray.__reduce_cython__CreatureHotArray.__setstate_cython__CreatureHotArray.get_dataCreatureHotArray.index_for_uidCreatureHotArray.perception_scanCreatureHotArray.syncDETECTIONHEARING_RANGEHP_CURRHP_MAXMELEE_DMG__Pyx_PyDict_NextRefSIGHT_RANGESIZE_UNITSSTEALTHStatactiveagearmorasyncio.coroutinesc__class_getitem__classes.creature._constantsclasses.statscline_in_tracebackcreaturesddeitydeity_iddetectioneff_sightequipmentequipment_countfast_creaturesfather_uid__func__getget_data__getstate__goldheardhearinghearing_rangehp_curhp_maxiindexindex_for_uidis_aliveis_child_is_coroutineis_pregnantis_sleepingitemsloclocation__main__malemediummelee_dmg__module__mother_uidn__name__npnumpyotherpartner_uidperception_scanpietypop__pyx_state__qualname____reduce____reduce_cython____reduce_ex__sselfself_uidself_xself_y__set_name__setdefault__setstate____setstate_cython__sexsightsight_rangesizesize_unitsspeciesspecies_idstatsstealthsync__test__uidvaluesvisiblexyz\200A\340\010\013\2106\220\022\2202\220S\230\006\230c\240\024\240Q\330\014\023\2201\330\010\"\240!\2404\240u\250A\250Q\330\010\t\330\014\023\2201\220F\230%\230q\240\004\240E\250\021\250!\330\014\026\220a\220y\240\n\250!\2501\330\014\027\220q\230\n\240-\250q\260\001\330\014\031\230\021\230,\240i\250q\260\001\330\014\033\2301\230N\320*;\2701\270A\330\014\030\230\001\230\033\240N\260!\2601\330\014\023\2201\220F\230,\240a\240q\330\014\033\2301\230N\250/\270\021\270!\330\014\037\230q\320 2\260.\300\001\300\021\330\014\023\2201\220F\230/\250\021\250!\330\014\032\230!\230=\250\016\260a\260q\330\014\030\230\001\230\033\240H\250A\250W\260I\270Q""\270a\200A\360\022\000\t\023\220!\330\010\020\220\001\340\010\014\210E\220\025\220a\220t\2301\330\014\024\220A\220T\230\025\230a\230q\330\014\017\210u\220E\230\023\230I\240S\250\004\250E\260\021\330\020\021\330\014\020\220\003\2201\220G\2302\230U\240$\240b\250\003\2501\250G\2602\260U\270!\330\014\030\230\006\230b\240\005\240Q\330\014\017\210r\220\023\220A\330\020\027\220w\230b\240\003\2405\250\006\250a\330\021\023\2203\220a\330\020\025\220W\230B\230c\240\025\240f\250A\340\010\017\210u\220A\330\010\r\210U\220!\330\010\017\210y\230\001\200A\360\014\000\t\026\220S\230\001\230\021\330\010\013\2102\210R\210t\2201\330\014\020\220\017\230q\240\003\2404\240z\260\022\2603\260a\330\014\017\210t\2206\230\023\230A\330\020\024\220H\320\034.\250g\260Q\330\024\030\230\007\230t\240:\250R\250q\340\020\024\220H\320\034.\250f\260A\330\024\030\230\n\240\"\240A\330\010\014\210I\220Q\330\010\014\320\014\034\230A\360\010\000\t\r\210E\220\025\220a\220q\330\014\020\220\t\230\021\230!\330\014\020\220\001\220\024\220U\230!\2301\330\014\r\210W\220A\220Q\330\014\022\220!\2201\330\014\r\210U\220#\220Q\330\014\r\210U\220#\220Q\330\014\r\210U\220#\220Q\330\014\r\210\\\230\025\230a\230\177\250a\340\014\017\210q\220\001\330\020\024\220A\220V\2301\330\020\025\320\025*\250!\330\020\021\220\032\2301\230A\230T\240\031\250!\330\020\021\220\035\230a\230s\240!\2401\240D\250\010\260\001\330\020\021\220\033\230A\230Q\230d\240)\2501\330\020\021\220\035\230a\230q\240\004\240K\250q\330\020\021\220\035\230a\230q\240\004\240K\250q\330\020\021\220\031\230!\2301\230D\240\007\240q\330\020\021\320\021#\2401\240C\240q\250\001\250\024\250]\270!\330\020\021\320\021%\240Q\240c\250\021\250!\2504\250\177\270a\330\020\021\220\036\230t\2401\240A\240Y\250c\260\024\260R\260q\330\020\021\220\027\230\005\230Q\230e\2403\240l\260!\330\020\021\220\034\230U\240'\250\021\250#\250\\\270\034\300Q\330\020\021\220\037\240\005\240Q\320&8\270\001\330\020\021\220\037\240\005\240W\250A\250S\260\017\270|\3101\330\020\021\320\021$\240C\240q""\250\001\250\021\330\020\025\320\0258\270\001\330\020\021\220\036\230z\250\024\250Q\250g\260Q\260c\270\030\300\033\310A\330\020\021\220\027\230\007\230q\240\003\2407\250!\330\020\021\220\037\240\001\320!1\260\021\260-\270w\300k\320QR\330\020\021\220\036\230w\240a\240s\250.\270\006\270d\300!\330\020\021\220\036\230w\240a\240s\250.\270\006\270d\300!\330\020\021\220\034\230T\240\021\240!\2408\2502\250^\2701\270M\310\021\330\020\021\220\030\230\025\230a\230q\240\001\330\020\021\220\031\230%\230q\240\001\240\021\340\020\021\220\032\2301\330\020\021\220\032\2301\340\014\020\220\r\230Q\230a\230x\240q\200A\340\010\017\210t\220=\240\004\240A\240V\2501\200\001\330\004\n\210+\220Q";
+    #else /* compression: none (2973 bytes) */
+const char* const bytes = ".Note that Cython is deliberately stricter than PEP-484 and rejects subclasses of builtin types. If you need to pass subclasses then set the 'annotation_typing' directive to False.?add_notedisableenablefast_creatures.pyxgcisenabledno default __reduce__ due to non-trivial __cinit__numpy._core.multiarray failed to importnumpy._core.umath failed to import<stringsource>ARMORCreatureHotArrayCreatureHotArray.__reduce_cython__CreatureHotArray.__setstate_cython__CreatureHotArray.get_dataCreatureHotArray.index_for_uidCreatureHotArray.perception_scanCreatureHotArray.syncCreatureHotArray.sync_positionsCreatureHotArray.sync_subsetDETECTIONHEARING_RANGEHP_CURRHP_MAXMELEE_DMG__Pyx_PyDict_NextRefSIGHT_RANGESIZE_UNITSSTEALTHStatactiveagearmorasyncio.coroutinesc__class_getitem__classes.creature._constantsclasses.statscline_in_tracebackcreaturescreatures_to_updateddeitydeity_iddetectioneff_sightequipmentequipment_countfast_creaturesfather_uid__func__getget_data__getstate__goldheardhearinghearing_rangehp_curhp_maxiidxindexindex_for_uidis_aliveis_child_is_coroutineis_pregnantis_sleepingitemsloclocation__main__malemediummelee_dmg__module__mother_uidn__name__npnumpyotherpartner_uidperception_scanpietypop__pyx_state__qualname____reduce____reduce_cython____reduce_ex__sselfself_uidself_xself_y__set_name__setdefault__setstate____setstate_cython__sexsightsight_rangesizesize_unitsspeciesspecies_idstatsstealthsyncsync_positionssync_subset__test__uidvaluesvisiblexyz\200A\360\016\000\t\016\320\r\"\240!\330\010\r\320\r0\260\001\360\006\000\t\r\210E\220\021\330\014\022\220$\220m\2404\240q\250\001\250\027\260\001\330\014\017\210t\2202\220Q\330\020\021\330\014\020\220\001\220\024\220U\230!\2301\330\014\022\220!\2201\330\014\r\210U\220#\220Q\330\014\r\210U\220#\220Q\330\014\r\210U\220#\220Q\330\014\r\210\\\230\025\230a\230\177\250a\330\014\017\210q\220\001\330\020\024\220A\220V\2301\330\020\021\220\032\2301\230A\230T\240\031\250!\330\020\021\220\035\230a\230s\240!\2401\240D\250\010\260\001\330\020""\021\220\033\230A\230Q\230d\240)\2501\330\020\021\220\035\230a\230q\240\004\240K\250q\330\020\021\220\035\230a\230q\240\004\240K\250q\330\020\021\220\031\230!\2301\230D\240\007\240q\330\020\021\320\021#\2401\240C\240q\250\001\250\024\250]\270!\330\020\021\320\021%\240Q\240c\250\021\250!\2504\250\177\270a\330\020\021\220\037\240\005\240Q\320&8\270\001\330\020\021\220\037\240\005\240W\250A\250S\260\017\270|\3101\330\020\021\320\021$\240C\240q\250\001\250\021\330\020\021\220\030\230\025\230a\230q\240\001\330\020\021\220\031\230%\230q\240\001\240\021\200A\360\016\000\t\031\230\003\2301\230A\330\010\013\2102\210S\220\004\220A\330\014\020\220\005\220Q\220a\330\014\r\340\010\014\210E\220\025\220a\220q\330\014\020\220\t\230\021\230!\330\014\020\220\001\220\024\220U\230!\2301\330\014\022\220!\2201\330\014\r\210U\220#\220Q\330\014\r\210U\220#\220Q\330\014\r\210U\220#\220Q\330\014\r\210\\\230\025\230a\230\177\250a\200A\340\010\013\2106\220\022\2202\220S\230\006\230c\240\024\240Q\330\014\023\2201\330\010\"\240!\2404\240u\250A\250Q\330\010\t\330\014\023\2201\220F\230%\230q\240\004\240E\250\021\250!\330\014\026\220a\220y\240\n\250!\2501\330\014\027\220q\230\n\240-\250q\260\001\330\014\031\230\021\230,\240i\250q\260\001\330\014\033\2301\230N\320*;\2701\270A\330\014\030\230\001\230\033\240N\260!\2601\330\014\023\2201\220F\230,\240a\240q\330\014\033\2301\230N\250/\270\021\270!\330\014\037\230q\320 2\260.\300\001\300\021\330\014\023\2201\220F\230/\250\021\250!\330\014\032\230!\230=\250\016\260a\260q\330\014\030\230\001\230\033\240H\250A\250W\260I\270Q\270a\200A\360\022\000\t\023\220!\330\010\020\220\001\340\010\014\210E\220\025\220a\220t\2301\330\014\024\220A\220T\230\025\230a\230q\330\014\017\210u\220E\230\023\230I\240S\250\004\250E\260\021\330\020\021\330\014\020\220\003\2201\220G\2302\230U\240$\240b\250\003\2501\250G\2602\260U\270!\330\014\030\230\006\230b\240\005\240Q\330\014\017\210r\220\023\220A\330\020\027\220w\230b\240\003\2405\250\006\250a\330\021\023\2203\220a\330\020\025""\220W\230B\230c\240\025\240f\250A\340\010\017\210u\220A\330\010\r\210U\220!\330\010\017\210y\230\001\200A\360\014\000\t\026\220S\230\001\230\021\330\010\013\2102\210R\210t\2201\330\014\020\220\017\230q\240\003\2404\240z\260\022\2603\260a\330\014\017\210t\2206\230\023\230A\330\020\024\220H\320\034.\250g\260Q\330\024\030\230\007\230t\240:\250R\250q\340\020\024\220H\320\034.\250f\260A\330\024\030\230\n\240\"\240A\330\010\014\210I\220Q\330\010\014\320\014\034\230A\360\010\000\t\r\210E\220\025\220a\220q\330\014\020\220\t\230\021\230!\330\014\020\220\001\220\024\220U\230!\2301\330\014\r\210W\220A\220Q\330\014\022\220!\2201\330\014\r\210U\220#\220Q\330\014\r\210U\220#\220Q\330\014\r\210U\220#\220Q\330\014\r\210\\\230\025\230a\230\177\250a\340\014\017\210q\220\001\330\020\024\220A\220V\2301\330\020\025\320\025*\250!\330\020\021\220\032\2301\230A\230T\240\031\250!\330\020\021\220\035\230a\230s\240!\2401\240D\250\010\260\001\330\020\021\220\033\230A\230Q\230d\240)\2501\330\020\021\220\035\230a\230q\240\004\240K\250q\330\020\021\220\035\230a\230q\240\004\240K\250q\330\020\021\220\031\230!\2301\230D\240\007\240q\330\020\021\320\021#\2401\240C\240q\250\001\250\024\250]\270!\330\020\021\320\021%\240Q\240c\250\021\250!\2504\250\177\270a\330\020\021\220\036\230t\2401\240A\240Y\250c\260\024\260R\260q\330\020\021\220\027\230\005\230Q\230e\2403\240l\260!\330\020\021\220\034\230U\240'\250\021\250#\250\\\270\034\300Q\330\020\021\220\037\240\005\240Q\320&8\270\001\330\020\021\220\037\240\005\240W\250A\250S\260\017\270|\3101\330\020\021\320\021$\240C\240q\250\001\250\021\330\020\025\320\0258\270\001\330\020\021\220\036\230z\250\024\250Q\250g\260Q\260c\270\030\300\033\310A\330\020\021\220\027\230\007\230q\240\003\2407\250!\330\020\021\220\037\240\001\320!1\260\021\260-\270w\300k\320QR\330\020\021\220\036\230w\240a\240s\250.\270\006\270d\300!\330\020\021\220\036\230w\240a\240s\250.\270\006\270d\300!\330\020\021\220\034\230T\240\021\240!\2408\2502\250^\2701\270M\310\021\330\020\021\220\030""\230\025\230a\230q\240\001\330\020\021\220\031\230%\230q\240\001\240\021\340\020\021\220\032\2301\330\020\021\220\032\2301\340\014\020\220\r\230Q\230a\230x\240q\200A\340\010\017\210t\220=\240\004\240A\240V\2501\200\001\330\004\n\210+\220Q";
     PyObject *data = NULL;
     CYTHON_UNUSED_VAR(__Pyx_DecompressString);
     #endif
     PyObject **stringtab = __pyx_mstate->__pyx_string_tab;
     Py_ssize_t pos = 0;
-    for (int i = 0; i < 118; i++) {
+    for (int i = 0; i < 124; i++) {
       Py_ssize_t bytes_length = index[i].length;
       PyObject *string = PyUnicode_DecodeUTF8(bytes + pos, bytes_length, NULL);
       if (likely(string) && i >= 14) PyUnicode_InternInPlace(&string);
@@ -8548,7 +9753,7 @@ const char* const bytes = ".Note that Cython is deliberately stricter than PEP-4
       stringtab[i] = string;
       pos += bytes_length;
     }
-    for (int i = 118; i < 123; i++) {
+    for (int i = 124; i < 131; i++) {
       Py_ssize_t bytes_length = index[i].length;
       PyObject *string = PyBytes_FromStringAndSize(bytes + pos, bytes_length);
       stringtab[i] = string;
@@ -8559,15 +9764,15 @@ const char* const bytes = ".Note that Cython is deliberately stricter than PEP-4
       }
     }
     Py_XDECREF(data);
-    for (Py_ssize_t i = 0; i < 123; i++) {
+    for (Py_ssize_t i = 0; i < 131; i++) {
       if (unlikely(PyObject_Hash(stringtab[i]) == -1)) {
         __PYX_ERR(0, 1, __pyx_L1_error)
       }
     }
     #if CYTHON_IMMORTAL_CONSTANTS
     {
-      PyObject **table = stringtab + 118;
-      for (Py_ssize_t i=0; i<5; ++i) {
+      PyObject **table = stringtab + 124;
+      for (Py_ssize_t i=0; i<7; ++i) {
         #if CYTHON_COMPILING_IN_CPYTHON_FREETHREADING
         #if PY_VERSION_HEX < 0x030E0000
         if (_Py_IsOwnedByCurrentThread(table[i]) && Py_REFCNT(table[i]) == 1)
@@ -8644,29 +9849,39 @@ static int __Pyx_CreateCodeObjects(__pyx_mstatetype *__pyx_mstate) {
     __pyx_mstate_global->__pyx_codeobj_tab[0] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_fast_creatures_pyx, __pyx_mstate->__pyx_n_u_sync, __pyx_mstate->__pyx_kp_b_iso88591_A_S_2Rt1_q_4z_3a_t6_A_H_gQ_t_Rq, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[0])) goto bad;
   }
   {
-    const __Pyx_PyCode_New_function_description descr = {6, 0, 0, 12, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 124};
+    const __Pyx_PyCode_New_function_description descr = {2, 0, 0, 7, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 124};
+    PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_self, __pyx_mstate->__pyx_n_u_creatures, __pyx_mstate->__pyx_n_u_i, __pyx_mstate->__pyx_n_u_n, __pyx_mstate->__pyx_n_u_d, __pyx_mstate->__pyx_n_u_c, __pyx_mstate->__pyx_n_u_loc};
+    __pyx_mstate_global->__pyx_codeobj_tab[1] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_fast_creatures_pyx, __pyx_mstate->__pyx_n_u_sync_positions, __pyx_mstate->__pyx_kp_b_iso88591_A_1A_2S_A_Qa_E_aq_U_1_1_U_Q_U_Q, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[1])) goto bad;
+  }
+  {
+    const __Pyx_PyCode_New_function_description descr = {2, 0, 0, 9, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 145};
+    PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_self, __pyx_mstate->__pyx_n_u_creatures_to_update, __pyx_mstate->__pyx_n_u_Stat, __pyx_mstate->__pyx_n_u_SIZE_UNITS, __pyx_mstate->__pyx_n_u_d, __pyx_mstate->__pyx_n_u_idx, __pyx_mstate->__pyx_n_u_c, __pyx_mstate->__pyx_n_u_loc, __pyx_mstate->__pyx_n_u_s};
+    __pyx_mstate_global->__pyx_codeobj_tab[2] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_fast_creatures_pyx, __pyx_mstate->__pyx_n_u_sync_subset, __pyx_mstate->__pyx_kp_b_iso88591_A_0_E_m4q_t2Q_U_1_1_U_Q_U_Q_U_Q, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[2])) goto bad;
+  }
+  {
+    const __Pyx_PyCode_New_function_description descr = {6, 0, 0, 12, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 182};
     PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_self, __pyx_mstate->__pyx_n_u_self_uid, __pyx_mstate->__pyx_n_u_self_x, __pyx_mstate->__pyx_n_u_self_y, __pyx_mstate->__pyx_n_u_sight, __pyx_mstate->__pyx_n_u_hearing, __pyx_mstate->__pyx_n_u_i, __pyx_mstate->__pyx_n_u_d, __pyx_mstate->__pyx_n_u_eff_sight, __pyx_mstate->__pyx_n_u_other, __pyx_mstate->__pyx_n_u_visible, __pyx_mstate->__pyx_n_u_heard};
-    __pyx_mstate_global->__pyx_codeobj_tab[1] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_fast_creatures_pyx, __pyx_mstate->__pyx_n_u_perception_scan, __pyx_mstate->__pyx_kp_b_iso88591_A_E_at1_AT_aq_uE_IS_E_1G2U_b_1G2, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[1])) goto bad;
+    __pyx_mstate_global->__pyx_codeobj_tab[3] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_fast_creatures_pyx, __pyx_mstate->__pyx_n_u_perception_scan, __pyx_mstate->__pyx_kp_b_iso88591_A_E_at1_AT_aq_uE_IS_E_1G2U_b_1G2, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[3])) goto bad;
   }
   {
-    const __Pyx_PyCode_New_function_description descr = {2, 0, 0, 3, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 151};
+    const __Pyx_PyCode_New_function_description descr = {2, 0, 0, 3, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 209};
     PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_self, __pyx_mstate->__pyx_n_u_index, __pyx_mstate->__pyx_n_u_d};
-    __pyx_mstate_global->__pyx_codeobj_tab[2] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_fast_creatures_pyx, __pyx_mstate->__pyx_n_u_get_data, __pyx_mstate->__pyx_kp_b_iso88591_A_6_2S_c_Q_1_4uAQ_1F_q_E_ay_1_q, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[2])) goto bad;
+    __pyx_mstate_global->__pyx_codeobj_tab[4] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_fast_creatures_pyx, __pyx_mstate->__pyx_n_u_get_data, __pyx_mstate->__pyx_kp_b_iso88591_A_6_2S_c_Q_1_4uAQ_1F_q_E_ay_1_q, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[4])) goto bad;
   }
   {
-    const __Pyx_PyCode_New_function_description descr = {2, 0, 0, 2, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 171};
+    const __Pyx_PyCode_New_function_description descr = {2, 0, 0, 2, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 229};
     PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_self, __pyx_mstate->__pyx_n_u_uid};
-    __pyx_mstate_global->__pyx_codeobj_tab[3] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_fast_creatures_pyx, __pyx_mstate->__pyx_n_u_index_for_uid, __pyx_mstate->__pyx_kp_b_iso88591_A_t_AV1, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[3])) goto bad;
+    __pyx_mstate_global->__pyx_codeobj_tab[5] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_fast_creatures_pyx, __pyx_mstate->__pyx_n_u_index_for_uid, __pyx_mstate->__pyx_kp_b_iso88591_A_t_AV1, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[5])) goto bad;
   }
   {
     const __Pyx_PyCode_New_function_description descr = {1, 0, 0, 1, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 1};
     PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_self};
-    __pyx_mstate_global->__pyx_codeobj_tab[4] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_stringsource, __pyx_mstate->__pyx_n_u_reduce_cython, __pyx_mstate->__pyx_kp_b_iso88591_Q, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[4])) goto bad;
+    __pyx_mstate_global->__pyx_codeobj_tab[6] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_stringsource, __pyx_mstate->__pyx_n_u_reduce_cython, __pyx_mstate->__pyx_kp_b_iso88591_Q, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[6])) goto bad;
   }
   {
     const __Pyx_PyCode_New_function_description descr = {2, 0, 0, 2, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 3};
     PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_self, __pyx_mstate->__pyx_n_u_pyx_state};
-    __pyx_mstate_global->__pyx_codeobj_tab[5] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_stringsource, __pyx_mstate->__pyx_n_u_setstate_cython, __pyx_mstate->__pyx_kp_b_iso88591_Q, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[5])) goto bad;
+    __pyx_mstate_global->__pyx_codeobj_tab[7] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_stringsource, __pyx_mstate->__pyx_n_u_setstate_cython, __pyx_mstate->__pyx_kp_b_iso88591_Q, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[7])) goto bad;
   }
   Py_DECREF(tuple_dedup_map);
   return 0;
