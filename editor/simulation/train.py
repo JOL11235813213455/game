@@ -1119,7 +1119,8 @@ def _run_mappo_parallel(net, ppo, steps, arena_kwargs, signal_scales,
     from classes.parallel_training import ParallelTrainer
     from editor.simulation.train_state import write_state
 
-    rollout_per_worker = max(256, 4096 // n_workers)
+    n_creatures = arena_kwargs.get('num_creatures', 12)
+    rollout_per_worker = max(128, 2048 // (n_workers * n_creatures))
     total_collected = 0
     config = {
         'arena_kwargs': arena_kwargs,
@@ -1129,7 +1130,7 @@ def _run_mappo_parallel(net, ppo, steps, arena_kwargs, signal_scales,
         'rollout_len': rollout_per_worker,
     }
 
-    print(f'  Parallel MAPPO: {n_workers} workers × {rollout_per_worker} steps')
+    print(f'  Parallel MAPPO: {n_workers} workers × {n_creatures} creatures × {rollout_per_worker} steps/worker')
 
     def _export_weights(torch_net):
         """Convert TorchCreatureNet state to CreatureNet numpy format."""

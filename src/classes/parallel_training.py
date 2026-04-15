@@ -152,7 +152,7 @@ def _mappo_worker(worker_id: int, weight_queue: mp.Queue,
                     c.process_ticks(sim.now)
 
             # Live stats every 50 steps
-            if step % 50 == 0:
+            if step % 10 == 0:
                 alive = sum(1 for c in sim.creatures if c.is_alive)
                 n_steps = max(1, len(rew_buf))
                 _day = int(sim.game_clock.day)
@@ -317,7 +317,7 @@ def _ppo_worker(worker_id: int, weight_queue: mp.Queue,
             for sk, sv in signals.items():
                 signal_totals[sk] = signal_totals.get(sk, 0.0) + sv
 
-            if step % 50 == 0:
+            if step % 10 == 0:
                 n_steps = max(1, len(rew_buf))
                 _day = int(sim.game_clock.day)
                 _hr = int(sim.game_clock.hour)
