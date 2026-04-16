@@ -147,10 +147,18 @@ def _draw_parallel_view(screen, state, font, font_sm, font_lg):
         screen.blit(font.render(f'Core {i}', True, C_YELLOW), (x, y))
     y += 18
 
-    # Basic stats
+    # Basic stats (includes per-worker episode-length visibility for PPO).
+    # Episode length is the number of ticks between agent deaths. An
+    # "in flight" run is the current un-terminated run length; it shows
+    # the full rollout length in stages where death is impossible.
     for label, key in [('Step', 'step'), ('Clock', 'clock'),
                         ('Alive', 'alive'), ('Total', 'total'),
-                        ('Avg Reward', 'avg_reward'), ('Samples', 'samples')]:
+                        ('Avg Reward', 'avg_reward'), ('Samples', 'samples'),
+                        ('Deaths', 'deaths'),
+                        ('Mean ep len', 'mean_ep_len'),
+                        ('Min ep len', 'min_ep_len'),
+                        ('Max ep len', 'max_ep_len'),
+                        ('In flight', 'in_flight')]:
         screen.blit(font_sm.render(f'{label}:', True, C_GRAY), (10, y))
         for i, w in enumerate(workers):
             x = 10 + i * col_w + 70

@@ -1427,7 +1427,13 @@ def _run_ppo_parallel(net, ppo, steps, arena_kwargs, signal_scales,
     """
     from classes.parallel_training import ParallelTrainer
 
+    # Each worker collects the full stage-configured rollout length
+    # before handing back to the main process for a merged PPO update.
+    # Total sample budget = stage.ppo_steps × n_workers (each worker
+    # contributes its own budget), so 3 workers with ppo_steps=30_000
+    # produces 90k samples across the run.
     rollout_per_worker = max(256, 2048 // n_workers)
+    target_total = steps * n_workers
     total_collected = 0
     config = {
         'arena_kwargs': arena_kwargs,
@@ -1438,8 +1444,8 @@ def _run_ppo_parallel(net, ppo, steps, arena_kwargs, signal_scales,
     }
 
     print(f'  Parallel PPO: {n_workers} workers × {rollout_per_worker} steps, '
-          f'target={steps}')
-    scheduler = HparamScheduler(ppo, steps) if adaptive_hparams else None
+          f'target={target_total} total ({steps} per worker)')
+    scheduler = HparamScheduler(ppo, target_total) if adaptive_hparams else None
     iter_reward_avgs: list[float] = []
 
     def _export_weights(torch_net):
@@ -1476,17 +1482,17 @@ def _run_ppo_parallel(net, ppo, steps, arena_kwargs, signal_scales,
     last_print_t = phase_t0
 
     with ParallelTrainer(n_workers, 'ppo', config) as trainer:
-        while total_collected < steps:
-            pct = 100.0 * total_collected / max(1, steps)
+        while total_collected < target_total:
+            pct = 100.0 * total_collected / max(1, target_total)
             elapsed = time.time() - phase_t0
-            eta = (elapsed * (steps - total_collected) / max(1, total_collected)
+            eta = (elapsed * (target_total - total_collected) / max(1, total_collected)
                    if total_collected > 0 else float('inf'))
             progress_info = {
                 **(viewer_extra or {}),
                 'status': 'collecting rollouts...',
                 'progress_pct': round(pct, 1),
                 'steps_done': total_collected,
-                'steps_total': steps,
+                'steps_total': target_total,
                 'elapsed_seconds': round(elapsed, 1),
                 'eta_seconds': round(eta, 1) if np.isfinite(eta) else None,
                 'eta_text': _fmt_eta(eta),
@@ -1523,20 +1529,76 @@ def _run_ppo_parallel(net, ppo, steps, arena_kwargs, signal_scales,
                 _log('ppo/ent_coef', ppo.ent_coef, total_collected)
 
             iter_count += 1
-            pct = 100.0 * min(1.0, total_collected / max(1, steps))
+            pct = 100.0 * min(1.0, total_collected / max(1, target_total))
             elapsed = time.time() - phase_t0
-            eta = (elapsed * (steps - total_collected) / max(1, total_collected)
+            eta = (elapsed * (target_total - total_collected) / max(1, total_collected)
                    if total_collected > 0 else 0.0)
 
             worker_stats = []
+            # Episode length = tick count between `done=1` markers. A
+            # rollout boundary that ends mid-episode is NOT a terminated
+            # episode — it's the worker handing back mid-flight. We
+            # track three series:
+            #   - completed_ep_lengths: lengths of episodes that
+            #     actually terminated this iteration (creature died)
+            #   - in_flight_steps: trailing run-length at rollout end
+            #     (creature still alive)
+            #   - total_deaths: deaths this iteration
+            # In safe stages (no combat, no hunger, no water danger)
+            # you expect completed_ep_lengths to be empty and
+            # in_flight_steps to equal rollout_len — i.e. no agent
+            # has died yet.
+            iter_completed_lengths = []
+            iter_in_flight_lengths = []
+            iter_total_deaths = 0
             for r in rollouts:
+                dones = r.get('dones')
+                completed = []
+                in_flight = 0
+                if dones is not None and len(dones) > 0:
+                    run = 0
+                    for d in dones:
+                        run += 1
+                        if d:
+                            completed.append(run)
+                            iter_total_deaths += 1
+                            run = 0
+                    in_flight = run  # trailing un-terminated
+                iter_completed_lengths.extend(completed)
+                if in_flight > 0:
+                    iter_in_flight_lengths.append(in_flight)
+                mean_comp = (float(np.mean(completed)) if completed else 0.0)
+                min_comp = (min(completed) if completed else 0)
+                max_comp = (max(completed) if completed else 0)
                 worker_stats.append({
                     'worker_id': r['worker_id'],
                     'alive': int((r['dones'] == 0).sum()) if len(r['dones']) > 0 else 0,
                     'total': len(r['rewards']),
                     'avg_reward': float(r['rewards'].mean()) if len(r['rewards']) > 0 else 0,
                     'samples': len(r['rewards']),
+                    'deaths': len(completed),
+                    'mean_ep_len': round(mean_comp, 1),
+                    'min_ep_len': min_comp,
+                    'max_ep_len': max_comp,
+                    'in_flight': in_flight,
                 })
+            if iter_completed_lengths:
+                agg_mean = float(np.mean(iter_completed_lengths))
+                agg_med = float(np.median(iter_completed_lengths))
+                agg_min = min(iter_completed_lengths)
+                agg_max = max(iter_completed_lengths)
+                _log('ppo/completed_episode_mean', agg_mean, total_collected)
+                _log('ppo/completed_episode_median', agg_med, total_collected)
+                _log('ppo/completed_episode_min', agg_min, total_collected)
+                _log('ppo/completed_episode_max', agg_max, total_collected)
+            else:
+                agg_mean = agg_med = 0.0
+                agg_min = agg_max = 0
+            agg_in_flight = (float(np.mean(iter_in_flight_lengths))
+                             if iter_in_flight_lengths else 0.0)
+            _log('ppo/deaths_per_iter', iter_total_deaths, total_collected)
+            _log('ppo/in_flight_steps_mean', agg_in_flight, total_collected)
+
             avg_r_iter = (float(merged['rewards'].mean())
                           if n_samples > 0 else 0.0)
             if n_samples > 0:
@@ -1546,12 +1608,18 @@ def _run_ppo_parallel(net, ppo, steps, arena_kwargs, signal_scales,
                 **(viewer_extra or {}),
                 'progress_pct': round(pct, 1),
                 'steps_done': total_collected,
-                'steps_total': steps,
+                'steps_total': target_total,
                 'elapsed_seconds': round(elapsed, 1),
                 'eta_seconds': round(eta, 1),
                 'eta_text': _fmt_eta(eta),
                 'iter': iter_count,
                 'avg_reward': round(avg_r_iter, 4),
+                'deaths_this_iter': iter_total_deaths,
+                'completed_ep_len_mean': round(agg_mean, 1),
+                'completed_ep_len_median': round(agg_med, 1),
+                'completed_ep_len_min': agg_min,
+                'completed_ep_len_max': agg_max,
+                'in_flight_steps_mean': round(agg_in_flight, 1),
             }
             write_parallel_state(worker_stats, phase='PPO',
                                  step=total_collected, info=end_info)
@@ -1560,10 +1628,19 @@ def _run_ppo_parallel(net, ppo, steps, arena_kwargs, signal_scales,
             # so short rollouts don't spam, but the line always includes
             # the %complete + ETA for quick visual tracking.
             now = time.time()
-            if now - last_print_t >= 5.0 or total_collected >= steps:
-                print(f'    [{pct:5.1f}%] step {total_collected}/{steps}  '
+            if now - last_print_t >= 5.0 or total_collected >= target_total:
+                if iter_total_deaths > 0:
+                    ep_summary = (f'  deaths={iter_total_deaths}  '
+                                  f'ep_len[mean={agg_mean:5.1f} '
+                                  f'med={agg_med:5.1f} '
+                                  f'min={agg_min} max={agg_max}]')
+                else:
+                    ep_summary = (f'  deaths=0  in_flight={agg_in_flight:.0f} '
+                                  f'steps (no terminations)')
+                print(f'    [{pct:5.1f}%] step {total_collected}/{target_total}  '
                       f'iter {iter_count}  avg_reward={avg_r_iter:+.4f}  '
-                      f'elapsed={_fmt_eta(elapsed)}  ETA={_fmt_eta(eta)}')
+                      f'elapsed={_fmt_eta(elapsed)}  ETA={_fmt_eta(eta)}'
+                      f'{ep_summary}')
                 last_print_t = now
 
     if out_metrics is not None and iter_reward_avgs:
