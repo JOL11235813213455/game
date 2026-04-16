@@ -147,6 +147,13 @@ class CombatMixin:
         # Track kill if target died from this hit
         if target.stats.active[Stat.HP_CURR]() <= 0:
             self._kills = getattr(self, '_kills', 0) + 1
+            # Phase 2: route lethal combat damage through the lifecycle
+            # dying window so allies can react (mourning) + potentially
+            # heal before the death is finalized. Guarded on hasattr so
+            # Monsters (no LifecycleMixin) fall through to old behavior.
+            _sim = getattr(self, '_active_sim', None)
+            if _sim is not None and hasattr(target, 'enter_dying'):
+                target.enter_dying(_sim)
             self.gain_exp(10)
 
         # Stagger check
@@ -306,6 +313,10 @@ class CombatMixin:
         if target.stats.active[Stat.HP_CURR]() <= 0:
             self._kills = getattr(self, '_kills', 0) + 1
             self.gain_exp(10)
+            # Phase 2: route lethal damage through the dying window
+            _sim = getattr(self, '_active_sim', None)
+            if _sim is not None and hasattr(target, 'enter_dying'):
+                target.enter_dying(_sim)
 
         # Weapon durability tick
         if weapon and isinstance(weapon, Weapon):

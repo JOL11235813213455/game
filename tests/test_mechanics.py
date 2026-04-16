@@ -5827,6 +5827,32 @@ if _watcher._any_hostile_in_sight():
 check(f"hostile in sight → alert ({_watcher.arousal_state})",
       _watcher.arousal_state == 'alert')
 
+# Lethal melee damage routes through enter_dying (Phase 2 dying window)
+_dwin_arena = generate_arena(cols=10, rows=10, num_creatures=2)
+_dwin_sim = Simulation(_dwin_arena)
+_dwin_atk, _dwin_tgt = _dwin_sim.creatures[0], _dwin_sim.creatures[1]
+_dwin_atk.location = MapKey(5, 5, 0)
+_dwin_tgt.location = MapKey(6, 5, 0)
+# Stacked: attacker max stats, target tiny HP + no dodge.
+# Hit roll is stochastic, so loop until the attack lands (bounded
+# so a run of misses doesn't hang the test).
+_dwin_atk.stats.base[Stat.STR] = 20
+_dwin_atk.stats.base[Stat.PER] = 18
+_dwin_tgt.stats.base[Stat.HP_MAX] = 1
+_dwin_tgt.stats.base[Stat.HP_CURR] = 1
+_dwin_tgt.stats.base[Stat.AGL] = 1      # easy to hit
+_dwin_tgt.stats.base[Stat.VIT] = 1
+import random as _dwin_rng
+_dwin_rng.seed(42)
+for _ in range(30):
+    _dwin_atk.melee_attack(_dwin_tgt, now=_dwin_sim.now)
+    if _dwin_tgt.stats.active[Stat.HP_CURR]() <= 0:
+        break
+check(f"lethal melee → target lifecycle 'dying' "
+      f"(hp={_dwin_tgt.stats.active[Stat.HP_CURR]()}, "
+      f"lifecycle={_dwin_tgt.lifecycle_state})",
+      _dwin_tgt.lifecycle_state == 'dying')
+
 # ==========================================================================
 print("\n=== Game Mode FSM (Phase 5) ===")
 from main.game_mode import (GameModeFSM, TopState, SubState,
