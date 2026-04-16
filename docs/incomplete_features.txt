@@ -10,76 +10,30 @@ KNOWN GAPS (sorted by training impact)
 
 HIGH IMPACT — Blocks curriculum stages 15-25 (monster training)
 ---------------------------------------------------------------
-- Training runner: wire freeze toggles (creature_frozen,
-  monster_trainable, pack_trainable) into the RL loop. Stages 15-20
-  need creature optimizer disabled and monster/pack optimizer enabled;
-  stages 21-22 need the inverse.
-- Monster tick loop: each simulation step needs monsters to build
-  observations, query MonsterNet, execute dispatched action. Currently
-  Monster class exists but has no per-tick drive in the arena runner.
-- Monster action dispatch: the 10 actions (MOVE, PATROL, GUARD,
-  ATTACK, PAIR, EAT, HOWL, FLEE, REST, PROTECT_EGG, HARVEST) each
-  need runtime execution. ATTACK reuses CombatMixin.melee_attack;
-  EAT/HARVEST/REST need new handlers.
-- Arena monster spawning: given a curriculum stage's
-  monster_species_subset, spawn N monsters into the arena with
-  initial territory placement (non-overlapping packs), auto-form
-  packs, assign initial alphas by stats.
-- Pack runtime: Pack NN forward pass on slow cadence (~1-2s), dispatch
-  outputs via broadcast_signals to members. Membership events
-  (split at split_size, merge when compatible packs meet) need
-  runtime wiring.
-- Shared perception wiring: Monster.on_pack_signal handlers exist;
-  the actual event emission from the per-tick loop isn't wired.
-  Monsters should call pack.on_creature_spotted on sighting.
+(none remaining)
 
 MEDIUM IMPACT — Weakens monster learning
 -----------------------------------------
-- Imitation pretraining runner: generate dataset with
-  monster_imitation.generate_monster_dataset(), then supervised-
-  train MonsterNet/PackNet via PyTorch (reuse the optimizer
-  infrastructure in simulation/train.py). Stub exists, no
-  gradient loop yet.
-- DAgger iteration loop: after imitation pretraining, roll out
-  the NN in sim and log disagreements with heuristic, retrain.
-- Cannibalism penalty for creatures: when a creature EATs a Meat
-  with meat.species == creature.species, apply
-  m_cannibal_penalty reward, rumor broadcast (widely negative),
-  piety loss. Logic not written.
-- Natural weapon attachment on monster spawn: Monster reads
-  natural_weapon_key from species data but doesn't actually equip
-  the weapon item. Needs to clone the item from ITEMS catalog and
-  add to inventory/equipment at spawn.
-- Infinite ammo flag on Weapon class: ranged natural weapons (e.g.
-  acid spit) need infinite_ammo=True support in Weapon to bypass
-  ammunition_type checks. Flag not yet added.
-- Meat spoilage tick: tile items don't currently tick their own
-  spoilage state. Need a periodic sweep (or lazy check on EAT)
-  that flags Meat spoiled when now >= spoil_tick.
-- Cooking/preserving recipes: Meat -> CookedMeat, Meat -> PreservedMeat
-  recipes not in PROCESSING_RECIPES. Cooking should set is_cooked
-  and extend spoil_tick by 48hr; preserving should set is_preserved.
-- Monster reward function coverage: monster_reward.py has the core
-  signals but misses m_eat, m_graze, m_pack_cohesion, m_territory_hold,
-  m_sleep_sync, m_dominance_wins, m_pair_success, m_reproduction,
-  m_egg_protect, m_queen_kill_bonus. Curriculum seeds reference these
-  but reward.compute() doesn't emit them yet.
-- Batch inference for monsters: like BatchBehavior for creatures,
-  stack monster observations for one forward pass. MonsterNet is
-  smaller than CreatureNet but still wins on parallelism with 40+
-  monsters.
-- Cross-pack combat: Pack.is_hostile_to returns True/False but the
-  engagement logic (attack on sight when hostile) isn't in the tick
-  loop.
-- Pack merge ritual: alpha-vs-alpha dominance fight to merge two
-  compatible small packs. Logic not implemented — can_merge_with()
-  returns True but nothing acts on it.
-- Dominance challenges: spontaneous challenges within a pack
-  (challenger walks to target, first-to-50%-HP-loses fight).
-  No scheduling or trigger logic yet.
-- Monster reproduction: eggs, gestation, hatch. No code; needs to
-  mirror the creature reproduction pipeline but without charisma
-  gates (pure rank-matching between alphas, betas, etc.).
+- MonsterNet training optimizer: stages 15-20 mark monster_trainable
+  but the training runner currently runs monsters on heuristic only
+  and doesn't collect monster rollouts / apply gradient updates. The
+  imitation pretrain pipeline (monster_pretrain.py) is built and
+  produces usable weights, but the PPO-style online RL for MonsterNet
+  is not wired into train.py yet. Needs: monster rollout buffer,
+  monster reward collection per tick, MonsterNet.update() call at
+  buffer full, optional LR schedule per stage.
+- PackNet training optimizer: same situation as MonsterNet. REINFORCE
+  or low-cadence PPO needed for pack decisions. Pretrained weights
+  from monster_pretrain --skip-monster already exist; online training
+  is the missing piece.
+- MonsterNet loading in training runner: sim.monster_net is set to
+  None by default. Train pipeline should load the pretrained .npz
+  (or a stage-specified checkpoint) and set sim.monster_net so
+  monsters use the NN instead of heuristic.
+- Monster reward wiring into training loop: monster_reward.compute()
+  is implemented but not called inside run_mappo/run_ppo for each
+  monster. Needs per-monster reward snapshot + delta computation
+  similar to the creature path.
 
 LOW IMPACT — Polish
 --------------------
@@ -88,20 +42,17 @@ LOW IMPACT — Polish
   info about monster territories via TALK. Lower priority — direct
   observation + spatial memory still works.
 - Purpose tile rumors: same extension, for economic knowledge
-  propagation ("trading tile at X,Y"). Pairs well with monster
-  rumors but not blocking.
-- Pack scent mechanic: cross-pack communication without rumors —
-  scent markers on tiles that other packs can detect. Future work,
-  not in any stage.
+  propagation.
+- Pack scent mechanic: cross-pack communication without rumors.
 - Live viewer monster visualization: editor viewer shows creature
-  state but not monster/pack state. Nice to have.
+  state but not monster/pack state.
 - ERD updates in sql_tab.py desc_map: monster_species columns
   documented. Also _SOFT_FKS entries for cross-references.
-- Monster animation bindings: walk_north, attack, death, etc. not
-  defined in DB for monster sprites.
 - Monster sprite seed: 9 species exist in DB but no sprite_name
   populated (they render as the default creature sprite). Needs
   sprite definitions or reuse of existing creature sprites.
+- Monster animation bindings: walk_north, attack, death, etc. not
+  defined in DB for monster sprites.
 
 FUTURE / NOT STARTED
 =====================
@@ -135,10 +86,11 @@ Creature System
 - Auto walk/run/sneak: walk default, run when hostile in sight, sneak as persistent toggle
 - Movement: 8-dir walk/run/sneak, flee, follow, map transitions (enter/exit)
 - Combat: melee, ranged (with ammo), grapple, cast_spell (8 spells in DB), block stance
+- Weapons: infinite_ammo flag for natural (monster) ranged weapons
 - Social: intimidate, deceive (context-gated + rumor poisoning + deceit tracking), trade (auto + proposed), bribe, steal (auto-resolve + familiarity modifier), share_rumor, talk, call_backup, proselytize
 - Deceit system: outstanding lies tracked in RelationshipGraph, revelation via social interactions, deception_stress penalty signal, long-term honesty incentive
 - Economy: harvest (5 resource types), farm, dig, process (9 recipes), craft (ItemFrames), job (7 job types), trade with loan fallback, REPAY_LOAN
-- Inventory: pickup (auto + gold + coalesce), smart drop (lowest value/weight), auto-equip (NN only), use_item (consumables + food), transfer_item (adjacent inventories)
+- Inventory: pickup (auto + gold + coalesce), smart drop (lowest value/weight), auto-equip (NN only), use_item (consumables + food + Meat with spoilage/cannibalism), transfer_item (adjacent inventories)
 - Reproduction: propose_pairing, force_pairing, egg system, genetics (14-gene chromosomes, Mendelian inheritance), fecundity curves
 - Encumbrance: S-curve penalty above 100% carry weight (regen slowed), movement blocked at 200% with struggle sound feedback
 - Swimming: can_swim from species DB or learned (innate 20%, witness 10%/tick, survival 2%/tick)
@@ -146,22 +98,24 @@ Creature System
 - Durability: weapons and armor lose 1 durability per hit, break at 0 (removed from equipment)
 - Dialogue: full conversation tree system with conditions, effects, quest triggers (loaded in training via DB)
 - Traps: creator-immune (trap_creator_uid stored on tile, checked before trigger)
-- Covered tiles: block cross-cover vision (creatures under cover can't see out, uncovered can't see in)
+- Covered tiles: block cross-cover vision
 - Meat drop on death: every dying LivingThing drops a Meat item with species tag and 48hr spoil window
 - meat_value species attribute: hunger restoration when consumed (auto-derived from size if NULL)
+- Cannibalism detection: eating meat where meat.species == self.species broadcasts -15 rumor to every witness within sight range, -0.1 piety if devoted; _cannibalism_events counter for reward
 
-Monster System (scaffolding — runtime wiring pending, see HIGH IMPACT)
+Monster System
 - Monster class: top-level (NOT Creature subclass), shares CombatMixin/
-  MovementMixin/InventoryMixin/RegenMixin, no social/relationships/dialogue
-- MonsterSpecies DB: 9 seeded archetypes (wolf, rat, bear, spitter,
-  bees, orc, crawler, boar, ants) with stats + lifecycle/territory/
-  dominance/diet/sprite configuration
-- Pack class (Trackable): separate M/F dominance hierarchies, auto-rank
-  by STR+VIT+AGL, event-driven signals (sleep/alert/cohesion/role/
-  target_position) with delta-threshold broadcast
-- Territory model: territory_scales toggle, effective territory
-  formula (scales with pack.size, modulated by cohesion), sampled
-  target positions from N(center, effective_std), territories_overlap
+  MovementMixin/InventoryMixin/RegenMixin, stubs for social methods
+  (get_relationship/record_interaction/gain_exp) so shared combat
+  paths work against monster targets
+- MonsterSpecies DB: 9 seeded archetypes with stats + lifecycle/
+  territory/dominance/diet/sprite configuration
+- Pack class (Trackable): separate M/F dominance hierarchies, auto-
+  rank by STR+VIT+AGL, event-driven signals (sleep/alert/cohesion/
+  role/target_position) with delta-threshold broadcast
+- Territory model: territory_scales toggle, effective formula
+  (scales with pack.size, modulated by cohesion), sampled target
+  positions from N(center, effective_std), territories_overlap
   via 3-sigma circle intersection
 - Pack-vs-Pack rules: neutral by default, hostile only on territory
   overlap, merge condition (same species + combined <= split_size/2)
@@ -173,9 +127,12 @@ Monster System (scaffolding — runtime wiring pending, see HIGH IMPACT)
   role softmax)
 - Monster observation builder: 73 floats across 9 sections
 - Creature-side monster perception: 5 monster slots + 3-float summary
-  populate when monsters are visible
+  populate when monsters visible
 - Heuristic monster + pack policies (priority cascade)
 - Imitation dataset generator (monster_imitation.py)
+- Imitation pretraining (editor/simulation/monster_pretrain.py):
+  TorchMonsterNet + TorchPackNet, supervised cross-entropy training,
+  DAgger iteration, .npz export to models/
 - Meat item subclass: species tag, spoilage tick, cooked/preserved flags
 - Monster editor tab (parallel to Species tab)
 - Training Pairs table + editor tab: bind creature/goal/monster/pack
@@ -183,57 +140,90 @@ Monster System (scaffolding — runtime wiring pending, see HIGH IMPACT)
 - Curriculum stages 15-25 seeded (M_Survive -> M_Eat -> M_Hunt ->
   M_Pack -> M_Dominance -> M_Lifecycle -> C_Predation -> C_Ecosystem
   -> Coevo_A -> Coevo_B -> Final) with freeze toggles
-- Monster reward function (monster_reward.py): core signals wired;
-  some curriculum signals still stub (see MEDIUM IMPACT)
+- Monster reward function (monster_reward.py) with 16 signals:
+  m_hp, m_hunger, m_kills, m_damage_dealt, m_chase, m_eat, m_graze,
+  m_territory_stay, m_territory_hold, m_pack_cohesion, m_sleep_sync,
+  m_dominance_wins, m_pair_success, m_reproduction, m_egg_protect,
+  m_queen_kill_bonus, m_failed_actions
+
+Monster Runtime
+- Monster action dispatch: all 11 actions executed
+- Monster tick loop (monster_runtime.monster_tick): batch inference
+  via MonsterNet, per-tick action execution, pack event propagation,
+  pack housekeeping (splits/merges/challenges)
+- Pack NN refresh on slow cadence (2s), broadcasts signals to members
+  only when they change beyond epsilon threshold
+- Cross-pack combat: hostile packs in contact trade melee attacks
+  each tick
+- Dominance challenges: contest-type packs roll probabilistic
+  challenges; rank swaps on successful challenge
+- Pregnancy + egg laying + hatching: gestation timer, Meat-tagged
+  monster eggs, hatch path routes through new Monster spawn
+- Arena integration: spawn_monsters_for_stage reads stage subset
+  and populates arena['monsters'] + arena['packs']; natural weapons
+  auto-equipped on spawn; non-overlapping territory placement
+- Simulation.step() drives monster_tick + per-monster process_ticks
+  for regen/hunger/water
 
 RL Training Pipeline
-- Lifecycle ticks in headless training: _tick_lifecycle_day() fires on day boundaries (egg gestation/hatching, fatigue accumulation, age increment)
-- 14-stage creature curriculum + 11-stage monster/coevo curriculum with
-  progressive action masking (10 -> 32 actions for creature stages)
+- Lifecycle ticks in headless training: _tick_lifecycle_day() fires
+  on day boundaries (egg gestation/hatching for creatures + monsters,
+  fatigue accumulation, age increment)
+- 14-stage creature curriculum + 11-stage monster/coevo curriculum
+  with progressive action masking
 - Per-stage signal_scales for reward masking with soft fade
-- Environment toggles: hunger_drain, combat_enabled, gestation_enabled, fatigue_enabled
+- Environment toggles: hunger_drain, combat_enabled, gestation_enabled,
+  fatigue_enabled
 - Monster environment toggles: monsters_enabled, creature_frozen,
   monster_trainable, pack_trainable, monster_species_subset
+- creature_frozen toggle: run_mappo/run_ppo skip the CreatureNet
+  and GoalNet gradient step when stage flag is set (buffers drain
+  silently, log zero loss)
+- Monster injection: _inject_monsters helper adds
+  spawn_monsters_for_stage to arenas for stages with monsters_enabled
 - 5-layer TorchCreatureNet (1837 -> 1536 -> 1024 -> 768 -> 384 -> 192 -> 32)
 - TorchGoalNet for hierarchical purpose selection
+- TorchMonsterNet + TorchPackNet (imitation pretrain)
 - PPO with GAE, entropy bonus, gradient clipping
 - MAPPO multi-agent + ES evolutionary + PPO single-agent pipeline
 - PPO/ES parallel worker support (MAPPO sequential)
 - Action mask at logit level (pre-softmax -1e10)
 - RolloutBuffer with per-step action masks
-- TensorBoard logging: episode reward, entropy, alive_count, per-action distribution, per-signal breakdown
-- Observation masks applied to NN input (apply_preset_mask in headless + train loops)
-- Game DB loaded in training arena (dialogue, quests, species data available)
+- TensorBoard logging: episode reward, entropy, alive_count, per-
+  action distribution, per-signal breakdown
+- Observation masks applied to NN input (apply_preset_mask in headless
+  + train loops)
+- Game DB loaded in training arena (dialogue, quests, species data,
+  monster species, monster_species_stats)
 
 Observation (1837 floats)
-- 28+ sections: self stats/resources/combat/economy/slots/weapon/inventory/crafting/social/status/hunger/quest/goal/schedule/movement/genetics/identity/reputation
-- Tile: deep properties, liquid/water, spatial walls/openness, feature directions (item/food/enemy/ally), tile items top 3
+- 28+ sections: self stats/resources/combat/economy/slots/weapon/
+  inventory/crafting/social/status/hunger/quest/goal/schedule/
+  movement/genetics/identity/reputation
+- Tile: deep properties, liquid/water, spatial walls/openness, feature
+  directions, tile items top 3
 - Census: 45-float visible creature summary, 3-float audible
-- Per-engaged: 10 persistent perception slots x 51 floats (threat, sentiment, approaching/fleeing, size, status)
-- Social topology: 17 floats (cohesion, Laplacian eigenvalues, rest-of-crowd)
+- Per-engaged: 10 persistent perception slots x 51 floats
+- Social topology: 17 floats (cohesion, Laplacian eigenvalues,
+  rest-of-crowd)
 - Social deception: outstanding_lies count, deceits_against count
 - World time: simplified to is_daytime + light_level (+4 god balances)
-- Monster perception: 5 slots x 6 fields + 3-float summary (populates
-  from Monster.on_same_map when monsters present)
-- Water/hearing awareness, temporal deltas, trends, time-since, reward signals, 264 math transforms
-
-Reward Signals (creature: 29+, monster: 6 core so far)
-- Creature: hp, gold, debt, inventory, equipment, equipment_upgrade, encumbrance_relief
-- reputation, allies, social_success, kills, damage_dealt
-- exploration, pickup_success, piety, quests, life_goals, xp, wage, trade
-- hunger, goal_progress, goal_completed, purpose_proximity
-- theft (ln-scaled by stolen value), stealth_success (undetected moves past hostiles)
-- Penalties: failed_actions, fatigue, crowding, water_danger, idleness, deception_stress, noise_penalty, death
-- Monster: m_hunger, m_hp, m_kills, m_damage_dealt, m_chase,
-  m_territory_stay (more pending — see MEDIUM IMPACT)
+- Monster perception: 5 slots x 6 fields + 3-float summary
+  (populates from Monster.on_same_map when monsters present)
+- Water/hearing awareness, temporal deltas, trends, time-since,
+  reward signals, 264 math transforms
 
 Arena
 - Purpose districts (14 types), resource tiles (5 types with regrowth)
 - Center pond (1 deep + 8 shallow banks)
-- Weapons, armor, ammo (arrows), consumables, food, potions, shovels, traps, ItemFrames
+- Weapons, armor, ammo (arrows), consumables, food, potions, shovels,
+  traps, ItemFrames
 - All creatures start with 2-3 food items; 20% spawn as innate swimmers
 - 50% start with quests from DB
 - Pre-seeded relationships, jobs (60% jobbed), deity assignments (70%)
+- Monster spawning: spawn_monsters_for_stage places packs with non-
+  overlapping territory circles, auto-forms packs with alternating
+  M/F assignment, equips natural weapons from species config
 
 Editor
 - Sprites (simple + composite + animations with connections)
@@ -244,14 +234,18 @@ Editor
 - SQL editor with ERD and data dictionary
 
 Presentation
-- Composite sprite rendering with layer connections and keyframe animations
-- Equipment overlay: render_on_creature items composited over creature sprite
+- Composite sprite rendering with layer connections and keyframe
+  animations
+- Equipment overlay: render_on_creature items composited over creature
+  sprite
 - Deterministic render sort (y, z_index, x, id) — no flickering
 - Uniform animation bounding box — no per-frame jitter
 - round() scaling for consistent NPC sizing across zoom levels
 - Day/night cycle with moon phases, shadows, top-lighting
 - Collision system with per-tile and structure collision masks
 - Bounds/entry system for tile traversal
-- Player UI: inventory menu (with action_word verbs), quest log, HUD, dialogue menu, contextual keybind strip
-- Player sleep: Z to sleep/wake, dark overlay, auto-wake on damage/noise/duration
+- Player UI: inventory menu, quest log, HUD, dialogue menu,
+  contextual keybind strip
+- Player sleep: Z to sleep/wake, dark overlay, auto-wake on
+  damage/noise/duration
 - Test Town demo world with houses, NPCs, cave
