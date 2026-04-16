@@ -116,7 +116,10 @@ class TrainingCurriculumTab(ttk.Frame):
         add_tooltip(cb4, 'When off, creatures never accumulate sleep debt or fatigue')
         row += 1
 
-        # Pipeline shape
+        # Pipeline shape — one row per phase (MAPPO / ES / PPO), each
+        # row carrying the knobs that phase actually uses. Built for
+        # extension: adding a 4th phase (DAgger / imitation / PBT) is
+        # a matter of appending another _phase_row(...) block.
         ttk.Separator(f, orient=tk.HORIZONTAL).grid(
             row=row, column=0, columnspan=2, sticky='ew', pady=6)
         row += 1
@@ -126,26 +129,104 @@ class TrainingCurriculumTab(ttk.Frame):
 
         pipe_grid = ttk.Frame(f)
         pipe_grid.grid(row=row, column=0, columnspan=2, sticky='ew', padx=6, pady=2)
-        items = [
-            ('MAPPO',    'v_mappo',    'Multi-agent PPO steps'),
-            ('ES gens',  'v_es_gens',  'ES generations (0=skip)'),
-            ('ES vars',  'v_es_vars',  'Variants per gen'),
-            ('ES steps', 'v_es_steps', 'Steps per variant'),
-            ('PPO',      'v_ppo',      'Single-agent PPO steps'),
-            ('LR',       'v_lr',       'Learning rate'),
-            ('Entropy',  'v_ent',      'Entropy bonus'),
-            ('Resume',   'v_resume',   'Resume from stage'),
-        ]
-        for idx, (label, attr, tooltip) in enumerate(items):
-            r = idx // 4
-            c = (idx % 4) * 2
-            ttk.Label(pipe_grid, text=label).grid(row=r, column=c, sticky='w', padx=(0, 2), pady=1)
-            var = tk.StringVar()
-            setattr(self, attr, var)
-            entry = ttk.Entry(pipe_grid, textvariable=var, width=8)
-            entry.grid(row=r, column=c + 1, sticky='w', padx=(0, 8), pady=1)
-            add_tooltip(entry, tooltip)
         row += 1
+
+        def _grid_label(parent, text, r, c, width=8, anchor='center'):
+            ttk.Label(parent, text=text, width=width, anchor=anchor).grid(
+                row=r, column=c, padx=2, pady=1, sticky='w')
+
+        def _grid_entry(parent, var, r, c, width=7, tip=''):
+            e = ttk.Entry(parent, textvariable=var, width=width)
+            e.grid(row=r, column=c, padx=2, pady=1, sticky='w')
+            if tip:
+                add_tooltip(e, tip)
+            return e
+
+        # --- MAPPO row ---
+        # Columns: label | Steps | Creatures | Cols | Rows | Map
+        # NOTE: MAPPO is always sequential (per train.py: per-creature
+        # obs cost is the bottleneck, parallelism doesn't help).
+        # No Parallel column on this row.
+        _grid_label(pipe_grid, 'MAPPO', 0, 0, width=7, anchor='w')
+        _grid_label(pipe_grid, 'Steps',    0, 1)
+        _grid_label(pipe_grid, 'Creatures',0, 2)
+        _grid_label(pipe_grid, 'Cols',     0, 3, width=5)
+        _grid_label(pipe_grid, 'Rows',     0, 4, width=5)
+        _grid_label(pipe_grid, 'Map',      0, 5, width=14, anchor='w')
+        self.v_mappo = tk.StringVar()
+        self.v_mappo_creatures = tk.StringVar(value='0')
+        self.v_mappo_cols = tk.StringVar(value='0')
+        self.v_mappo_rows = tk.StringVar(value='0')
+        self.v_mappo_map = tk.StringVar(value='')
+        ttk.Label(pipe_grid, text='MAPPO:', width=7, anchor='w').grid(
+            row=1, column=0, padx=2, pady=1, sticky='w')
+        _grid_entry(pipe_grid, self.v_mappo,          1, 1, tip='MAPPO steps (0=skip)')
+        _grid_entry(pipe_grid, self.v_mappo_creatures,1, 2, tip='Creatures in MAPPO arena (0=inherit)')
+        _grid_entry(pipe_grid, self.v_mappo_cols,     1, 3, width=5, tip='Arena cols (0=inherit)')
+        _grid_entry(pipe_grid, self.v_mappo_rows,     1, 4, width=5, tip='Arena rows (0=inherit)')
+        _grid_entry(pipe_grid, self.v_mappo_map,      1, 5, width=14,
+                     tip='Named map (optional; blank=procedural)')
+
+        # --- ES row ---
+        _grid_label(pipe_grid, 'ES',       2, 0, width=7, anchor='w')
+        _grid_label(pipe_grid, 'Gens',     2, 1)
+        _grid_label(pipe_grid, 'Variants', 2, 2)
+        _grid_label(pipe_grid, 'Steps',    2, 3)
+        _grid_label(pipe_grid, 'Parallel', 2, 4, width=5)
+        self.v_es_gens = tk.StringVar()
+        self.v_es_vars = tk.StringVar()
+        self.v_es_steps = tk.StringVar()
+        self.v_es_parallel = tk.StringVar(value='1')
+        ttk.Label(pipe_grid, text='ES:', width=7, anchor='w').grid(
+            row=3, column=0, padx=2, pady=1, sticky='w')
+        _grid_entry(pipe_grid, self.v_es_gens,     3, 1, tip='ES generations (0=skip)')
+        _grid_entry(pipe_grid, self.v_es_vars,     3, 2, tip='Variants per generation')
+        _grid_entry(pipe_grid, self.v_es_steps,    3, 3, tip='Steps per variant evaluation')
+        _grid_entry(pipe_grid, self.v_es_parallel, 3, 4, width=5, tip='ES worker count')
+
+        # --- PPO row ---
+        _grid_label(pipe_grid, 'PPO', 4, 0, width=7, anchor='w')
+        _grid_label(pipe_grid, 'Steps',    4, 1)
+        _grid_label(pipe_grid, 'Parallel', 4, 2)
+        _grid_label(pipe_grid, 'Creatures',4, 3)
+        _grid_label(pipe_grid, 'Cols',     4, 4, width=5)
+        _grid_label(pipe_grid, 'Rows',     4, 5, width=5)
+        _grid_label(pipe_grid, 'Map',      4, 6, width=14, anchor='w')
+        self.v_ppo = tk.StringVar()
+        self.v_ppo_parallel = tk.StringVar(value='1')
+        self.v_ppo_creatures = tk.StringVar(value='0')
+        self.v_ppo_cols = tk.StringVar(value='0')
+        self.v_ppo_rows = tk.StringVar(value='0')
+        self.v_ppo_map = tk.StringVar(value='')
+        ttk.Label(pipe_grid, text='PPO:', width=7, anchor='w').grid(
+            row=5, column=0, padx=2, pady=1, sticky='w')
+        _grid_entry(pipe_grid, self.v_ppo,          5, 1, tip='PPO steps (0=skip)')
+        _grid_entry(pipe_grid, self.v_ppo_parallel, 5, 2, tip='PPO worker count (1=sequential)')
+        _grid_entry(pipe_grid, self.v_ppo_creatures,5, 3, tip='Creatures in PPO arena (0=inherit)')
+        _grid_entry(pipe_grid, self.v_ppo_cols,     5, 4, width=5, tip='Arena cols (0=inherit)')
+        _grid_entry(pipe_grid, self.v_ppo_rows,     5, 5, width=5, tip='Arena rows (0=inherit)')
+        _grid_entry(pipe_grid, self.v_ppo_map,      5, 6, width=14,
+                     tip='Named map (optional; blank=procedural)')
+
+        # --- Global hparams row: LR, Entropy, Resume ---
+        hp = ttk.Frame(f)
+        hp.grid(row=row, column=0, columnspan=2, sticky='w', padx=6, pady=(2, 4))
+        row += 1
+        self.v_lr = tk.StringVar()
+        self.v_ent = tk.StringVar()
+        self.v_resume = tk.StringVar()
+        ttk.Label(hp, text='LR:').pack(side=tk.LEFT)
+        _lr_e = ttk.Entry(hp, textvariable=self.v_lr, width=8)
+        _lr_e.pack(side=tk.LEFT, padx=(2, 10))
+        add_tooltip(_lr_e, 'Learning rate (Adam)')
+        ttk.Label(hp, text='Entropy:').pack(side=tk.LEFT)
+        _ent_e = ttk.Entry(hp, textvariable=self.v_ent, width=8)
+        _ent_e.pack(side=tk.LEFT, padx=(2, 10))
+        add_tooltip(_ent_e, 'Entropy bonus coefficient')
+        ttk.Label(hp, text='Resume from stage:').pack(side=tk.LEFT)
+        _res_e = ttk.Entry(hp, textvariable=self.v_resume, width=5)
+        _res_e.pack(side=tk.LEFT, padx=2)
+        add_tooltip(_res_e, 'Resume from stage N (blank=no auto-resume)')
 
         # Signals
         ttk.Separator(f, orient=tk.HORIZONTAL).grid(
@@ -231,37 +312,9 @@ class TrainingCurriculumTab(ttk.Frame):
         ttk.Entry(cfg_row, textvariable=self.v_parallel, width=3).pack(side=tk.LEFT)
         row += 1
 
-        # Pipeline config grid — headers
-        hdr = ttk.Frame(f)
-        hdr.grid(row=row, column=0, columnspan=2, sticky='w', padx=6, pady=(4, 0))
-        ttk.Label(hdr, text='', width=8).pack(side=tk.LEFT)
-        for label in ('Cols', 'Rows', 'Pop'):
-            ttk.Label(hdr, text=label, width=6, anchor='center').pack(side=tk.LEFT, padx=2)
-        row += 1
-
-        # MAPPO row
-        mappo_row = ttk.Frame(f)
-        mappo_row.grid(row=row, column=0, columnspan=2, sticky='w', padx=6, pady=1)
-        ttk.Label(mappo_row, text='MAPPO:', width=8).pack(side=tk.LEFT)
-        self.v_mappo_cols = tk.StringVar(value='25')
-        ttk.Entry(mappo_row, textvariable=self.v_mappo_cols, width=5).pack(side=tk.LEFT, padx=2)
-        self.v_mappo_rows = tk.StringVar(value='25')
-        ttk.Entry(mappo_row, textvariable=self.v_mappo_rows, width=5).pack(side=tk.LEFT, padx=2)
-        self.v_mappo_creatures = tk.StringVar(value='12')
-        ttk.Entry(mappo_row, textvariable=self.v_mappo_creatures, width=5).pack(side=tk.LEFT, padx=2)
-        row += 1
-
-        # PPO row
-        ppo_row = ttk.Frame(f)
-        ppo_row.grid(row=row, column=0, columnspan=2, sticky='w', padx=6, pady=1)
-        ttk.Label(ppo_row, text='PPO:', width=8).pack(side=tk.LEFT)
-        self.v_ppo_cols = tk.StringVar(value='50')
-        ttk.Entry(ppo_row, textvariable=self.v_ppo_cols, width=5).pack(side=tk.LEFT, padx=2)
-        self.v_ppo_rows = tk.StringVar(value='50')
-        ttk.Entry(ppo_row, textvariable=self.v_ppo_rows, width=5).pack(side=tk.LEFT, padx=2)
-        self.v_ppo_creatures = tk.StringVar(value='30')
-        ttk.Entry(ppo_row, textvariable=self.v_ppo_creatures, width=5).pack(side=tk.LEFT, padx=2)
-        row += 1
+        # (Arena size + creatures + map now live on the Pipeline rows
+        # above, per-phase. The old separate Arena section was merged
+        # into the 3-row pipeline.)
 
         # Status line
         self.status = ttk.Label(f, text='ready', foreground='gray')
@@ -319,6 +372,27 @@ class TrainingCurriculumTab(ttk.Frame):
         self.v_lr.set(str(r['learning_rate']))
         self.v_ent.set(str(r['ent_coef']))
         self.v_resume.set(str(r['resume_from_stage']) if r['resume_from_stage'] is not None else '')
+
+        # Per-phase parallelism / creatures / arena / map. Guarded
+        # by ``keys()`` check so pre-migration DBs don't throw.
+        _cols = set(r.keys())
+        def _set(var, key, default=''):
+            if key in _cols and r[key] is not None:
+                var.set(str(r[key]))
+            else:
+                var.set(str(default))
+        _set(self.v_ppo_parallel,    'ppo_parallel',    1)
+        _set(self.v_es_parallel,     'es_parallel',     1)
+        _set(self.v_mappo_creatures, 'mappo_creatures', 0)
+        _set(self.v_ppo_creatures,   'ppo_creatures',   0)
+        _set(self.v_mappo_cols,      'mappo_cols',      0)
+        _set(self.v_mappo_rows,      'mappo_rows',      0)
+        _set(self.v_ppo_cols,        'ppo_cols',        0)
+        _set(self.v_ppo_rows,        'ppo_rows',        0)
+        # arena_map is shared (single column) — populate both UI
+        # fields with the same value so either can be edited
+        _set(self.v_mappo_map, 'arena_map', '')
+        _set(self.v_ppo_map,   'arena_map', '')
         # Pretty-print signal scales for editing
         try:
             scales = json.loads(r['signal_scales'] or '{}')
@@ -357,6 +431,17 @@ class TrainingCurriculumTab(ttk.Frame):
             ent = float(self.v_ent.get() or 0.05)
             resume_str = self.v_resume.get().strip()
             resume = int(resume_str) if resume_str else None
+            ppo_parallel = int(self.v_ppo_parallel.get() or 1)
+            es_parallel = int(self.v_es_parallel.get() or 1)
+            mappo_creatures = int(self.v_mappo_creatures.get() or 0)
+            ppo_creatures = int(self.v_ppo_creatures.get() or 0)
+            mappo_cols = int(self.v_mappo_cols.get() or 0)
+            mappo_rows = int(self.v_mappo_rows.get() or 0)
+            ppo_cols = int(self.v_ppo_cols.get() or 0)
+            ppo_rows = int(self.v_ppo_rows.get() or 0)
+            # Either map field authoritative; prefer non-empty mappo_map.
+            arena_map = (self.v_mappo_map.get().strip()
+                         or self.v_ppo_map.get().strip() or '')
         except (ValueError, json.JSONDecodeError) as e:
             messagebox.showerror('Validation', f'Invalid input: {e}')
             return
@@ -371,7 +456,11 @@ class TrainingCurriculumTab(ttk.Frame):
                    fatigue_enabled=?,
                    mappo_steps=?, es_generations=?, es_variants=?, es_steps=?,
                    ppo_steps=?, learning_rate=?, ent_coef=?,
-                   resume_from_stage=?, allowed_actions=?
+                   resume_from_stage=?, allowed_actions=?,
+                   mappo_creatures=?, ppo_creatures=?,
+                   es_parallel=?, ppo_parallel=?,
+                   mappo_cols=?, mappo_rows=?, ppo_cols=?, ppo_rows=?,
+                   arena_map=?
                    WHERE stage_number=?''',
                 (self.v_name.get().strip(),
                  self.desc_text.get('1.0', tk.END).strip(),
@@ -382,6 +471,10 @@ class TrainingCurriculumTab(ttk.Frame):
                  1 if self.v_fatigue.get() else 0,
                  mappo, es_gens, es_vars, es_steps, ppo, lr, ent, resume,
                  json.dumps(allowed_actions),
+                 mappo_creatures, ppo_creatures,
+                 es_parallel, ppo_parallel,
+                 mappo_cols, mappo_rows, ppo_cols, ppo_rows,
+                 arena_map,
                  self._selected_stage)
             )
             con.commit()
