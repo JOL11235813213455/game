@@ -193,6 +193,15 @@ def compute_reward(creature, prev: dict, curr: dict,
     if dmg_delta > 0:
         signals['damage_dealt'] = math.log(1 + dmg_delta) * 1.0
 
+    # Grief — negative signal when a loved one dies (magnitude scales
+    # with sentiment × ln(count+1)). Teaches the NN that letting an
+    # ally die is painful, not just a missed kill-reward. Applies as
+    # a burst the tick the death is witnessed.
+    grief_mag_delta = (curr.get('grief_magnitude_sum', 0.0)
+                       - prev.get('grief_magnitude_sum', 0.0))
+    if grief_mag_delta > 0:
+        signals['grief'] = -math.log(1 + grief_mag_delta) * 2.0
+
     # Stealth: reward for sneaking past hostiles undetected
     stealth_delta = curr.get('stealth_moves', 0) - prev.get('stealth_moves', 0)
     if stealth_delta > 0:
@@ -494,4 +503,6 @@ def make_reward_snapshot(creature) -> dict:
         'outstanding_lies': GRAPH.outstanding_lies(creature.uid),
         'stamina_ratio': stats.active[Stat.CUR_STAMINA]() / stam_max,
         'encumbrance_ratio': creature.carried_weight / max(1, stats.active[Stat.CARRY_WEIGHT]()),
+        'grief_events_total': getattr(creature, '_grief_events_total', 0),
+        'grief_magnitude_sum': getattr(creature, '_grief_magnitude_sum', 0.0),
     }

@@ -183,6 +183,12 @@ class Creature(
         self._quests_completed: int = 0
         self._quest_steps_completed: int = 0
         self._max_hit_taken: int = 0        # worst single hit for survival anchor
+        # Grief counters — updated by classes.mourning.apply_grief when
+        # a positively-bonded creature dies. Used by reward deltas and
+        # future funeral/goal systems.
+        self._grief_events_total: int = 0
+        self._grief_magnitude_sum: float = 0.0
+        self._grief_death_locations: list = []
         self._item_prices: dict = {}        # item id -> gold paid
         self._pickups: int = 0              # successful PICKUP actions (RL counter)
         self._stolen_value: float = 0.0     # cumulative value of stolen items/gold (RL counter)

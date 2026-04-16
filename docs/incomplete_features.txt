@@ -34,17 +34,7 @@ FUTURE / NOT STARTED
 - Per-creature learnable reward weights (personality via 0.5-2.0 bounded scales)
 - Shop/vendor NPCs (distinct from peer-to-peer trade)
 - Pathfinding for NPC cross-map travel (map_graph exists, behavior module doesn't)
-- Mourning / grief system: when a high-sentiment relationship dies (direct
-  witness or via rumor), survivor gets a `grief` stat mod scaled by
-  sentiment * ln(count+1) for a bereavement window (3-7 game days).
-  Effects: reduced productivity, lower food intake, lower CHR on social,
-  reduced combat aggression. Reward signal m_grief/grief_penalty teaches
-  the NN to protect allies. Death tile becomes a place of interest
-  (funeral-like emergent behavior). Ties into existing ghost system
-  (_ghost_loved_uid visits during grief window). Training via dedicated
-  "loved ones vs monster" scenario: spawn 2-8 creatures with pre-seeded
-  strong positive relationships against monsters; survivor grief reward
-  teaches protective behavior. See memory/project_mourning_system.md.
+(Mourning system implemented — moved to completed.)
 
 COMPLETED SYSTEMS
 =================
@@ -86,6 +76,17 @@ Creature System
 - Meat drop on death: every dying LivingThing drops a Meat item with species tag and 48hr spoil window
 - meat_value species attribute: hunger restoration when consumed (auto-derived from size if NULL)
 - Cannibalism detection: eating meat where meat.species == self.species broadcasts -15 rumor to every witness within sight range, -0.1 piety if devoted; _cannibalism_events counter for reward
+- Mourning / grief (classes/mourning.py): when a creature dies, survivors
+  with positive sentiment get a one-shot grief event. Magnitude scales
+  as sentiment * ln(count+1). Four tiers (mild/notable/deep/profound)
+  apply stat debuffs (STR/CHR/PER/AGL) for 1-7 game days, auto-expired
+  via a scheduled tick. `_grief_events_total` + `_grief_magnitude_sum`
+  counters feed the `grief` reward signal (negative log-scaled).
+  `_grief_death_locations` buffer (capped at 10) remembers where loved
+  ones died for future funeral/goal behavior. Training via
+  generate_grief_training_scenario: spawns bonded pairs with sentiment
+  ~19 × 50 interactions → profound-tier grief when one dies, plus
+  monsters to do the killing.
 
 Monster System
 - Monster class: top-level (NOT Creature subclass), shares CombatMixin/

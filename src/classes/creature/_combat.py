@@ -563,6 +563,18 @@ class CombatMixin:
             return
 
         self.play_animation('death')
+
+        # Grief notification: walk incoming sentiment edges and apply
+        # bereavement stat mods to positive-relationship survivors
+        # BEFORE the graph is torn down below.
+        try:
+            from classes.mourning import notify_death
+            now_ms = getattr(self, '_last_update_time', 0)
+            notify_death(self, now=now_ms)
+        except Exception:
+            # Mourning must never block the death path; swallow errors.
+            pass
+
         self._timed_events.clear()
 
         # Permanently remove non-ghost dead creature from spatial registries.

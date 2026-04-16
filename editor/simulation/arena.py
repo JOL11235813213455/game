@@ -578,6 +578,79 @@ def generate_arena(cols: int = 20, rows: int = 20,
     }
 
 
+def generate_grief_training_scenario(
+        cols: int = 20, rows: int = 20,
+        bonded_pairs: int = 3,
+        monster_species: list[str] = None) -> dict:
+    """Pre-bonded creatures vs monsters, for mourning-signal training.
+
+    Spawns `bonded_pairs × 2` creatures placed in pairs, with VERY high
+    positive relationships between each pair (sentiment ~18-20, count
+    ~40-60 → magnitude pushed into the 'profound' grief tier when a
+    partner dies). Monsters are spawned at the edges of the map.
+
+    Training mechanic: monsters kill creatures → survivors experience
+    deep grief → m_grief reward teaches the NN to protect bondmates
+    rather than optimise for kill-count alone.
+
+    Returns the same shape as generate_arena().
+    """
+    from classes.monster import Monster
+    from classes.pack import Pack
+    from classes.relationship_graph import GRAPH
+
+    monster_species = monster_species or ['grey_wolf']
+
+    arena = generate_arena(cols=cols, rows=rows,
+                           num_creatures=bonded_pairs * 2,
+                           mask_probability=0.0)
+    game_map = arena['map']
+    creatures = arena['creatures']
+
+    # Bond creatures pairwise with extreme sentiment + interaction count
+    for i in range(0, min(len(creatures) - 1, bonded_pairs * 2), 2):
+        a = creatures[i]
+        b = creatures[i + 1]
+        # 50 interactions averaging +19 sentiment — magnitude will be
+        # 19 * ln(50+1) ≈ 74.6 → 'profound' tier (7-day grief)
+        for _ in range(50):
+            GRAPH.record_interaction(a.uid, b.uid, random.uniform(17, 20))
+            GRAPH.record_interaction(b.uid, a.uid, random.uniform(17, 20))
+        # Place pair adjacent on the map
+        try:
+            a.location = a.location._replace(x=b.location.x + 1,
+                                              y=b.location.y)
+        except Exception:
+            pass
+
+    # Spawn monsters on the edges
+    monsters = []
+    packs = []
+    for species in monster_species:
+        # Place pack center on a random edge tile
+        center_x = random.choice([2, cols - 3])
+        center_y = random.choice([2, rows - 3])
+        center = MapKey(center_x, center_y, 0)
+        pack = Pack(species=species, territory_center=center,
+                    game_map=game_map)
+        packs.append(pack)
+        for i in range(3):
+            sx = max(0, min(cols - 1, center_x + random.randint(-1, 1)))
+            sy = max(0, min(rows - 1, center_y + random.randint(-1, 1)))
+            loc = MapKey(sx, sy, 0)
+            if loc not in game_map.tiles:
+                loc = center
+            mon = spawn_monster(game_map, loc, species,
+                                pack=pack,
+                                sex='male' if i % 2 == 0 else 'female',
+                                age=20)
+            monsters.append(mon)
+
+    arena['monsters'] = monsters
+    arena['packs'] = packs
+    return arena
+
+
 def spawn_monster(game_map, location, species: str,
                   pack=None, sex: str = None, age: int = 20):
     """Spawn a single Monster at the given location.

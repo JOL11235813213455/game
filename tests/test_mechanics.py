@@ -4636,6 +4636,112 @@ if received is not None:
           received[2] < 0.99)
 
 # ==========================================================================
+print("\n=== Mourning / Grief ===")
+from classes.mourning import (notify_death, apply_grief,
+                              _grief_magnitude, make_grief_snapshot,
+                              GRIEF_TIERS)
+
+GRAPH.clear()
+gm = make_map(10, 10)
+
+# Two bonded creatures
+lover_a = make_creature(gm, x=2, y=2, name='Romeo')
+lover_b = make_creature(gm, x=2, y=3, name='Juliet')
+
+# Seed extreme positive sentiment (sentiment 19, count 40 → magnitude ~77)
+for _ in range(40):
+    GRAPH.record_interaction(lover_a.uid, lover_b.uid, 19.0)
+    GRAPH.record_interaction(lover_b.uid, lover_a.uid, 19.0)
+
+# A creature with negative relationship (should NOT grieve)
+enemy = make_creature(gm, x=5, y=5, name='Tybalt')
+for _ in range(10):
+    GRAPH.record_interaction(enemy.uid, lover_a.uid, -10.0)
+
+# A creature with mild positive sentiment (tier 1 mild grief)
+friend = make_creature(gm, x=6, y=6, name='Mercutio')
+for _ in range(2):
+    GRAPH.record_interaction(friend.uid, lover_a.uid, 2.0)
+
+# Magnitudes
+mag_b = _grief_magnitude(lover_b, lover_a.uid)
+mag_enemy = _grief_magnitude(enemy, lover_a.uid)
+mag_friend = _grief_magnitude(friend, lover_a.uid)
+check(f"Lover magnitude > 50 (got {mag_b:.1f})", mag_b > 50)
+check(f"Enemy magnitude is 0 (negative sentiment) (got {mag_enemy})",
+      mag_enemy == 0)
+check(f"Friend magnitude 2-10 mild (got {mag_friend:.1f})",
+      2 < mag_friend < 10)
+
+# Fire the death
+str_before = lover_b.stats.active[Stat.STR]()
+chr_before = lover_b.stats.active[Stat.CHR]()
+lover_a._last_update_time = 1000
+lover_a.die()
+
+# Lover has profound grief: -3 STR, -5 CHR, -2 PER, -1 AGL
+str_after = lover_b.stats.active[Stat.STR]()
+chr_after = lover_b.stats.active[Stat.CHR]()
+check(f"Lover STR debuff applied ({str_before} -> {str_after})",
+      str_after < str_before)
+check(f"Lover CHR debuff applied ({chr_before} -> {chr_after})",
+      chr_after < chr_before)
+check(f"Lover grief counter incremented",
+      lover_b._grief_events_total == 1)
+check(f"Lover grief magnitude > 50",
+      lover_b._grief_magnitude_sum > 50)
+check(f"Lover remembers death location",
+      len(lover_b._grief_death_locations) == 1)
+
+# Enemy does NOT grieve
+check(f"Enemy grief counter == 0",
+      enemy._grief_events_total == 0)
+
+# Friend has mild grief (tier 1: -1 CHR only)
+# Magnitude ~ 2 * ln(3) ≈ 2.2 which is just above tier 1 (2.0)
+check(f"Friend has some grief counter",
+      friend._grief_events_total == 1)
+
+# Grief reward signal activates via snapshot delta
+from classes.reward import compute_reward, make_reward_snapshot
+# Reset lover's snapshot to pre-grief state
+pre_snapshot = make_reward_snapshot(lover_b)
+pre_snapshot['grief_magnitude_sum'] = 0
+pre_snapshot['grief_events_total'] = 0
+curr_snapshot = make_reward_snapshot(lover_b)
+reward, signals = compute_reward(
+    lover_b, pre_snapshot, curr_snapshot,
+    breakdown=True,
+    signal_scales={'grief': 1.0})
+check(f"grief signal present in reward breakdown",
+      'grief' in signals)
+check(f"grief signal is negative (penalty)",
+      signals.get('grief', 0) < 0)
+
+# Cleanup via clear_grief
+from classes.mourning import clear_grief
+clear_grief(lover_b)
+str_recovered = lover_b.stats.active[Stat.STR]()
+check(f"clear_grief restores STR ({str_after} -> {str_recovered})",
+      str_recovered == str_before)
+
+# Training scenario smoke test
+from editor.simulation.arena import generate_grief_training_scenario
+import random as _rng
+_rng.seed(12345)
+scn = generate_grief_training_scenario(cols=20, rows=20,
+                                        bonded_pairs=2,
+                                        monster_species=['grey_wolf'])
+check(f"grief scenario has creatures", len(scn['creatures']) >= 2)
+check(f"grief scenario has monsters", len(scn['monsters']) >= 1)
+check(f"grief scenario has pack", len(scn['packs']) >= 1)
+# Check bond was set
+if len(scn['creatures']) >= 2:
+    pair_mag = _grief_magnitude(scn['creatures'][0],
+                                 scn['creatures'][1].uid)
+    check(f"scenario bond produces profound magnitude (>50, got {pair_mag:.1f})",
+          pair_mag > 50)
+
 print("\n=== Species Sprite Size Audit ===")
 from data.db import SPRITE_DATA, SPECIES as _SPECIES
 SIZE_RANGES = {
