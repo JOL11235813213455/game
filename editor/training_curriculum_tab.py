@@ -64,10 +64,50 @@ class TrainingCurriculumTab(ttk.Frame):
         self.listbox.bind('<<ListboxSelect>>', self._on_select)
 
         # ---- Right: stage config form ----
+        # Wrapped in a vertical scroll container so the growing pipeline
+        # grid (8 phase rows + signals + actions + buttons) doesn't push
+        # controls off the bottom of a small editor window.
         right = ttk.Frame(pane)
         pane.add(right, weight=1)
 
-        f = right
+        _canvas = tk.Canvas(right, highlightthickness=0)
+        _vsb = ttk.Scrollbar(right, orient=tk.VERTICAL, command=_canvas.yview)
+        _canvas.configure(yscrollcommand=_vsb.set)
+        _canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        _vsb.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # The real form lives inside an inner frame placed into the
+        # canvas via create_window. Size is re-measured whenever the
+        # inner frame changes so the scrollregion stays correct.
+        f = ttk.Frame(_canvas)
+        _inner_id = _canvas.create_window((0, 0), window=f, anchor='nw')
+
+        def _on_inner_configure(_event):
+            _canvas.configure(scrollregion=_canvas.bbox('all'))
+        f.bind('<Configure>', _on_inner_configure)
+
+        def _on_canvas_configure(event):
+            # Grow the inner frame to the canvas width so entries
+            # stretching with sticky='ew' actually fill available space.
+            _canvas.itemconfigure(_inner_id, width=event.width)
+        _canvas.bind('<Configure>', _on_canvas_configure)
+
+        # Mouse-wheel scrolling when the cursor is over the canvas.
+        # Linux uses Button-4/5; macOS/Windows use MouseWheel.
+        def _on_mousewheel(event):
+            delta = 0
+            if hasattr(event, 'delta') and event.delta:
+                delta = int(-event.delta / 40)
+            elif getattr(event, 'num', 0) == 4:
+                delta = -3
+            elif getattr(event, 'num', 0) == 5:
+                delta = 3
+            if delta:
+                _canvas.yview_scroll(delta, 'units')
+
+        for _seq in ('<MouseWheel>', '<Button-4>', '<Button-5>'):
+            _canvas.bind_all(_seq, _on_mousewheel, add='+')
+
         row = 0
 
         # Identity
