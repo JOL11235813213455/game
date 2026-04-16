@@ -5031,6 +5031,197 @@ with tempfile.TemporaryDirectory() as tmpdir:
           pool.latest_snapshot()['name'] == 'v4')
 
 # ==========================================================================
+print("\n=== StateMachine ===")
+from classes.fsm import StateMachine, Transition
+
+# Basic transition
+enter_log = []
+exit_log = []
+sm = StateMachine(
+    owner=None,
+    initial='normal',
+    states=['normal', 'stunned', 'sleeping', 'dead'],
+    transitions=[
+        Transition('normal', 'stun', 'stunned'),
+        Transition('stunned', 'stun_expired', 'normal'),
+        Transition('normal', 'sleep', 'sleeping'),
+        Transition('sleeping', 'wake', 'normal'),
+        Transition('*', 'die', 'dead'),
+    ],
+    on_enter={'stunned': lambda: enter_log.append('stunned'),
+              'dead':    lambda: enter_log.append('dead')},
+    on_exit={'normal':   lambda: exit_log.append('normal')},
+)
+check("initial state is 'normal'", sm.current == 'normal')
+check("no previous yet", sm.previous is None)
+
+ok = sm.trigger('stun', now=1000)
+check("'stun' transition returns True", ok is True)
+check("state is now 'stunned'", sm.current == 'stunned')
+check("previous is 'normal'", sm.previous == 'normal')
+check("on_exit(normal) fired", exit_log == ['normal'])
+check("on_enter(stunned) fired", enter_log == ['stunned'])
+check("time_in_state uses entered_at", sm.time_in_state(1500) == 500)
+
+# Invalid trigger — silent no-op
+ok2 = sm.trigger('nonexistent', now=2000)
+check("unknown trigger returns False", ok2 is False)
+check("state unchanged", sm.current == 'stunned')
+
+# Back to normal
+sm.trigger('stun_expired', now=3000)
+check("returned to 'normal'", sm.current == 'normal')
+
+# Wildcard transition ('*' matches any from_state)
+sm.trigger('die', now=4000)
+check("wildcard 'die' fires from any state", sm.current == 'dead')
+check("on_enter(dead) fired", 'dead' in enter_log)
+
+# Guarded transition: False guard blocks
+allow_transition = [False]
+sm2 = StateMachine(
+    owner=None,
+    initial='a', states=['a', 'b'],
+    transitions=[
+        Transition('a', 'go', 'b',
+                   guard=lambda: allow_transition[0]),
+    ],
+)
+check("guard=False blocks transition",
+      sm2.trigger('go') is False and sm2.current == 'a')
+allow_transition[0] = True
+check("guard=True permits transition",
+      sm2.trigger('go') is True and sm2.current == 'b')
+
+# Effect runs on transition
+effect_log = []
+sm3 = StateMachine(
+    owner=None, initial='a', states=['a', 'b'],
+    transitions=[Transition('a', 'go', 'b',
+                             effect=lambda: effect_log.append('fired'))],
+)
+sm3.trigger('go')
+check("effect fired on transition", effect_log == ['fired'])
+
+# force() bypasses guards and effects but runs enter/exit
+sm4_enter = []
+sm4 = StateMachine(
+    owner=None, initial='a', states=['a', 'b', 'c'],
+    transitions=[],
+    on_enter={'c': lambda: sm4_enter.append('c')},
+)
+sm4.force('c', now=1234)
+check("force() jumped to 'c'", sm4.current == 'c')
+check("force() ran on_enter", sm4_enter == ['c'])
+
+# Pickle roundtrip (state preserved, graph dropped)
+import pickle
+sm5 = StateMachine(
+    owner=None, initial='a', states=['a', 'b'],
+    transitions=[Transition('a', 'go', 'b')],
+)
+sm5.trigger('go', now=500)
+restored = pickle.loads(pickle.dumps(sm5))
+check("pickle preserved current state", restored.current == 'b')
+check("pickle preserved entered_at", restored.time_in_state(800) == 300)
+
+# ==========================================================================
+print("\n=== ScheduledEventQueue ===")
+from classes.fsm import ScheduledEventQueue
+
+q = ScheduledEventQueue()
+check("empty queue has len 0", len(q) == 0)
+check("peek empty returns None", q.peek_next_expiry() is None)
+
+t1 = q.schedule(1000, 'poison_tick', {'uid': 42})
+t2 = q.schedule(500, 'stun_expire', {'uid': 42})
+t3 = q.schedule(2000, 'lifecycle', {'stage': 'adult'})
+check("3 events queued", len(q) == 3)
+check("next expiry is the earliest (500)", q.peek_next_expiry() == 500)
+
+# Drain at 700 — only the stun_expire should fire
+fired_700 = q.drain(700)
+check(f"drain@700 fires 1 event: {len(fired_700)}", len(fired_700) == 1)
+check("fired event was stun_expire", fired_700[0][0] == 'stun_expire')
+check("payload preserved", fired_700[0][1] == {'uid': 42})
+check("queue has 2 left", len(q) == 2)
+
+# Drain at 1500 — poison_tick fires, lifecycle waits
+fired_1500 = q.drain(1500)
+check("drain@1500 fires 1 more (poison_tick)",
+      len(fired_1500) == 1 and fired_1500[0][0] == 'poison_tick')
+check("queue has 1 left", len(q) == 1)
+
+# Cancellation — mark t3 cancelled, drain past, should NOT fire
+q.cancel(t3)
+fired_3000 = q.drain(3000)
+check("cancelled ticket does not fire",
+      len(fired_3000) == 0)
+check("queue empty after cancelled drain", len(q) == 0)
+
+# Cancellation before expiry window skips silently
+q2 = ScheduledEventQueue()
+t_a = q2.schedule(100, 'a', None)
+t_b = q2.schedule(200, 'b', None)
+q2.cancel(t_a)
+fired = q2.drain(500)
+check("cancel before drain: only non-cancelled fires",
+      len(fired) == 1 and fired[0][0] == 'b')
+
+# Pickle roundtrip — events and cancellations preserved
+q3 = ScheduledEventQueue()
+q3.schedule(100, 'evt', 'pay')
+q3.schedule(200, 'evt2', None)
+q3_r = pickle.loads(pickle.dumps(q3))
+fired_r = q3_r.drain(300)
+check("pickled queue fires preserved events",
+      len(fired_r) == 2)
+
+# ==========================================================================
+print("\n=== sim.events integration ===")
+from editor.simulation.arena import generate_arena
+from editor.simulation.headless import Simulation
+
+_arena = generate_arena(cols=10, rows=10, num_creatures=2)
+_sim = Simulation(_arena)
+
+check("sim.events exists and is empty",
+      hasattr(_sim, 'events') and len(_sim.events) == 0)
+
+# Schedule + verify handler dispatch via step
+delivered = []
+def _handle(payload):
+    delivered.append(payload)
+_sim.subscribe_event('test_tag', _handle)
+_sim.events.schedule(_sim.now + _sim.tick_ms, 'test_tag', 'hello')
+_sim.step()
+check("event delivered during step",
+      delivered == ['hello'])
+
+# Handler that raises doesn't abort drain
+def _bad(payload):
+    raise RuntimeError('boom')
+_sim.subscribe_event('boom_tag', _bad)
+also_delivered = []
+_sim.subscribe_event('boom_tag', lambda p: also_delivered.append(p))
+_sim.events.schedule(_sim.now + _sim.tick_ms, 'boom_tag', 'ping')
+import io, contextlib
+_errbuf = io.StringIO()
+with contextlib.redirect_stderr(_errbuf):
+    _sim.step()
+check("raising handler did not block second handler",
+      also_delivered == ['ping'])
+check("raising handler logged to stderr",
+      'boom' in _errbuf.getvalue())
+
+# Unsubscribe
+_sim.unsubscribe_event('test_tag', _handle)
+_sim.events.schedule(_sim.now + _sim.tick_ms, 'test_tag', 'bye')
+_sim.step()
+check("unsubscribed handler does not receive further events",
+      delivered == ['hello'])
+
+# ==========================================================================
 print(f"\n{'='*50}")
 print(f"Results: {PASS} passed, {FAIL} failed out of {PASS+FAIL} tests")
 if FAIL:

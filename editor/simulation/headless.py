@@ -131,10 +131,49 @@ class Simulation:
         self._obs_snapshots: dict[int, dict] = {}  # uid → prev observation snapshot
         self._reward_snapshots: dict[int, dict] = {}  # uid → prev reward snapshot
 
+        # Shared scheduled-event queue. Owners (status effects,
+        # lifecycle timers, weather transitions, etc.) schedule
+        # expiries here; the tick loop drains fired events and
+        # dispatches them to tag-specific handlers. See src/classes/fsm.py.
+        from classes.fsm import ScheduledEventQueue
+        self.events = ScheduledEventQueue()
+        self._event_handlers: dict[str, list] = {}
+
         # Initialize snapshots
         for c in self.creatures:
             self._obs_snapshots[c.uid] = make_snapshot(c)
             self._reward_snapshots[c.uid] = make_reward_snapshot(c)
+
+    def subscribe_event(self, tag: str, handler) -> None:
+        """Register a handler for events drained with the given tag.
+
+        Handler signature: ``handler(payload) -> None``. Multiple
+        handlers per tag are called in registration order.
+        """
+        self._event_handlers.setdefault(tag, []).append(handler)
+
+    def unsubscribe_event(self, tag: str, handler) -> None:
+        """Remove a previously-registered handler. Silent if missing."""
+        hs = self._event_handlers.get(tag, [])
+        if handler in hs:
+            hs.remove(handler)
+
+    def _drain_scheduled_events(self) -> None:
+        """Dispatch all events whose expiry has passed.
+
+        Called once per sim step from the tick loop. Handlers that
+        raise log to stderr but do not abort the drain — one broken
+        handler must not strand every other timer.
+        """
+        import sys as _sys
+        fired = self.events.drain(self.now)
+        for tag, payload in fired:
+            for h in self._event_handlers.get(tag, ()):
+                try:
+                    h(payload)
+                except Exception as _e:
+                    print(f'[sim.events] handler for {tag!r} raised: {_e}',
+                          file=_sys.stderr)
 
     def _tick_lifecycle_day(self):
         """Daily population tick: gestation + hatching.
@@ -236,6 +275,11 @@ class Simulation:
         """
         self.now += self.tick_ms
         self.step_count += 1
+
+        # Drain expired scheduled events first — status effects that
+        # fired their expiry during *this* tick should have their
+        # on_expire hooks run before creature updates see stale state.
+        self._drain_scheduled_events()
 
         # Set tile grid reference (synced once at init, tiles don't change often)
         from classes.creature import Creature as _Creature
