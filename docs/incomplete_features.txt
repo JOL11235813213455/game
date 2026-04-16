@@ -34,6 +34,17 @@ FUTURE / NOT STARTED
 - Per-creature learnable reward weights (personality via 0.5-2.0 bounded scales)
 - Shop/vendor NPCs (distinct from peer-to-peer trade)
 - Pathfinding for NPC cross-map travel (map_graph exists, behavior module doesn't)
+- Mourning / grief system: when a high-sentiment relationship dies (direct
+  witness or via rumor), survivor gets a `grief` stat mod scaled by
+  sentiment * ln(count+1) for a bereavement window (3-7 game days).
+  Effects: reduced productivity, lower food intake, lower CHR on social,
+  reduced combat aggression. Reward signal m_grief/grief_penalty teaches
+  the NN to protect allies. Death tile becomes a place of interest
+  (funeral-like emergent behavior). Ties into existing ghost system
+  (_ghost_loved_uid visits during grief window). Training via dedicated
+  "loved ones vs monster" scenario: spawn 2-8 creatures with pre-seeded
+  strong positive relationships against monsters; survivor grief reward
+  teaches protective behavior. See memory/project_mourning_system.md.
 
 COMPLETED SYSTEMS
 =================
