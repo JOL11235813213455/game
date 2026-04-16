@@ -12,6 +12,7 @@ sequenceDiagram
     M->>DB: load()
     DB->>SQLite: connect + _migrate()
     DB->>DB: _load_species() -> SPECIES, PLAYABLE, NONPLAYABLE
+    DB->>DB: _load_monster_species() -> MONSTER_SPECIES
     DB->>DB: _load_items() -> ITEMS, STRUCTURES
     DB->>DB: _load_sprites() -> SPRITE_DATA
     DB->>DB: _load_tile_templates() -> TILE_TEMPLATES
@@ -99,6 +100,61 @@ sequenceDiagram
         S->>WO: _by_map[id(map)].add(obj)
     end
     S-->>UI: player
+```
+
+## Monster Tick Flow (headless simulation)
+
+Monsters tick alongside creatures each `Simulation.step()`. The
+per-step flow:
+
+```mermaid
+sequenceDiagram
+    participant SIM as Simulation.step
+    participant MT as monster_tick
+    participant PN as PackNet (NN or heuristic)
+    participant MN as MonsterNet (NN or heuristic)
+    participant MD as dispatch_monster
+    participant P as Pack
+    participant T as MonsterTrainer (optional)
+
+    SIM->>MT: run if sim.monsters non-empty
+    MT->>PN: pack NN refresh (slow cadence, ~2s)
+    PN-->>P: broadcast_signals on change (sleep/alert/cohesion/roles)
+    MT->>MN: batch inference (stacked obs + masks)
+    MN-->>MT: action probs per monster
+    loop each monster
+        MT->>MD: dispatch_monster(action, context)
+        MD-->>MT: result {success, damage, hunger_restored, target, ...}
+        MT->>P: on_creature_spotted, on_member_state (events)
+    end
+    MT->>MT: pack housekeeping (split, merge, challenge, egg lay)
+    SIM->>SIM: for m in sim.monsters: m.process_ticks(now)
+    SIM->>SIM: sweep dead monsters + empty packs
+    SIM->>T: on_step(sim, signal_scales) (only if trainer attached)
+    T->>T: compute reward delta, buffer per-monster rollout
+    T-->>T: trigger PPO / REINFORCE update when buffer full
+```
+
+## Training Freeze Toggle Flow (curriculum stages 15-25)
+
+Training runners (run_mappo / run_ppo) read stage config and wire
+monsters + optimizer behavior accordingly.
+
+```mermaid
+graph TD
+    STAGE[_load_curriculum_stage<br/>stage_number] --> FLAGS{stage flags}
+    FLAGS -->|monsters_enabled| INJECT[_inject_monsters<br/>spawn_monsters_for_stage]
+    FLAGS -->|creature_frozen| SKIP_C[Skip CreatureNet + GoalNet<br/>PPO update]
+    FLAGS -->|monster_trainable| MK_TRAINER[Build MonsterTrainer<br/>load pretrained .npz if exists<br/>attach_to_sim]
+    FLAGS -->|pack_trainable| PACK_FLAG[MonsterTrainer.pack_trainable=True<br/>REINFORCE enabled]
+    INJECT --> SIM[Simulation constructor<br/>arena.monsters + arena.packs]
+    MK_TRAINER --> SIM
+    SIM --> LOOP[Per-step: monster_tick, reward collection,<br/>optional PPO/REINFORCE updates]
+    LOOP --> EXPORT[End of phase:<br/>monster_trainer.export_weights]
+
+    style STAGE fill:#4a6,color:#fff
+    style SKIP_C fill:#a64,color:#fff
+    style MK_TRAINER fill:#a4a,color:#fff
 ```
 
 ## Sprite Rendering Pipeline

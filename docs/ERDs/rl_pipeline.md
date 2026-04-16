@@ -2,84 +2,121 @@
 
 ## Architecture Overview
 
+Four networks co-evolve in the world:
+
+- **CreatureNet** — creature action policy (1837 → 32 actions)
+- **GoalNet** — creature hierarchical goal selection
+- **MonsterNet** — monster action policy (73 → 11 actions, INT-masked)
+- **PackNet** — pack-level coordination (14 → 6 signals)
+
+Creature training runs first (stages 1-14), then monsters bootstrap
+against frozen creatures (stages 15-20), then creatures adapt to frozen
+monsters (stages 21-22), then co-evolution (stages 23-25).
+
 ```mermaid
 graph TD
-    subgraph "Training Pipeline (train.py)"
-        MAPPO[Phase 1: MAPPO<br/>All creatures share weights<br/>Learn multi-agent dynamics]
-        ES[Phase 2: ES<br/>50 weight variants<br/>Break Nash equilibrium]
-        PPO[Phase 3: PPO<br/>Single agent vs diverse pool<br/>Sharpen robust policy]
-        MAPPO --> ES --> PPO
-        PPO -->|repeat cycle| MAPPO
+    subgraph "Curriculum (25 stages)"
+        S1_14[Stages 1-14: Creature curriculum<br/>Wander → Pickup → Hunger → Purpose →<br/>Harvest → Process → Jobs → Trade →<br/>Schedule → Reputation → Combat →<br/>Lifecycle → Religion → Mastery]
+        S15_20[Stages 15-20: Monster bootstrap<br/>M_Survive → M_Eat → M_Hunt → M_Pack →<br/>M_Dominance → M_Lifecycle<br/>CREATURE FROZEN, MONSTER TRAINABLE]
+        S21_22[Stages 21-22: Creature adaptation<br/>C_Predation → C_Ecosystem<br/>MONSTER FROZEN, CREATURE TRAINABLE<br/>Cannibalism penalty active]
+        S23_25[Stages 23-25: Co-evolution<br/>Coevo_A (alternating) →<br/>Coevo_B (league) →<br/>Final (reduced LR)]
+        S1_14 --> S15_20 --> S21_22 --> S23_25
     end
 
-    subgraph "Per-Tick Data Flow"
-        CREATURE[Creature State<br/>stats, inventory, relationships<br/>position, health, gold, deity]
-        HISTORY[History Buffer<br/>deque(maxlen=100)<br/>per-creature ring buffer]
-        OBS_BUILD[build_observation()<br/>786 base + 668 temporal<br/>= 1454 float vector]
-        MASK[Observation Mask<br/>socially_deaf, blind, feral<br/>14 presets + custom]
-        NET[CreatureNet<br/>1454 → 1024 → 512 → 256 → 49<br/>2.16M params, ReLU + softmax]
-        ACTION[dispatch()<br/>49 actions → creature methods<br/>god counter recording]
-        SNAP[Reward Snapshot<br/>HP, gold, debt, reputation<br/>allies, kills, piety, quests]
-        REWARD[compute_reward()<br/>13 signals × ln transform<br/>death/fatigue/failed penalties]
+    subgraph "Within-stage phases"
+        MAPPO[Phase 1: MAPPO<br/>All agents share weights]
+        ES[Phase 2: ES<br/>Weight variants, break Nash]
+        PPO[Phase 3: PPO<br/>Single agent vs diverse pool]
+        MAPPO --> ES --> PPO
+    end
+
+    subgraph "Per-Tick Data Flow (creature)"
+        CREATURE[Creature State]
+        HISTORY[History Buffer deque100]
+        OBS_BUILD[build_observation<br/>1837 float vector]
+        MASK[Observation Mask]
+        NET[CreatureNet<br/>1837→1536→1024→768→384→192→32]
+        ACTION[dispatch 32 actions]
+        SNAP[Reward Snapshot]
+        REWARD[compute_reward<br/>29 signals + penalties]
 
         CREATURE --> OBS_BUILD
         HISTORY --> OBS_BUILD
-        OBS_BUILD --> MASK
-        MASK --> NET
-        NET -->|action probabilities| ACTION
-        ACTION -->|modifies| CREATURE
-        CREATURE --> SNAP
-        SNAP --> REWARD
-        REWARD -->|float| BUFFER[PPO Buffer]
-        CREATURE -->|snapshot| HISTORY
+        OBS_BUILD --> MASK --> NET
+        NET --> ACTION --> CREATURE
+        CREATURE --> SNAP --> REWARD
+        REWARD --> BUFFER[Rollout Buffer]
+        CREATURE --> HISTORY
     end
 
-    subgraph "Observation Vector (1454 floats)"
-        S1[Self: 14 base stats raw+dmod]
-        S2[Self: 36 derived stats]
-        S3[Self: 6 resources HP/stam/mana]
-        S4[Self: 17 combat readiness]
-        S5[Self: 20 economy gold/debt/inv]
-        S6[Self: 14 equipment slots]
-        S7[Self: 15 weapon/ammo/spell]
-        S8[Self: 13 inventory texture]
-        S9[Self: 10 social capital]
-        S10[Self: 16 status/reproduction]
-        S11[Self: 10 quest/progression]
-        S12[Self: 8 movement/position]
-        S13[Self: 7 genetics]
-        S14[Self: 25 identity/species/deity]
-        S15[Self: 6 reputation]
-        S16[Tile: 18 current tile deep]
-        S17[Spatial: 25 walls/openness]
-        S18[Spatial: 12 feature directions]
-        S19[Tile: 27 top-3 items]
-        S20[Census: 45 visible creatures]
-        S21[Census: 3 audible]
-        S22[Engaged: 45 × 6 = 270]
-        S23[World: 13 time/gods]
-        S24[Temporal: 14 immediate deltas]
-        S25_26[Temporal: 691 transforms<br/>ln ratio, sign, stdev, accel<br/>momentum, z-score, rel-pos<br/>cross-var interactions<br/>time-since-events]
-        S27[Reward: 17 signal values]
-        S28[Transforms: 102 wild<br/>sq, sqrt, recip, sigmoid<br/>interaction terms]
+    subgraph "Per-Tick Data Flow (monster)"
+        MON[Monster State]
+        MON_OBS[build_monster_observation<br/>73 float vector]
+        MON_MASK[compute_monster_mask<br/>INT-gated + diet-gated]
+        MN[MonsterNet<br/>73→256→128→64→11]
+        MON_ACT[dispatch_monster 11 actions]
+        MON_REW[compute_monster_reward<br/>16 signals]
+        MON_BUF[per-monster rollout]
+
+        MON --> MON_OBS --> MN
+        MON_MASK --> MN
+        MN --> MON_ACT --> MON
+        MON --> MON_REW --> MON_BUF
     end
 
-    subgraph "Reward Function (13 signals)"
-        R1["1. HP change: ln × 8.0"]
-        R2["2. Wealth: ln × 3.0"]
-        R3["3. Debt reduction: ln × 2.0"]
-        R4["4. Inventory value: ln × 1.0"]
-        R5["5. Equipment KPI: ln × 2.0"]
-        R6["6. Reputation: ln × 3.0<br/>sumproduct(sent,depth)/sum(depth)"]
-        R7["7. Ally count: delta × 1.0"]
-        R8["8. Kills: delta × 3.0"]
-        R9["9. Exploration: tiles 0.2 + creatures 0.5"]
-        R10["10. Piety: ln × 2.0 + world balance"]
-        R11["11. Quests: steps 5.0 / complete 10.0"]
-        R12["12. Life goals: delta × 2.0"]
-        R13["13. XP activity: sign(ln) × 0.05"]
-        RP["Penalties: death -20, failed -0.5<br/>fatigue -1.5/tier, underwater -0.5/tick"]
+    subgraph "Pack Tick (slow cadence ~2s)"
+        PACK[Pack Aggregated State]
+        PACK_OBS[build_pack_observation<br/>14 floats:<br/>active_period, light,<br/>mean/std dist from center,<br/>pairwise cohesion,<br/>mean/min HP, mean/max fatigue,<br/>size, egg count,<br/>visible creatures, distances]
+        PN[PackNet<br/>14→64→32→6]
+        OUT[sleep, alert, cohesion<br/>+ 3-way role softmax]
+        BROADCAST[broadcast_signals<br/>delta-threshold event]
+
+        PACK --> PACK_OBS --> PN --> OUT --> BROADCAST
     end
+```
+
+## Creature Observation Layout (1837 floats)
+
+Monster-related slots are pre-allocated so creature checkpoints from
+stages 1-14 remain loadable when monsters are introduced in stage 21+.
+
+```mermaid
+graph LR
+    S1[Self base 14<br/>STR/VIT/AGL/PER/INT/CHR/LCK + dmod]
+    S2[Self derived 36<br/>HP_MAX, MELEE_DMG, DODGE, SIGHT, ...]
+    S3[Self resources 10<br/>HP/stam/mana current + regen bools]
+    S4[Self combat 17]
+    S5[Self economy 20]
+    S6[Slots 14]
+    S7[Weapon 15]
+    S8[Inv texture 13]
+    S9[Crafting 6]
+    S10[Social 10]
+    S11[Status 16]
+    S12[Hunger 6]
+    S13[Quest 10]
+    S14[Goal 21]
+    S15[Schedule 10]
+    S16[Movement 8]
+    S17[Genetics 7]
+    S18[Identity 25<br/>species one-hot, deity]
+    S19[Reputation 6]
+    S20[Tile deep 21]
+    S21[Tile liquid 25]
+    S22[Spatial walls 25]
+    S23[Spatial features 16]
+    S24[Tile items 27]
+    S25[Census visible 45]
+    S26[Census audible 3]
+    S27[Per-engaged 270<br/>10 slots × 51 fields]
+    S28[World time 6<br/>is_day, light, 4 god balances]
+    S29[Monster slots 30<br/>5 × distance/size/threat/fleeing/pack_sz/in_terr]
+    S30[Monster summary 3<br/>count, nearest, in_any_territory]
+    S31[Temporal 14]
+    S32[Trends 11]
+    S33[Time since 12]
+    S34[Reward signals 17]
+    S35[Transforms ~1048]
 ```
 
 ## Training Cycle Detail
@@ -87,126 +124,138 @@ graph TD
 ```mermaid
 sequenceDiagram
     participant T as train.py
-    participant N as CreatureNet
+    participant STAGE as stage config
+    participant MT as MonsterTrainer (optional)
+    participant N as TorchCreatureNet
+    participant MN as TorchMonsterPolicy
     participant A as Arena
     participant S as Simulation
-    participant C as Creatures
 
-    Note over T: Cycle N begins
+    Note over T: Stage N begins
+    T->>STAGE: _load_curriculum_stage(N)
+    STAGE-->>T: flags, signal_scales, action_mask
 
-    rect rgb(40, 80, 40)
-        Note over T,C: Phase 1: MAPPO (100K steps)
-        T->>N: Initialize / load weights
-        T->>A: generate_arena(8 creatures)
-        A->>C: spawn_creature() × 8 (genetics, sex, deity, gold)
-        T->>S: Simulation(arena, tick_ms=500)
-        loop Every tick
-            S->>C: process_ticks(now)
-            C->>N: forward(observation) — same weights all creatures
-            N->>C: action probabilities
-            C->>C: dispatch(action)
-            S->>T: (obs, action, reward, done) per creature
-        end
-        T->>N: PPO update every 2048 steps
-        T->>N: Save mappo_cycleN.npz
+    T->>A: generate_arena + _inject_monsters(stage)
+    A->>S: arena.monsters + arena.packs populated
+
+    alt stage.monster_trainable
+        T->>MT: build_from_pretrained
+        MT->>MT: attach_to_sim(sim)<br/>replaces heuristic with NN-driven actions
     end
 
-    rect rgb(80, 40, 40)
-        Note over T,N: Phase 2: ES (50 gens × 50 variants)
-        loop Each generation
-            T->>N: Generate 50 noise variants
-            loop Each variant
-                T->>A: generate_arena()
-                T->>S: Run 2000 steps
-                S->>T: total_reward
+    rect rgb(40, 80, 40)
+        Note over T,S: Phase 1: MAPPO
+        loop Every tick
+            S->>N: forward(creature obs) per creature
+            N->>S: creature actions
+            S->>S: dispatch
+            S->>S: monster_tick (NN or heuristic)
+            opt monster_trainable
+                S->>MT: on_step(sim, signal_scales)
+                MT->>MT: buffer per-monster rollout
+                MT->>MT: PPO / REINFORCE when full
             end
-            T->>N: Keep top 20%, average noise, update base
+            S->>T: (obs, action, reward, done) per creature
         end
-        T->>N: Save es_cycleN.npz
+        opt stage.creature_frozen
+            T->>T: skip creature PPO update (buffer clears)
+        end
+        T->>N: Save cycle checkpoint
+        opt monster_trainable
+            T->>MT: export_weights → monster_net_trained.npz
+        end
     end
 
     rect rgb(40, 40, 80)
-        Note over T,C: Phase 3: PPO (100K steps)
-        T->>A: generate_arena(8 creatures)
-        Note over C: Creature[0] = agent (latest weights)
-        Note over C: Creatures[1-7] = opponents (old checkpoints + StatWeighted)
-        loop Every tick
-            C->>N: Agent: forward(observation)
-            N->>C: action
-            C->>C: Opponents: behavior.think()
-            S->>T: (obs, action, reward, done) for agent
-        end
-        T->>N: PPO update every 2048 steps
-        T->>N: Save ppo_cycleN.npz
+        Note over T,S: Phase 3: PPO (same pattern as MAPPO with 1 agent)
     end
 
-    Note over T: Cycle N complete → repeat
-    T->>N: Save final.npz after all cycles
+    Note over T: Stage N complete → advance pair.current_stage
 ```
 
-## Creature Spawning (arena.py)
+## Monster Reward Function (16 signals)
 
 ```mermaid
 graph LR
-    SPECIES[Species Defaults<br/>human: STR 10, VIT 10, ...]
-    GENETICS[generate_chromosomes(sex)<br/>14 genes, sex-linked biases]
-    EXPRESS[express(chromosomes)<br/>dominance → stat mods -3 to +3]
-    APPLY[apply_genetics()<br/>species + genetic mods]
-    PROFILE[random_stats(profile)<br/>fighter/mage/rogue/social]
-    BLEND[Blend 60% genetics<br/>+ 40% profile]
-
-    SPECIES --> APPLY
-    GENETICS --> EXPRESS --> APPLY
-    APPLY --> BLEND
-    PROFILE --> BLEND
-
-    BLEND --> CREATURE[Creature]
-    SEX[random sex] --> CREATURE
-    AGE[random age 18-200] --> CREATURE
-    DEITY[random deity 70%] --> CREATURE
-    GOLD[random gold] --> CREATURE
-    EQUIP[random weapon + armor] --> CREATURE
-    MASK[observation mask?] --> CREATURE
-    PRUD[prudishness ± 0.2] --> CREATURE
+    R1[m_hp: hp ratio delta × 0.5]
+    R2[m_hunger: delta × 1.0]
+    R3[m_kills: delta × 1.0]
+    R4[m_damage_dealt: ln × 0.5]
+    R5[m_chase: attack fleeing × 0.7]
+    R6[m_eat: hunger_restored × 1.0]
+    R7[m_graze: HARVEST hunger × 0.7]
+    R8[m_territory_stay: inside × 0.3]
+    R9[m_territory_hold: no hostiles × 0.3]
+    R10[m_pack_cohesion: near centroid × 0.3]
+    R11[m_sleep_sync: 80% resting × 0.5]
+    R12[m_dominance_wins: challenge × 1.0]
+    R13[m_pair_success: × 1.0]
+    R14[m_reproduction: egg laid × 1.0]
+    R15[m_egg_protect: guard adj × 0.7]
+    R16[m_queen_kill_bonus: fixed-alpha × 2.0]
+    RP[m_failed_actions: -0.3]
 ```
+
+## Creature Reward Function (29 signals)
+
+Unchanged from prior spec. Key creature-side monster-interaction
+signals activated in stages 21+:
+
+- **m_avoid_threat** — rewards creature for avoiding monster territories
+- **m_cannibal_penalty** — negative when creature eats own species (-15 sentiment broadcast fires too)
+- **m_queen_kill_bonus** — rewards killing a fixed-dominance alpha (same as monster-side)
 
 ## Observation Mask System
 
+Unchanged from prior spec — 14 preset masks operate on creature observation.
+
+## Training Pair Versioning
+
+Training pairs bind model versions so a pair's state is fully
+reproducible at any stage.
+
 ```mermaid
 graph TD
-    OBS[Full 1454-float observation]
-    MASK_SYS{creature.observation_mask}
+    PAIR[(training_pairs table)]
+    PAIR --> CR[creature_model name/version]
+    PAIR --> GO[goal_model name/version]
+    PAIR --> MO[monster_model name/version]
+    PAIR --> PK[pack_model name/version]
+    PAIR --> STG[current_stage]
 
-    MASK_SYS -->|None| OBS_FULL[Full perception]
-    MASK_SYS -->|socially_deaf| OBS_SD[Social sections = 0<br/>Pure combat/spatial/economic creature]
-    MASK_SYS -->|blind| OBS_BL[Vision sections = 0<br/>Navigate by hearing + memory]
-    MASK_SYS -->|feral| OBS_FE[Social/economy/quest/religion = 0<br/>Pure animal instinct]
-    MASK_SYS -->|paranoid| OBS_PA[Social signals × -1<br/>Friends appear as threats]
-    MASK_SYS -->|fearless| OBS_FL[Combat readiness = 0<br/>Cannot assess danger]
+    CR --> CM[(nn_models)]
+    GO --> CM
+    MO --> CM
+    PK --> CM
 
-    OBS --> NET[CreatureNet forward pass]
-    OBS_FULL --> NET
-    OBS_SD --> NET
-    OBS_BL --> NET
-    OBS_FE --> NET
-    OBS_PA --> NET
-    OBS_FL --> NET
+    STG -->|stages 1-14| ADV_CR[advance creature + goal]
+    STG -->|stages 15-20| ADV_MO[advance monster + pack]
+    STG -->|stages 21-22| ADV_CR
+    STG -->|stages 23-25| ADV_ALL[advance all four]
 ```
 
 ## File Reference
 
-| File | Purpose | Size |
+| File | Purpose | Approx lines |
 |------|---------|------|
-| `classes/observation.py` | Build 1454-float observation vector | ~850 lines |
-| `classes/reward.py` | 13 reward signals + ln transforms | ~160 lines |
-| `classes/temporal.py` | History buffer + 691 temporal features | ~210 lines |
-| `classes/actions.py` | 49-action enum + dispatch | ~280 lines |
-| `classes/valuation.py` | Item KPI, decompounding, trade pricing | ~210 lines |
-| `classes/genetics.py` | Chromosomes, inheritance, inbreeding | ~180 lines |
-| `classes/gods.py` | 8 gods, piety drift, world balance | ~180 lines |
-| `classes/quest.py` | QuestLog, safe eval, time limits | ~180 lines |
-| `simulation/net.py` | CreatureNet 3-layer feedforward | ~150 lines |
-| `simulation/arena.py` | spawn_creature, generate_arena | ~230 lines |
-| `simulation/headless.py` | Tick loop, history population | ~100 lines |
-| `simulation/env.py` | Gym-compatible environments | ~200 lines |
-| `simulation/train.py` | MAPPO → ES → PPO pipeline | ~480 lines |
+| `classes/observation.py` | 1837-float creature observation | ~1700 |
+| `classes/monster_observation.py` | 73-float monster observation | ~250 |
+| `classes/reward.py` | 29 creature reward signals | ~300 |
+| `classes/monster_reward.py` | 16 monster reward signals | ~200 |
+| `classes/temporal.py` | History buffer + transforms | ~300 |
+| `classes/actions.py` | 32-action enum + dispatch | ~400 |
+| `classes/monster_actions.py` | 11-action enum + INT-gated mask | ~100 |
+| `classes/monster_dispatch.py` | 11 monster action handlers | ~300 |
+| `classes/monster_runtime.py` | monster_tick + pack housekeeping | ~320 |
+| `classes/monster_heuristic.py` | Priority cascade monster/pack policies | ~120 |
+| `classes/monster_net.py` | MonsterNet numpy inference | ~120 |
+| `classes/pack_net.py` | PackNet numpy inference + build_pack_observation | ~180 |
+| `simulation/net.py` | CreatureNet numpy | ~180 |
+| `simulation/torch_net.py` | Training creature net (autograd) | ~350 |
+| `simulation/monster_train.py` | MonsterTrainer (PPO + REINFORCE) | ~380 |
+| `simulation/monster_pretrain.py` | Imitation + DAgger pretraining | ~300 |
+| `simulation/league_pool.py` | Snapshot pool for co-evolution | ~100 |
+| `simulation/arena.py` | spawn_creature + spawn_monsters_for_stage | ~320 |
+| `simulation/headless.py` | Tick loop driving creatures + monsters | ~400 |
+| `simulation/env.py` | Gym-compatible environments | ~220 |
+| `simulation/train.py` | MAPPO → ES → PPO + freeze toggles + monster trainer attach | ~1700 |
