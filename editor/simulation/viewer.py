@@ -133,13 +133,22 @@ def _draw_parallel_view(screen, state, font, font_sm, font_lg):
         screen.blit(font.render('Waiting for worker data...', True, C_GRAY), (10, y))
         return
 
-    # Column layout
-    col_w = max(180, (sw - 10) // n_workers)
-    need_w = 10 + col_w * n_workers
-    need_h = max(400, sh)
-    if screen.get_width() != need_w or screen.get_height() != need_h:
-        screen = pygame.display.set_mode((need_w, need_h))
+    # Column layout — honor the user's current window size. If the
+    # user has resized bigger than needed, distribute the extra width
+    # across columns. If the user sized smaller than the minimum we
+    # need (180px per worker column), force a resize just enough to
+    # fit; otherwise leave the user's window alone so the drag-resize
+    # UX actually works.
+    min_col_w = 180
+    min_w = 10 + min_col_w * n_workers
+    min_h = 400
+    if sw < min_w or sh < min_h:
+        new_w = max(sw, min_w)
+        new_h = max(sh, min_h)
+        screen = pygame.display.set_mode((new_w, new_h), pygame.RESIZABLE)
         screen.fill(C_BLACK)
+        sw, sh = screen.get_size()
+    col_w = max(min_col_w, (sw - 10) // n_workers)
 
     # Column headers
     for i in range(n_workers):
@@ -536,6 +545,15 @@ def run_training_viewer(cell_size: int = 20):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+            elif event.type == pygame.VIDEORESIZE:
+                # User dragged the window edge — rebuild the surface at
+                # their chosen size, preserving RESIZABLE so they can
+                # keep doing it. The parallel view's layout code
+                # (sw = screen.get_size()) will pick up the new size
+                # naturally on the next frame.
+                screen = pygame.display.set_mode(
+                    (event.w, event.h), pygame.RESIZABLE)
+                screen.fill(C_BLACK)
             elif event.type == pygame.KEYDOWN:
                 # Zoom: + grows the cell, - shrinks it. The render
                 # path below recomputes window size from cell_size
