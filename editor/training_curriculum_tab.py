@@ -208,6 +208,89 @@ class TrainingCurriculumTab(ttk.Frame):
         _grid_entry(pipe_grid, self.v_ppo_map,      5, 6, width=14,
                      tip='Named map (optional; blank=procedural)')
 
+        # --- Imitation / DAgger row (new technique, fully wired) ---
+        _grid_label(pipe_grid, 'Imitation', 6, 0, width=9, anchor='w')
+        _grid_label(pipe_grid, 'Epochs',    6, 1)
+        _grid_label(pipe_grid, 'Batch',     6, 2)
+        _grid_label(pipe_grid, 'Teacher',   6, 3, width=12)
+        _grid_label(pipe_grid, 'Parallel',  6, 4, width=5)
+        self.v_imit_epochs = tk.StringVar(value='0')
+        self.v_imit_batch = tk.StringVar(value='256')
+        self.v_imit_teacher = tk.StringVar(value='StatWeighted')
+        self.v_imit_parallel = tk.StringVar(value='1')
+        ttk.Label(pipe_grid, text='Imit:', width=9, anchor='w').grid(
+            row=7, column=0, padx=2, pady=1, sticky='w')
+        _grid_entry(pipe_grid, self.v_imit_epochs,   7, 1, tip='DAgger epochs (0=skip)')
+        _grid_entry(pipe_grid, self.v_imit_batch,    7, 2, tip='Supervised minibatch size')
+        _grid_entry(pipe_grid, self.v_imit_teacher,  7, 3, width=12,
+                     tip='Teacher behavior module (currently: StatWeighted)')
+        _grid_entry(pipe_grid, self.v_imit_parallel, 7, 4, width=5,
+                     tip='Parallel workers (reserved)')
+
+        # --- League row (stub — schema + UI only) ---
+        _grid_label(pipe_grid, 'League', 8, 0, width=9, anchor='w')
+        _grid_label(pipe_grid, 'Iters',  8, 1)
+        _grid_label(pipe_grid, 'Pool',   8, 2)
+        _grid_label(pipe_grid, 'Parallel', 8, 3, width=5)
+        self.v_league_iter = tk.StringVar(value='0')
+        self.v_league_pool = tk.StringVar(value='4')
+        self.v_league_parallel = tk.StringVar(value='1')
+        ttk.Label(pipe_grid, text='Lg:', width=9, anchor='w').grid(
+            row=9, column=0, padx=2, pady=1, sticky='w')
+        _grid_entry(pipe_grid, self.v_league_iter,     9, 1, tip='League self-play iterations (0=skip)')
+        _grid_entry(pipe_grid, self.v_league_pool,     9, 2, tip='Opponent pool size')
+        _grid_entry(pipe_grid, self.v_league_parallel, 9, 3, width=5, tip='Parallel workers')
+
+        # --- PBT row (stub) ---
+        _grid_label(pipe_grid, 'PBT',       10, 0, width=9, anchor='w')
+        _grid_label(pipe_grid, 'Population',10, 1)
+        _grid_label(pipe_grid, 'Mutation',  10, 2)
+        _grid_label(pipe_grid, 'Exploit',   10, 3)
+        self.v_pbt_pop = tk.StringVar(value='0')
+        self.v_pbt_mut = tk.StringVar(value='0.2')
+        self.v_pbt_thr = tk.StringVar(value='0.25')
+        ttk.Label(pipe_grid, text='PBT:', width=9, anchor='w').grid(
+            row=11, column=0, padx=2, pady=1, sticky='w')
+        _grid_entry(pipe_grid, self.v_pbt_pop, 11, 1, tip='PBT population size (0=skip)')
+        _grid_entry(pipe_grid, self.v_pbt_mut, 11, 2, tip='Hparam mutation rate (0-1)')
+        _grid_entry(pipe_grid, self.v_pbt_thr, 11, 3, tip='Exploit threshold (fraction)')
+
+        # --- Curiosity row (stub) ---
+        _grid_label(pipe_grid, 'Curiosity', 12, 0, width=9, anchor='w')
+        _grid_label(pipe_grid, 'Weight',    12, 1)
+        _grid_label(pipe_grid, 'Hidden',    12, 2)
+        self.v_cur_weight = tk.StringVar(value='0.0')
+        self.v_cur_hidden = tk.StringVar(value='64')
+        ttk.Label(pipe_grid, text='Curios:', width=9, anchor='w').grid(
+            row=13, column=0, padx=2, pady=1, sticky='w')
+        _grid_entry(pipe_grid, self.v_cur_weight, 13, 1, tip='Novelty reward weight (0=disabled)')
+        _grid_entry(pipe_grid, self.v_cur_hidden, 13, 2, tip='Novelty net hidden size')
+
+        # --- Offline replay row (stub) ---
+        _grid_label(pipe_grid, 'OfflineReplay', 14, 0, width=13, anchor='w')
+        _grid_label(pipe_grid, 'Path',   14, 1, width=18)
+        _grid_label(pipe_grid, 'Epochs', 14, 2)
+        self.v_off_path = tk.StringVar(value='')
+        self.v_off_epochs = tk.StringVar(value='0')
+        ttk.Label(pipe_grid, text='Off:', width=13, anchor='w').grid(
+            row=15, column=0, padx=2, pady=1, sticky='w')
+        _grid_entry(pipe_grid, self.v_off_path,   15, 1, width=18, tip='Trajectory file path')
+        _grid_entry(pipe_grid, self.v_off_epochs, 15, 2, tip='Replay epochs (0=skip)')
+
+        # --- Run order editor ---
+        ro = ttk.Frame(f)
+        ro.grid(row=row, column=0, columnspan=2, sticky='w', padx=6, pady=(4, 2))
+        row += 1
+        ttk.Label(ro, text='Run order:').pack(side=tk.LEFT)
+        self.v_run_order = tk.StringVar(value='mappo,es,ppo')
+        _ro_e = ttk.Entry(ro, textvariable=self.v_run_order, width=50)
+        _ro_e.pack(side=tk.LEFT, padx=(4, 4))
+        add_tooltip(_ro_e,
+                    'Comma-separated phase names. Phases run in order; '
+                    'unknown names skip silently with a warning. '
+                    'Available: imitation, mappo, es, ppo, league, pbt, '
+                    'curiosity, offline_replay')
+
         # --- Global hparams row: LR, Entropy, Resume ---
         hp = ttk.Frame(f)
         hp.grid(row=row, column=0, columnspan=2, sticky='w', padx=6, pady=(2, 4))
@@ -393,6 +476,23 @@ class TrainingCurriculumTab(ttk.Frame):
         # fields with the same value so either can be edited
         _set(self.v_mappo_map, 'arena_map', '')
         _set(self.v_ppo_map,   'arena_map', '')
+
+        # Run order + new phase params (imitation/league/pbt/curiosity/offline)
+        _set(self.v_run_order,     'run_order',            'mappo,es,ppo')
+        _set(self.v_imit_epochs,   'imitation_epochs',     0)
+        _set(self.v_imit_batch,    'imitation_batch_size', 256)
+        _set(self.v_imit_teacher,  'imitation_teacher',    'StatWeighted')
+        _set(self.v_imit_parallel, 'imitation_parallel',   1)
+        _set(self.v_league_iter,     'league_iterations', 0)
+        _set(self.v_league_pool,     'league_pool_size',  4)
+        _set(self.v_league_parallel, 'league_parallel',   1)
+        _set(self.v_pbt_pop, 'pbt_population',        0)
+        _set(self.v_pbt_mut, 'pbt_mutation_rate',     0.2)
+        _set(self.v_pbt_thr, 'pbt_exploit_threshold', 0.25)
+        _set(self.v_cur_weight, 'curiosity_weight', 0.0)
+        _set(self.v_cur_hidden, 'curiosity_hidden', 64)
+        _set(self.v_off_path,   'offline_replay_path',   '')
+        _set(self.v_off_epochs, 'offline_replay_epochs', 0)
         # Pretty-print signal scales for editing
         try:
             scales = json.loads(r['signal_scales'] or '{}')
@@ -442,6 +542,21 @@ class TrainingCurriculumTab(ttk.Frame):
             # Either map field authoritative; prefer non-empty mappo_map.
             arena_map = (self.v_mappo_map.get().strip()
                          or self.v_ppo_map.get().strip() or '')
+            run_order = (self.v_run_order.get().strip() or 'mappo,es,ppo')
+            imit_epochs = int(self.v_imit_epochs.get() or 0)
+            imit_batch = int(self.v_imit_batch.get() or 256)
+            imit_teacher = (self.v_imit_teacher.get().strip() or 'StatWeighted')
+            imit_parallel = int(self.v_imit_parallel.get() or 1)
+            league_iter = int(self.v_league_iter.get() or 0)
+            league_pool = int(self.v_league_pool.get() or 4)
+            league_parallel = int(self.v_league_parallel.get() or 1)
+            pbt_pop = int(self.v_pbt_pop.get() or 0)
+            pbt_mut = float(self.v_pbt_mut.get() or 0.2)
+            pbt_thr = float(self.v_pbt_thr.get() or 0.25)
+            cur_w = float(self.v_cur_weight.get() or 0.0)
+            cur_h = int(self.v_cur_hidden.get() or 64)
+            off_path = self.v_off_path.get().strip()
+            off_ep = int(self.v_off_epochs.get() or 0)
         except (ValueError, json.JSONDecodeError) as e:
             messagebox.showerror('Validation', f'Invalid input: {e}')
             return
@@ -460,7 +575,14 @@ class TrainingCurriculumTab(ttk.Frame):
                    mappo_creatures=?, ppo_creatures=?,
                    es_parallel=?, ppo_parallel=?,
                    mappo_cols=?, mappo_rows=?, ppo_cols=?, ppo_rows=?,
-                   arena_map=?
+                   arena_map=?,
+                   run_order=?,
+                   imitation_epochs=?, imitation_batch_size=?,
+                   imitation_teacher=?, imitation_parallel=?,
+                   league_iterations=?, league_pool_size=?, league_parallel=?,
+                   pbt_population=?, pbt_mutation_rate=?, pbt_exploit_threshold=?,
+                   curiosity_weight=?, curiosity_hidden=?,
+                   offline_replay_path=?, offline_replay_epochs=?
                    WHERE stage_number=?''',
                 (self.v_name.get().strip(),
                  self.desc_text.get('1.0', tk.END).strip(),
@@ -475,6 +597,12 @@ class TrainingCurriculumTab(ttk.Frame):
                  es_parallel, ppo_parallel,
                  mappo_cols, mappo_rows, ppo_cols, ppo_rows,
                  arena_map,
+                 run_order,
+                 imit_epochs, imit_batch, imit_teacher, imit_parallel,
+                 league_iter, league_pool, league_parallel,
+                 pbt_pop, pbt_mut, pbt_thr,
+                 cur_w, cur_h,
+                 off_path, off_ep,
                  self._selected_stage)
             )
             con.commit()
