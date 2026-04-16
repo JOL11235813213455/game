@@ -382,6 +382,23 @@ def compute_dynamic_mask(creature, context: dict = None) -> np.ndarray:
         mask[:] = 0
         mask[Action.WAIT] = 1
 
+    # Phase 4 pack-state action bias — a pack in 'fleeing' shouldn't
+    # have members turning around to pick fights. Block aggressive
+    # actions so flee dominates. Pack state is context, not absolute
+    # constraint: if the creature is alone or in territorial/hunting,
+    # all actions stay open.
+    _pack = getattr(creature, 'pack', None)
+    if _pack is not None and getattr(_pack, 'size', 0) > 0:
+        _ps = _pack.pack_state
+        if _ps == 'fleeing':
+            mask[Action.MELEE_ATTACK] = 0
+            mask[Action.RANGED_ATTACK] = 0
+            mask[Action.GRAPPLE] = 0
+            mask[Action.INTIMIDATE] = 0
+            # PUSH / STEAL also barred — pack is running, not fighting
+            mask[Action.PUSH] = 0
+            mask[Action.STEAL] = 0
+
     return mask
 
 
