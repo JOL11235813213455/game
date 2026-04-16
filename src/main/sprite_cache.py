@@ -29,6 +29,12 @@ _composite_cache: dict[tuple, tuple] = {}
 # {(composite_name, anim_name, variant_key, block_size, tile_scale): [Surface, ...]}
 _composite_anim_cache: dict[tuple, list] = {}
 
+# {(anim_name, block_size, tile_scale): [Surface, ...]} — pre-rendered
+# simple-animation frame lists. Parallels _composite_anim_cache. Built
+# lazily on first `get_simple_anim_frames` call AND eagerly via
+# `precache_all_simple_anims` at startup.
+_simple_anim_cache: dict[tuple, list] = {}
+
 _last_block_size: int = 0
 
 
@@ -39,6 +45,7 @@ def invalidate(full: bool = False):
     _surface_cache.clear()
     _composite_cache.clear()
     _composite_anim_cache.clear()
+    _simple_anim_cache.clear()
 
 
 def _check_zoom(block_size: int):
@@ -47,6 +54,7 @@ def _check_zoom(block_size: int):
         _surface_cache.clear()
         _composite_cache.clear()
         _composite_anim_cache.clear()
+        _simple_anim_cache.clear()
         _last_block_size = block_size
 
 
@@ -136,6 +144,87 @@ def get_tiled(sprite_name: str, target_w: int, target_h: int,
             tiled.blit(native, (tx, ty))
     _surface_cache[key] = tiled
     return tiled
+
+
+# ---------------------------------------------------------------------------
+# Simple-animation pre-rendering
+# ---------------------------------------------------------------------------
+#
+# Composite animations are pre-baked into flat frame lists at load time
+# (see _composite_anim_cache). This mirrors that treatment for simple
+# sprite animations — each frame's scaled surface is resolved once at
+# the current block_size + tile_scale and reused across playback.
+
+def get_simple_anim_frames(anim_name: str, block_size: int,
+                           tile_scale: float = 1.0) -> list | None:
+    """Return the pre-rendered frame surfaces for a simple animation.
+
+    Each entry is (surface, duration_ms, blit_dx, blit_dy). The blit
+    offsets account for per-sprite action_points so the frame's action
+    point lands on the tile center — same convention as static sprites.
+
+    Returns None if the animation doesn't exist or has no frames.
+    """
+    _check_zoom(block_size)
+    key = (anim_name, block_size, float(tile_scale))
+    if key in _simple_anim_cache:
+        return _simple_anim_cache[key]
+
+    from data.db import ANIMATIONS, SPRITE_DATA
+    anim = ANIMATIONS.get(anim_name)
+    if anim is None or not anim.get('frames'):
+        return None
+
+    from main.config import get_tile_height
+    tile_cy = get_tile_height() // 2
+    tile_cx = block_size // 2
+
+    result = []
+    for frame in anim['frames']:
+        sprite_name = frame['sprite_name']
+        duration = int(frame.get('duration_ms', 100))
+        data = SPRITE_DATA.get(sprite_name)
+        if data is None:
+            continue
+        cols = data['width']
+        rows = len(data['pixels'])
+        scale = block_size / 32.0 * tile_scale
+        w = max(1, round(cols * scale))
+        h = max(1, round(rows * scale))
+        surf = get_scaled(sprite_name, w, h, block_size)
+        if surf is None:
+            continue
+        ap = data.get('action_point')
+        if ap is not None:
+            ap_sx = int(ap[0] * w / cols)
+            ap_sy = int(ap[1] * h / rows)
+        else:
+            ap_sx = w // 2
+            ap_sy = h
+        blit_dx = tile_cx - ap_sx
+        blit_dy = tile_cy - ap_sy
+        result.append((surf, duration, blit_dx, blit_dy))
+
+    _simple_anim_cache[key] = result
+    return result
+
+
+def precache_all_simple_anims(block_size: int, tile_scales: list[float] = None):
+    """Pre-render every known simple animation at the given block_size.
+
+    Called after DB load (or after a zoom change) to eliminate the
+    first-playback scaling cost. Composite animations already have an
+    equivalent warm-up via `get_composite_anim_frame`.
+
+    tile_scales: optional list of tile_scale values to precache (default:
+        [1.0]). Include every tile_scale used by your species/items if
+        they differ from 1.0.
+    """
+    from data.db import ANIMATIONS
+    scales = tile_scales or [1.0]
+    for name in ANIMATIONS.keys():
+        for s in scales:
+            get_simple_anim_frames(name, block_size, tile_scale=s)
 
 
 # ---------------------------------------------------------------------------

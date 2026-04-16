@@ -4636,6 +4636,38 @@ if received is not None:
           received[2] < 0.99)
 
 # ==========================================================================
+print("\n=== Species Sprite Size Audit ===")
+from data.db import SPRITE_DATA, SPECIES as _SPECIES
+SIZE_RANGES = {
+    'tiny': (1, 7), 'small': (8, 16), 'medium': (16, 24),
+    'large': (24, 32), 'huge': (32, 40), 'colossal': (40, 80),
+}
+for name, cfg in {**_SPECIES, **MONSTER_SPECIES}.items():
+    size_cat = cfg.get('size', 'medium')
+    sprite = cfg.get('sprite_name', None)
+    if not sprite:
+        continue
+    data = SPRITE_DATA.get(sprite)
+    if data is None:
+        check(f"{name} sprite {sprite!r} exists", False)
+        continue
+    dim = max(data['width'], len(data['pixels']))
+    lo, hi = SIZE_RANGES[size_cat]
+    check(f"{name} [{size_cat}] sprite {dim}px in range {lo}-{hi}",
+          lo <= dim <= hi)
+
+# Verify every species has a default anim binding for idle + walk + attack + hurt + death
+from data.db import ANIM_BINDINGS
+for name, cfg in {**_SPECIES, **MONSTER_SPECIES}.items():
+    sprite = cfg.get('sprite_name', None)
+    if not sprite:
+        continue
+    for beh in ('idle', 'walk_south', 'attack_south', 'hurt', 'death'):
+        anim = ANIM_BINDINGS.get((sprite, beh))
+        check(f"{name}/{sprite} has '{beh}' binding",
+              anim is not None)
+
+# ==========================================================================
 print("\n=== League Pool Snapshot Management ===")
 import tempfile
 import shutil as _shutil
