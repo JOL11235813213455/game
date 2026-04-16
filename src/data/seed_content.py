@@ -1316,6 +1316,27 @@ def seed():
             lr=0.0001,  # half the default
             allowed_actions=_s12_actions, ppo=200000)
 
+    # ------------------------------------------------------------------
+    # FSM curriculum toggles (Phases 1, 3, 4, 7).
+    # Applied as post-insert UPDATEs so the _stage / _mstage helpers
+    # don't need per-phase awareness. Stage-range rationale:
+    #   * cycles (day/night + weather): Stage 2+ — visibility mods
+    #     pressure creatures to factor perception into decisions early.
+    #   * conditions (status effects): Stage 11+ (Combat) — need combat
+    #     mechanics in play for conditions to matter.
+    #   * arousal (combat state FSM): Stage 11+ alongside conditions.
+    #   * pack_states (pack FSM heuristics): Stage 15+ when packs are
+    #     actively trained (creatures-with-packs is content-driven).
+    # ------------------------------------------------------------------
+    con.execute('UPDATE curriculum_stages SET cycles_enabled = 1 '
+                'WHERE stage_number >= 2')
+    con.execute('UPDATE curriculum_stages SET conditions_enabled = 1 '
+                'WHERE stage_number >= 11')
+    con.execute('UPDATE curriculum_stages SET arousal_enabled = 1 '
+                'WHERE stage_number >= 11')
+    con.execute('UPDATE curriculum_stages SET pack_states_enabled = 1 '
+                'WHERE stage_number >= 15')
+
     # ==================================================================
     # MONSTER SPECIES (9 starter archetypes)
     # ==================================================================
