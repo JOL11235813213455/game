@@ -1321,6 +1321,9 @@ def _load_curriculum_stage(stage_number: int) -> dict:
     # default and keeps early-stage runs clean.
     stage['conditions_enabled'] = (
         bool(row['conditions_enabled']) if 'conditions_enabled' in cols else False)
+    # Phase 3 FSM: day/night + weather cycles
+    stage['cycles_enabled'] = (
+        bool(row['cycles_enabled']) if 'cycles_enabled' in cols else False)
     return stage
 
 
@@ -1874,6 +1877,7 @@ def train_curriculum_stage(stage_number: int, model_name: str,
         'gestation_enabled':    stage['gestation_enabled'],
         'fatigue_enabled':      stage['fatigue_enabled'],
         'conditions_enabled':   stage['conditions_enabled'],
+        'cycles_enabled':       stage['cycles_enabled'],
     }
 
     _mappo_n = mappo_creatures or num_creatures
@@ -1984,6 +1988,7 @@ def train_curriculum_stage(stage_number: int, model_name: str,
         'gestation_enabled': stage['gestation_enabled'],
         'fatigue_enabled': stage['fatigue_enabled'],
         'conditions_enabled': stage['conditions_enabled'],
+        'cycles_enabled': stage['cycles_enabled'],
     }
     # Pick the terminal phase's final reward as the stage KPI. PPO
     # trumps MAPPO when both ran, since PPO is the refinement phase

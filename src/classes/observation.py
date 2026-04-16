@@ -463,6 +463,31 @@ def build_observation(creature, cols: int, rows: int,
     obs.append(egg.gestation_days / 30.0 if egg else 0.0)
     obs.append(1.0 if egg and egg.is_abomination else 0.0)
 
+    # ==== SECTION 10a0: WORLD CYCLES (Phase 3 FSM) — 4 floats ====
+    # time_of_day_idx:   0..3 normalized (dawn/day/dusk/night)
+    # light_level:       0.0..1.0 continuous, smooth across dawn/dusk
+    # weather_idx:       0..5 normalized (clear/overcast/rain/storm/fog/snow)
+    # visibility_mult:   0.0..1.0 combined light × weather visibility
+    _section_starts['self_world_cycles'] = len(obs)
+    from classes.world_cycles import (TIME_OF_DAY_IDX, WEATHER_IDX,
+                                        WorldCycles as _WC)
+    # Find the active WorldCycles singleton (one per live sim).
+    _wc_inst = None
+    for _obj in _WC.all():
+        _wc_inst = _obj
+        break
+    if _wc_inst is not None:
+        obs.append(TIME_OF_DAY_IDX.get(_wc_inst.time_of_day.current, 1) / 3.0)
+        obs.append(_wc_inst.light_level)
+        obs.append(WEATHER_IDX.get(_wc_inst.weather.current, 0) / 5.0)
+        obs.append(_wc_inst.visibility_mult)
+    else:
+        # No cycles active (test fixtures, early bootstrap) → clear day baseline.
+        obs.append(1.0 / 3.0)   # 'day'
+        obs.append(1.0)          # full light
+        obs.append(0.0)          # 'clear'
+        obs.append(1.0)          # no visibility penalty
+
     # ==== SECTION 10a1: LIFECYCLE (Phase 2 FSM) — 2 floats ====
     # lifecycle_state_idx: 0..6 normalized by max index (6 = dead),
     # so dead = 1.0, egg = 0, adult = 3/6.

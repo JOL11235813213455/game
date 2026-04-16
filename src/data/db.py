@@ -539,6 +539,10 @@ def _migrate(con: sqlite3.Connection) -> None:
         # Phase 1 FSM: status-effect conditions (poison, stun, blessed, etc.).
         # Disabled for stages 1-5 (early learning), enabled at stage 6.
         "ALTER TABLE curriculum_stages ADD COLUMN conditions_enabled INTEGER NOT NULL DEFAULT 0",
+        # Phase 3 FSM: day/night + weather cycles. Default 0; enable
+        # from Stage 2 (Forage) onward so visibility modulation pressures
+        # the creature to factor perception into decisions early.
+        "ALTER TABLE curriculum_stages ADD COLUMN cycles_enabled INTEGER NOT NULL DEFAULT 0",
         """CREATE TABLE IF NOT EXISTS training_pairs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,

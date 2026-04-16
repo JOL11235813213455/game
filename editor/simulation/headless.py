@@ -37,7 +37,8 @@ class Simulation:
                  combat_enabled: bool = True,
                  gestation_enabled: bool = True,
                  fatigue_enabled: bool = True,
-                 conditions_enabled: bool = True):
+                 conditions_enabled: bool = True,
+                 cycles_enabled: bool = True):
         """Initialize simulation from an arena dict.
 
         Args:
@@ -83,6 +84,7 @@ class Simulation:
         self.gestation_enabled = gestation_enabled
         self.fatigue_enabled = fatigue_enabled
         self.conditions_enabled = conditions_enabled
+        self.cycles_enabled = cycles_enabled
         if not hunger_drain_enabled:
             for c in self.creatures:
                 c._hunger_drain = 0.0
@@ -129,6 +131,12 @@ class Simulation:
         # gestating, hatching) exactly once per day boundary.
         self._last_game_day = int(self.game_clock.day)
 
+        # Phase 3 world cycles — TimeOfDay + Weather FSMs on a
+        # Trackable singleton. Disabled when cycles_enabled=False
+        # (early curriculum stages keep environment static).
+        from classes.world_cycles import WorldCycles
+        self.world_cycles = WorldCycles(game_clock=self.game_clock)
+
         # Per-creature state tracking
         self._obs_snapshots: dict[int, dict] = {}  # uid → prev observation snapshot
         self._reward_snapshots: dict[int, dict] = {}  # uid → prev reward snapshot
@@ -147,6 +155,14 @@ class Simulation:
         self.subscribe_event('condition_expired', self._dispatch_condition_expired)
         # Phase 2 lifecycle: dying-window timer expiry → final death
         self.subscribe_event('lifecycle_death_expire', self._dispatch_death_expire)
+        # Phase 3 world cycles: weather-transition expiry
+        self.subscribe_event('weather_transition', self._dispatch_weather_transition)
+        # Seed the first weather transition so the FSM advances when
+        # cycles are enabled. When cycles_enabled=False, we skip this
+        # and the weather FSM stays pinned to its initial state.
+        if self.cycles_enabled:
+            self.world_cycles.tick(self)
+            self.world_cycles.seed_weather_schedule(self)
 
         # Initialize snapshots
         for c in self.creatures:
@@ -184,6 +200,11 @@ class Simulation:
         c = _C.by_uid(uid)
         if c is not None:
             c.on_condition_expired(self, name)
+
+    def _dispatch_weather_transition(self, payload) -> None:
+        """Weather timer fired — advance weather FSM + reschedule."""
+        if getattr(self, 'world_cycles', None) is not None:
+            self.world_cycles.on_weather_transition(self)
 
     def _dispatch_death_expire(self, payload) -> None:
         """Dying-window timer fired — finalize the death.
@@ -352,6 +373,11 @@ class Simulation:
         # GameClock.update takes real seconds and maps 1 real second = 1
         # game minute, so advance by exactly 1 real-second per tick.
         self.game_clock.update(1.0)
+
+        # Phase 3: refresh time-of-day + cached visibility / sound mults
+        # so creatures' perception calcs see up-to-date world state.
+        if self.cycles_enabled and self.world_cycles is not None:
+            self.world_cycles.tick(self)
 
         # Detect day boundary and fire the daily lifecycle pass exactly
         # once per game day (eggs gestating + hatching). Loop in case
