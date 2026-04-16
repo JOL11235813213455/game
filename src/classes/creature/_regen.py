@@ -60,7 +60,15 @@ class RegenMixin:
             if 'hp_regen' not in self._timed_events:
                 self.register_tick('hp_regen', 1000, self._do_hp_regen)
             if self.stats.base.get(Stat.HP_CURR, 0) <= 0:
-                self.die()
+                # Phase 2: starvation/attrition routes through the
+                # lifecycle dying window so mourning fires consistently
+                # with combat deaths. Falls back to direct die() when
+                # no sim is attached (test fixtures, minimal probes).
+                _sim = getattr(self, '_active_sim', None)
+                if _sim is not None and hasattr(self, 'enter_dying'):
+                    self.enter_dying(_sim)
+                else:
+                    self.die()
 
     def eat(self, amount: float = 0.3):
         """Restore hunger. Called when consuming food items.

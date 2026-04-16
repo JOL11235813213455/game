@@ -347,7 +347,13 @@ class MovementMixin:
             hp = self.stats.base.get(Stat.HP_CURR, 0)
             self.stats.base[Stat.HP_CURR] = max(0, hp - dmg)
             if self.stats.base[Stat.HP_CURR] <= 0:
-                self.die()
+                # Phase 2: drowning routes through lifecycle dying
+                # window when sim attached; fallback to direct die.
+                _sim = getattr(self, '_active_sim', None)
+                if _sim is not None and hasattr(self, 'enter_dying'):
+                    self.enter_dying(_sim)
+                else:
+                    self.die()
                 return
         else:
             self.is_drowning = False

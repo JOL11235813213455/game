@@ -234,6 +234,16 @@ class ConditionsMixin:
                                        damage_type=f'condition:{name}')
                 else:
                     self.stats.base[Stat.HP_CURR] -= delta
+                # Phase 2: if the DoT lethal, route through the dying
+                # window so mourning fires + allies can heal in time.
+                # Guarded by lifecycle_state presence — only FSM-enabled
+                # creatures take this path.
+                if (self.stats.base.get(Stat.HP_CURR, 0) <= 0
+                        and hasattr(self, 'enter_dying')
+                        and self.lifecycle_state not in ('dying', 'dead')):
+                    self.remove_condition(sim, name)   # stop further ticks
+                    self.enter_dying(sim)
+                    return
                 # Special clearing: bleeding stops when HP fully restored
                 # (paralleled by the natural expiry).
                 if name == 'bleeding':
