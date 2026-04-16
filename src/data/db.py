@@ -546,6 +546,11 @@ def _migrate(con: sqlite3.Connection) -> None:
         # Phase 4 FSM: pack coordination states. Default 0; enable
         # from Stage 6 (Combat & Social) when pack dynamics are trained.
         "ALTER TABLE curriculum_stages ADD COLUMN pack_states_enabled INTEGER NOT NULL DEFAULT 0",
+        # Phase 4: species-configurable rank formula for creature packs.
+        # Values: 'might' | 'wealth' | 'social' | 'hybrid'. Default
+        # 'hybrid' for new creatures; monsters use their own default
+        # ('might') via MONSTER_SPECIES lookup regardless.
+        "ALTER TABLE species ADD COLUMN rank_formula TEXT NOT NULL DEFAULT 'hybrid'",
         """CREATE TABLE IF NOT EXISTS training_pairs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,

@@ -414,3 +414,43 @@ class Pack(Trackable):
         x = sum(m.location.x for m in members) / len(members)
         y = sum(m.location.y for m in members) / len(members)
         return (x, y)
+
+    # ------------------------------------------------------------------
+    # Polymorphic member lookup (Phase 4 extension: creatures + monsters)
+    # ------------------------------------------------------------------
+    def _lookup_member(self, uid: int):
+        """Find a member by UID. Tries Monster first, then Creature.
+
+        Supports packs with mixed or creature-only membership so the
+        same Pack/FSM logic drives both beast packs and (future)
+        creature societies.
+        """
+        from classes.monster import Monster
+        m = Monster.by_uid(uid)
+        if m is not None:
+            return m
+        from classes.creature import Creature
+        return Creature.by_uid(uid)
+
+    def rank_members_by_formula(self) -> None:
+        """Reorder members_m / members_f by the species rank formula.
+
+        Uses classes.species_rank.formula_for_species to pick the
+        formula, then rank_score to order. Missing members (dead,
+        GC'd) are filtered out.
+        """
+        from classes.species_rank import rank_score, formula_for_species
+        formula = formula_for_species(self.species)
+
+        def _sorted(uids: list[int]) -> list[int]:
+            alive = []
+            for uid in uids:
+                m = self._lookup_member(uid)
+                if m is not None and getattr(m, 'is_alive', True):
+                    alive.append((uid, rank_score(m, formula)))
+            # Highest score first → alpha at index 0
+            alive.sort(key=lambda p: -p[1])
+            return [uid for uid, _ in alive]
+
+        self.members_m = _sorted(self.members_m)
+        self.members_f = _sorted(self.members_f)

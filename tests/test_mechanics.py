@@ -5619,6 +5619,96 @@ _cx, _cy = _empty_pack.pack_centroid()
 check("empty pack_centroid() → (0, 0)",
       _cx == 0.0 and _cy == 0.0)
 
+# ---- Creature-pack support + species-configurable ranking ----
+from classes.species_rank import rank_score, formula_for_species
+
+# Creature has a pack attribute (default None)
+_sanity_map = make_map()
+_cpc = make_creature(_sanity_map, x=0, y=0,
+                     stats={Stat.STR: 14, Stat.CHR: 12, Stat.AGL: 11},
+                     name='CPack')
+check("Creature.pack default None", _cpc.pack is None)
+
+# rank_score: each formula returns sensible values
+_mighty = make_creature(_sanity_map, x=1, y=0,
+                        stats={Stat.STR: 18, Stat.AGL: 14, Stat.CHR: 8},
+                        name='Mighty')
+_mighty.gold = 5
+_social = make_creature(_sanity_map, x=2, y=0,
+                        stats={Stat.STR: 10, Stat.AGL: 10, Stat.CHR: 18},
+                        name='Social')
+_social.gold = 5
+_rich = make_creature(_sanity_map, x=3, y=0,
+                      stats={Stat.STR: 10, Stat.AGL: 10, Stat.CHR: 10},
+                      name='Rich')
+_rich.gold = 5000
+
+# might formula favors STR+AGL
+_might_m = rank_score(_mighty, 'might')
+_might_s = rank_score(_social, 'might')
+check(f"might formula: Mighty ({_might_m}) > Social ({_might_s})",
+      _might_m > _might_s)
+# social formula favors CHR
+_social_m = rank_score(_mighty, 'social')
+_social_s = rank_score(_social, 'social')
+check(f"social formula: Social ({_social_s}) > Mighty ({_social_m})",
+      _social_s > _social_m)
+# wealth formula favors gold
+_wealth_m = rank_score(_mighty, 'wealth')
+_wealth_r = rank_score(_rich, 'wealth')
+check(f"wealth formula: Rich ({_wealth_r}) > Mighty ({_wealth_m})",
+      _wealth_r > _wealth_m)
+# hybrid formula blends; CHR*1.5 can tip the scale vs raw STR/AGL.
+# Just verify it's a non-zero finite float — exact ordering depends
+# on profile balance.
+_hybrid_m = rank_score(_mighty, 'hybrid')
+_hybrid_s = rank_score(_social, 'hybrid')
+check(f"hybrid formula returns finite positive scores "
+      f"(Mighty={_hybrid_m}, Social={_hybrid_s})",
+      _hybrid_m > 0 and _hybrid_s > 0)
+
+# formula_for_species: monsters default to 'might', creatures to 'hybrid'
+# (when MONSTER_SPECIES / SPECIES dicts aren't available, falls back).
+check("unknown species falls back to 'might'",
+      formula_for_species('nonexistent_species_xyz') == 'might')
+
+# Pack.rank_members_by_formula — create a bunch of dummy members
+_species_pack = Pack(species='wolf', territory_center=MapKey(0, 0, 0))
+# Register some creatures + put UIDs in members_m
+_species_pack.members_m = [_mighty.uid, _rich.uid, _social.uid]
+# Force the formula lookup to return 'might' by overriding species_rank
+import classes.species_rank as _sr
+_orig_lookup = _sr.formula_for_species
+_sr.formula_for_species = lambda s: 'might'
+try:
+    _species_pack.rank_members_by_formula()
+    # Mighty should be first (highest STR+AGL = 32)
+    check(f"rerank (might): alpha_m is Mighty "
+          f"(order={_species_pack.members_m})",
+          _species_pack.members_m[0] == _mighty.uid)
+finally:
+    _sr.formula_for_species = _orig_lookup
+
+# Swap to 'social' — Social goes first
+_sr.formula_for_species = lambda s: 'social'
+try:
+    _species_pack.rank_members_by_formula()
+    check(f"rerank (social): alpha_m is Social "
+          f"(order={_species_pack.members_m})",
+          _species_pack.members_m[0] == _social.uid)
+finally:
+    _sr.formula_for_species = _orig_lookup
+
+# Swap to 'wealth' — Rich goes first
+_sr.formula_for_species = lambda s: 'wealth'
+try:
+    _species_pack.rank_members_by_formula()
+    check(f"rerank (wealth): alpha_m is Rich "
+          f"(order={_species_pack.members_m})",
+          _species_pack.members_m[0] == _rich.uid)
+finally:
+    _sr.formula_for_species = _orig_lookup
+
 # ==========================================================================
 print(f"\n{'='*50}")
 print(f"Results: {PASS} passed, {FAIL} failed out of {PASS+FAIL} tests")

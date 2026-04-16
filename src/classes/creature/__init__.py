@@ -263,6 +263,12 @@ class Creature(
         # Active conversation state: {target_uid, conversation, current_node_id}
         self.dialogue = None  # None = not in conversation
 
+        # Pack membership — Phase 4 extension to creatures. None for
+        # solitary creatures; a Pack instance otherwise. Ranking within
+        # the pack uses the species-configured rank_formula
+        # (see classes/species_rank.py).
+        self.pack = None
+
         # Status effect conditions (Phase 1 of FSM adoption).
         # Parallel FSMs: each key in this dict is an active condition
         # applied to this creature. Paired with the compound
