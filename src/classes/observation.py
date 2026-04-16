@@ -463,6 +463,26 @@ def build_observation(creature, cols: int, rows: int,
     obs.append(egg.gestation_days / 30.0 if egg else 0.0)
     obs.append(1.0 if egg and egg.is_abomination else 0.0)
 
+    # ==== SECTION 10a_1: PACK (Phase 4 FSM) — 5 floats ====
+    # For pack members (monsters today): state_idx, size_norm,
+    # centroid_dx, centroid_dy, in_pack flag. Creatures always see
+    # zeros (no Creature.pack yet) — the NN learns to ignore when
+    # in_pack=0, matching the design's graceful-degradation rule.
+    _section_starts['self_pack'] = len(obs)
+    _PACK_STATE_IDX = {'forming': 0, 'territorial': 1, 'defending': 2,
+                        'hunting': 3, 'fleeing': 4, 'merging': 5,
+                        'dispersed': 6}
+    _pack = getattr(creature, 'pack', None)
+    if _pack is not None and getattr(_pack, 'size', 0) > 0:
+        obs.append(_PACK_STATE_IDX.get(_pack.pack_state, 1) / 6.0)
+        obs.append(min(1.0, _pack.size / 10.0))
+        cx, cy = _pack.pack_centroid()
+        obs.append((cx - creature.location.x) / max(1, cols))
+        obs.append((cy - creature.location.y) / max(1, rows))
+        obs.append(1.0)
+    else:
+        obs.extend([0.0, 0.0, 0.0, 0.0, 0.0])
+
     # ==== SECTION 10a0: WORLD CYCLES (Phase 3 FSM) — 4 floats ====
     # time_of_day_idx:   0..3 normalized (dawn/day/dusk/night)
     # light_level:       0.0..1.0 continuous, smooth across dawn/dusk

@@ -597,6 +597,8 @@ def migrate_db():
             "ALTER TABLE curriculum_stages ADD COLUMN conditions_enabled INTEGER NOT NULL DEFAULT 0",
             # Phase 3 FSM: day/night + weather cycles
             "ALTER TABLE curriculum_stages ADD COLUMN cycles_enabled INTEGER NOT NULL DEFAULT 0",
+            # Phase 4 FSM: pack coordination states
+            "ALTER TABLE curriculum_stages ADD COLUMN pack_states_enabled INTEGER NOT NULL DEFAULT 0",
             """CREATE TABLE IF NOT EXISTS training_pairs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,

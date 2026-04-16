@@ -5551,6 +5551,75 @@ check("observation size matches with world cycles active",
       len(_wc_obs) == OBSERVATION_SIZE)
 
 # ==========================================================================
+print("\n=== Pack FSM (Phase 4) ===")
+from classes.pack import Pack
+from classes.maps import MapKey
+
+# Construct a pack directly (independent of arena generator which
+# doesn't always produce monsters in test contexts)
+_pack = Pack(species='wolf', territory_center=MapKey(5, 5, 0),
+             game_map=None)
+check("new pack starts in 'forming' state",
+      _pack.pack_state == 'forming')
+
+# Empty pack → dispersed via the wildcard 'disperse' transition.
+# size=0 right now since we haven't added members. A sim tick would
+# fire disperse; drive it directly here for determinism.
+class _FakeSim:
+    now = 0
+    _event_handlers = {}
+_fs = _FakeSim()
+_pack.evaluate_pack_state(_fs)
+check("empty pack transitions to 'dispersed'",
+      _pack.pack_state == 'dispersed')
+
+# Fresh pack, populate + step it through the state cycle
+_pack2 = Pack(species='wolf', territory_center=MapKey(5, 5, 0))
+
+# Forming → territorial after the forming window elapses
+_fs.now = 0
+_pack2._pack_formed_at = 0
+# Simulate a single-member pack (not empty, so disperse doesn't fire)
+_pack2.members_m = [999]   # dummy UID, not a real Monster
+_fs.now = 5000  # past FORMING_WINDOW_MS = 3000
+_pack2.evaluate_pack_state(_fs)
+# Single-member pack stabilizes then may immediately overwhelm if
+# threats — with no seen_creatures, should land in territorial.
+check(f"forming → territorial after window "
+      f"(state={_pack2.pack_state})",
+      _pack2.pack_state == 'territorial')
+
+# Threat detection: add to seen_creatures → transitions to defending
+_pack2.seen_creatures = {42: (10, 10, 0)}
+# Single-member packs flee rather than defend — bump size first.
+_pack2.members_m = [999, 1000, 1001]
+_pack2.evaluate_pack_state(_fs)
+check("territorial + threat → defending",
+      _pack2.pack_state == 'defending')
+
+# Threat clears → back to territorial
+_pack2.seen_creatures = {}
+_pack2.evaluate_pack_state(_fs)
+check("defending → territorial when threats gone",
+      _pack2.pack_state == 'territorial')
+
+# Overwhelm: drop to 1 member with threats → flee
+_pack2.members_m = [999]
+_pack2.seen_creatures = {42: (10, 10, 0)}
+_pack2.evaluate_pack_state(_fs)
+# territorial → defending (via threat) then → fleeing (via overwhelm
+# triggered on same tick because size <= 1). Actual order per code:
+# threat fires first (territorial → defending), then overwhelm checks.
+check(f"1-member + threat → fleeing (state={_pack2.pack_state})",
+      _pack2.pack_state == 'fleeing')
+
+# Centroid helper — empty pack returns (0, 0)
+_empty_pack = Pack(species='wolf', territory_center=MapKey(0, 0, 0))
+_cx, _cy = _empty_pack.pack_centroid()
+check("empty pack_centroid() → (0, 0)",
+      _cx == 0.0 and _cy == 0.0)
+
+# ==========================================================================
 print(f"\n{'='*50}")
 print(f"Results: {PASS} passed, {FAIL} failed out of {PASS+FAIL} tests")
 if FAIL:

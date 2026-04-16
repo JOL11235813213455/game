@@ -1324,6 +1324,9 @@ def _load_curriculum_stage(stage_number: int) -> dict:
     # Phase 3 FSM: day/night + weather cycles
     stage['cycles_enabled'] = (
         bool(row['cycles_enabled']) if 'cycles_enabled' in cols else False)
+    # Phase 4 FSM: pack coordination states
+    stage['pack_states_enabled'] = (
+        bool(row['pack_states_enabled']) if 'pack_states_enabled' in cols else False)
     return stage
 
 

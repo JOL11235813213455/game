@@ -543,6 +543,9 @@ def _migrate(con: sqlite3.Connection) -> None:
         # from Stage 2 (Forage) onward so visibility modulation pressures
         # the creature to factor perception into decisions early.
         "ALTER TABLE curriculum_stages ADD COLUMN cycles_enabled INTEGER NOT NULL DEFAULT 0",
+        # Phase 4 FSM: pack coordination states. Default 0; enable
+        # from Stage 6 (Combat & Social) when pack dynamics are trained.
+        "ALTER TABLE curriculum_stages ADD COLUMN pack_states_enabled INTEGER NOT NULL DEFAULT 0",
         """CREATE TABLE IF NOT EXISTS training_pairs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,

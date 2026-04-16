@@ -55,6 +55,14 @@ class Pack(Trackable):
         self.split_start_hp_a: int = 0
         self.split_start_hp_b: int = 0
 
+        # Phase 4 FSM: pack coordination state. Built lazily via
+        # _ensure_state_fsm(). Transitions are heuristic (member
+        # count, threat detection, resource scarcity). PackNet
+        # reads the state as context and chooses actions within it.
+        self._state_fsm = None
+        self._pack_state_tick_at = 0   # last state-evaluation tick
+        self._pack_formed_at = 0       # entry time for forming → territorial timer
+
     # ------------------------------------------------------------------
     # Species config access (cached from DB on first use)
     # ------------------------------------------------------------------
@@ -308,3 +316,101 @@ class Pack(Trackable):
         if self.species == other.species and self.can_merge_with(other):
             return False  # small enough to prefer merging
         return self.territories_overlap(other)
+
+    # ------------------------------------------------------------------
+    # Phase 4: Pack state FSM (heuristic transitions)
+    # ------------------------------------------------------------------
+    def _ensure_state_fsm(self):
+        """Lazy-init the pack-state FSM on first use.
+
+        States per Phase 4 design: forming, territorial, defending,
+        hunting, fleeing, merging, dispersed (terminal).
+        """
+        if self._state_fsm is not None:
+            return self._state_fsm
+        from classes.fsm import StateMachine, Transition
+        self._state_fsm = StateMachine(
+            owner=self,
+            initial='forming',
+            states=['forming', 'territorial', 'defending', 'hunting',
+                    'fleeing', 'merging', 'dispersed'],
+            transitions=[
+                # Forming stabilizes into territorial after the timer.
+                Transition('forming',     'stabilize', 'territorial'),
+                # Territorial → situational states
+                Transition('territorial', 'threat',    'defending'),
+                Transition('territorial', 'hunt',      'hunting'),
+                Transition('territorial', 'overwhelm', 'fleeing'),
+                Transition('territorial', 'join',      'merging'),
+                # Return paths
+                Transition('defending',   'safe',       'territorial'),
+                Transition('defending',   'overwhelm',  'fleeing'),
+                Transition('hunting',     'satiated',   'territorial'),
+                Transition('hunting',     'overwhelm',  'fleeing'),
+                Transition('fleeing',     'safe',       'territorial'),
+                Transition('fleeing',     'shatter',    'dispersed'),
+                Transition('merging',     'complete',   'territorial'),
+                # Disperse from any state when size hits 0
+                Transition('*',           'disperse',   'dispersed'),
+            ],
+        )
+        return self._state_fsm
+
+    @property
+    def pack_state(self) -> str:
+        fsm = self._state_fsm
+        return fsm.current if fsm is not None else 'forming'
+
+    def evaluate_pack_state(self, sim=None) -> None:
+        """Re-evaluate heuristic transitions. Safe to call each tick.
+
+        Rules:
+          - forming → territorial after FORMING_DAYS (3 game days)
+          - any → dispersed when size == 0
+          - territorial → defending when any seen creature is a threat
+            in the territory
+          - defending → territorial when threats cleared
+          - territorial → fleeing when size dropped > 50% from peak
+            (simplified: size <= 1)
+          - Merging/hunting left for PackNet signals to trigger
+        """
+        fsm = self._ensure_state_fsm()
+        now = getattr(sim, 'now', 0)
+
+        # Disperse on empty
+        if self.size == 0 and fsm.current != 'dispersed':
+            fsm.trigger('disperse', now=now)
+            return
+
+        # Forming window: stabilize once the initial period is past.
+        # In the absence of explicit calendar integration here we
+        # treat 3000 game-ticks (~25 min real time) as the stabilization.
+        FORMING_WINDOW_MS = 3000
+        if fsm.current == 'forming':
+            if now - self._pack_formed_at >= FORMING_WINDOW_MS:
+                fsm.trigger('stabilize', now=now)
+            return
+
+        # Threat detection via seen_creatures
+        # NOTE: this is a heuristic — real PackNet sees individual
+        # threats and may emit explicit pack signals. We only fire
+        # the coarse transition here; fine-grained flee/press is
+        # the Pack NN's job.
+        has_threat = bool(self.seen_creatures)
+        if fsm.current == 'territorial' and has_threat:
+            fsm.trigger('threat', now=now)
+        elif fsm.current == 'defending' and not has_threat:
+            fsm.trigger('safe', now=now)
+
+        # Overwhelm check: small pack + threats = flee
+        if fsm.current in ('territorial', 'defending') and has_threat and self.size <= 1:
+            fsm.trigger('overwhelm', now=now)
+
+    def pack_centroid(self) -> tuple[float, float]:
+        """Average (x, y) of all members. (0,0) if empty."""
+        members = self.members
+        if not members:
+            return (0.0, 0.0)
+        x = sum(m.location.x for m in members) / len(members)
+        y = sum(m.location.y for m in members) / len(members)
+        return (x, y)

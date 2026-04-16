@@ -379,6 +379,12 @@ class Simulation:
         if self.cycles_enabled and self.world_cycles is not None:
             self.world_cycles.tick(self)
 
+        # Phase 4: evaluate pack-state heuristics for every pack.
+        # Cheap — only size / seen_creatures checks. Could throttle
+        # to every N ticks if profiling shows it matters.
+        for p in self.packs:
+            p.evaluate_pack_state(self)
+
         # Detect day boundary and fire the daily lifecycle pass exactly
         # once per game day (eggs gestating + hatching). Loop in case
         # multiple days slipped — defensive, shouldn't normally happen.
