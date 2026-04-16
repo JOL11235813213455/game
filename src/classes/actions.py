@@ -214,6 +214,14 @@ def _auto_share_rumor(creature, target, now):
         confidence = min(1.0, abs(sentiment) / 20.0)
         creature.share_rumor(target, subject_uid, sentiment, now)
 
+    # Auto-share a death rumor if the creature is carrying one.
+    # Runs regardless of whether peer-rumor gossip fired.
+    try:
+        from classes.mourning import share_death_news
+        share_death_news(creature, target, now)
+    except Exception:
+        pass
+
 
 # ---------------------------------------------------------------------------
 # Dynamic action mask

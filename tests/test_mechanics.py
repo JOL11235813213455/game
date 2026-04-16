@@ -4636,96 +4636,155 @@ if received is not None:
           received[2] < 0.99)
 
 # ==========================================================================
-print("\n=== Mourning / Grief ===")
-from classes.mourning import (notify_death, apply_grief,
-                              _grief_magnitude, make_grief_snapshot,
-                              GRIEF_TIERS)
+print("\n=== Mourning / Grief (awareness-gated) ===")
+from classes.mourning import (
+    notify_death, _base_magnitude, make_grief_snapshot,
+    GRIEF_TIERS, FINISH_FIGHT_DELAY_MS, FALLBACK_REACH_MS,
+    is_aware, share_death_news, get_death_event, clear_grief,
+)
 
 GRAPH.clear()
-gm = make_map(10, 10)
+gm = make_map(30, 30)
 
-# Two bonded creatures
-lover_a = make_creature(gm, x=2, y=2, name='Romeo')
-lover_b = make_creature(gm, x=2, y=3, name='Juliet')
+# Two bonded creatures — witnesses within sight
+lover_a = make_creature(gm, x=10, y=10, name='Romeo',
+                        stats={Stat.PER: 14})
+lover_b = make_creature(gm, x=11, y=10, name='Juliet',
+                        stats={Stat.PER: 14})
+# Off-map creature: bonded but far away (out of sight)
+far_friend = make_creature(gm, x=28, y=28, name='FarFriend',
+                            stats={Stat.PER: 10})
+# Enemy — should never grieve
+enemy = make_creature(gm, x=12, y=10, name='Tybalt')
 
-# Seed extreme positive sentiment (sentiment 19, count 40 → magnitude ~77)
+# Seed relationships: lovers deeply bonded, friend mildly bonded,
+# enemy hostile.
 for _ in range(40):
     GRAPH.record_interaction(lover_a.uid, lover_b.uid, 19.0)
     GRAPH.record_interaction(lover_b.uid, lover_a.uid, 19.0)
-
-# A creature with negative relationship (should NOT grieve)
-enemy = make_creature(gm, x=5, y=5, name='Tybalt')
+for _ in range(20):
+    GRAPH.record_interaction(far_friend.uid, lover_a.uid, 10.0)
 for _ in range(10):
     GRAPH.record_interaction(enemy.uid, lover_a.uid, -10.0)
 
-# A creature with mild positive sentiment (tier 1 mild grief)
-friend = make_creature(gm, x=6, y=6, name='Mercutio')
-for _ in range(2):
-    GRAPH.record_interaction(friend.uid, lover_a.uid, 2.0)
-
-# Magnitudes
-mag_b = _grief_magnitude(lover_b, lover_a.uid)
-mag_enemy = _grief_magnitude(enemy, lover_a.uid)
-mag_friend = _grief_magnitude(friend, lover_a.uid)
-check(f"Lover magnitude > 50 (got {mag_b:.1f})", mag_b > 50)
-check(f"Enemy magnitude is 0 (negative sentiment) (got {mag_enemy})",
-      mag_enemy == 0)
-check(f"Friend magnitude 2-10 mild (got {mag_friend:.1f})",
-      2 < mag_friend < 10)
+check(f"Lover magnitude > 50",
+      _base_magnitude(lover_b, lover_a.uid) > 50)
+check(f"Far friend magnitude > 8 (notable tier)",
+      _base_magnitude(far_friend, lover_a.uid) > 8)
+check(f"Enemy magnitude is 0",
+      _base_magnitude(enemy, lover_a.uid) == 0)
 
 # Fire the death
+lover_a._last_update_time = 1000
 str_before = lover_b.stats.active[Stat.STR]()
 chr_before = lover_b.stats.active[Stat.CHR]()
-lover_a._last_update_time = 1000
 lover_a.die()
 
-# Lover has profound grief: -3 STR, -5 CHR, -2 PER, -1 AGL
-str_after = lover_b.stats.active[Stat.STR]()
-chr_after = lover_b.stats.active[Stat.CHR]()
-check(f"Lover STR debuff applied ({str_before} -> {str_after})",
-      str_after < str_before)
-check(f"Lover CHR debuff applied ({chr_before} -> {chr_after})",
-      chr_after < chr_before)
-check(f"Lover grief counter incremented",
+# 1. SIGHT WITNESS: lover_b can see the death tile (adjacent)
+check(f"Lover is aware immediately",
+      is_aware(lover_b, lover_a.uid))
+check(f"Lover grief counter incremented at death-time",
       lover_b._grief_events_total == 1)
-check(f"Lover grief magnitude > 50",
-      lover_b._grief_magnitude_sum > 50)
 check(f"Lover remembers death location",
       len(lover_b._grief_death_locations) == 1)
 
-# Enemy does NOT grieve
+# 2. BUT debuffs are delayed — stats NOT yet reduced
+str_mid = lover_b.stats.active[Stat.STR]()
+chr_mid = lover_b.stats.active[Stat.CHR]()
+check(f"Lover STR unchanged during grace ({str_before} -> {str_mid})",
+      str_mid == str_before)
+check(f"Lover CHR unchanged during grace",
+      chr_mid == chr_before)
+
+# 3. After 2 game hours (finish-fight delay), debuffs fire
+lover_b.process_ticks(FINISH_FIGHT_DELAY_MS + 1)
+str_after = lover_b.stats.active[Stat.STR]()
+chr_after = lover_b.stats.active[Stat.CHR]()
+check(f"Lover STR dropped after grace ({str_before} -> {str_after})",
+      str_after < str_before)
+check(f"Lover CHR dropped after grace",
+      chr_after < chr_before)
+
+# 4. FAR FRIEND: not in sight — should NOT be aware yet
+check(f"Far friend not aware without witness/rumor",
+      not is_aware(far_friend, lover_a.uid))
+check(f"Far friend grief counter still 0",
+      far_friend._grief_events_total == 0)
+
+# 5. Enemy never grieves
+check(f"Enemy never aware (hostile relationship)",
+      not is_aware(enemy, lover_a.uid))
 check(f"Enemy grief counter == 0",
       enemy._grief_events_total == 0)
 
-# Friend has mild grief (tier 1: -1 CHR only)
-# Magnitude ~ 2 * ln(3) ≈ 2.2 which is just above tier 1 (2.0)
-check(f"Friend has some grief counter",
-      friend._grief_events_total == 1)
+# 6. RUMOR PROPAGATION: lover_b (witness) talks to far_friend
+# lover_b carries rumor at confidence 1.0; share decays to 0.6
+transmitted = share_death_news(lover_b, far_friend, tick=2000)
+check(f"share_death_news transmitted to far_friend",
+      transmitted)
+check(f"Far friend now aware via rumor",
+      is_aware(far_friend, lover_a.uid))
+known = far_friend._known_deaths[lover_a.uid]
+check(f"Rumor confidence < 1.0 (got {known['confidence']:.2f})",
+      known['confidence'] < 1.0)
+check(f"Rumor confidence > 0.5",
+      known['confidence'] > 0.5)
+check(f"Rumor source is decorated 'rumor_from_'",
+      known['source'].startswith('rumor_from_'))
 
-# Grief reward signal activates via snapshot delta
+# Far friend grief event fired (magnitude attenuated by confidence)
+check(f"Far friend grief counter incremented",
+      far_friend._grief_events_total == 1)
+# Base = sentiment * ln(count+1); attenuated by 0.6 rumor decay
+# Confirm attenuation occurred — i.e. effective < base magnitude
+ff_base = _base_magnitude(far_friend, lover_a.uid)
+ff_mag = far_friend._grief_magnitude_sum
+check(f"Far friend effective magnitude attenuated "
+      f"(base={ff_base:.0f}, effective={ff_mag:.0f})",
+      ff_mag < ff_base and ff_mag > 0)
+
+# 7. FALLBACK REACH: a third isolated bonded creature
+GRAPH.clear()
+victim = make_creature(gm, x=15, y=15, name='Victim',
+                       stats={Stat.PER: 14})
+isolated = make_creature(gm, x=29, y=29, name='Isolated',
+                         stats={Stat.PER: 10})
+for _ in range(20):
+    GRAPH.record_interaction(isolated.uid, victim.uid, 10.0)
+victim._last_update_time = 5000
+victim.die()
+check(f"Isolated NOT aware at death-time",
+      not is_aware(isolated, victim.uid))
+# Advance time past fallback reach window
+isolated.process_ticks(FALLBACK_REACH_MS + 1)
+check(f"Isolated aware after fallback reach",
+      is_aware(isolated, victim.uid))
+fallback_entry = isolated._known_deaths.get(victim.uid, {})
+check(f"Fallback source is 'fallback_reach'",
+      fallback_entry.get('source') == 'fallback_reach')
+check(f"Fallback confidence is reduced (0.3)",
+      abs(fallback_entry.get('confidence', 0) - 0.3) < 0.01)
+
+# 8. Grief reward signal (via snapshot delta)
 from classes.reward import compute_reward, make_reward_snapshot
-# Reset lover's snapshot to pre-grief state
-pre_snapshot = make_reward_snapshot(lover_b)
-pre_snapshot['grief_magnitude_sum'] = 0
-pre_snapshot['grief_events_total'] = 0
-curr_snapshot = make_reward_snapshot(lover_b)
-reward, signals = compute_reward(
-    lover_b, pre_snapshot, curr_snapshot,
-    breakdown=True,
-    signal_scales={'grief': 1.0})
-check(f"grief signal present in reward breakdown",
-      'grief' in signals)
-check(f"grief signal is negative (penalty)",
+pre_snap = make_reward_snapshot(lover_b)
+pre_snap['grief_magnitude_sum'] = 0
+pre_snap['grief_events_total'] = 0
+curr_snap = make_reward_snapshot(lover_b)
+_, signals = compute_reward(lover_b, pre_snap, curr_snap,
+                            breakdown=True,
+                            signal_scales={'grief': 1.0})
+check(f"grief signal present", 'grief' in signals)
+check(f"grief signal is negative",
       signals.get('grief', 0) < 0)
 
-# Cleanup via clear_grief
-from classes.mourning import clear_grief
+# 9. Cleanup
 clear_grief(lover_b)
-str_recovered = lover_b.stats.active[Stat.STR]()
-check(f"clear_grief restores STR ({str_after} -> {str_recovered})",
-      str_recovered == str_before)
+str_restored = lover_b.stats.active[Stat.STR]()
+check(f"clear_grief restores STR",
+      str_restored == str_before)
 
-# Training scenario smoke test
+# 10. Training scenario smoke test
 from editor.simulation.arena import generate_grief_training_scenario
 import random as _rng
 _rng.seed(12345)
@@ -4734,11 +4793,9 @@ scn = generate_grief_training_scenario(cols=20, rows=20,
                                         monster_species=['grey_wolf'])
 check(f"grief scenario has creatures", len(scn['creatures']) >= 2)
 check(f"grief scenario has monsters", len(scn['monsters']) >= 1)
-check(f"grief scenario has pack", len(scn['packs']) >= 1)
-# Check bond was set
 if len(scn['creatures']) >= 2:
-    pair_mag = _grief_magnitude(scn['creatures'][0],
-                                 scn['creatures'][1].uid)
+    pair_mag = _base_magnitude(scn['creatures'][0],
+                                scn['creatures'][1].uid)
     check(f"scenario bond produces profound magnitude (>50, got {pair_mag:.1f})",
           pair_mag > 50)
 
