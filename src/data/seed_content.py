@@ -1345,6 +1345,78 @@ def seed():
     con.execute('UPDATE curriculum_stages SET pack_states_enabled = 1 '
                 'WHERE stage_number >= 15')
 
+    # ------------------------------------------------------------------
+    # Per-stage arena + parallelism + creature-count defaults.
+    # Baselines track what the user validated with p001/c001/c002
+    # runs (25x25 arena, ~12 MAPPO / ~20 PPO creatures, parallel=4).
+    # Scaled up for later stages where density matters more.
+    # ------------------------------------------------------------------
+
+    # Early stages (1-3, Wander / Pickup / Hunger): small + fast iteration.
+    con.execute('UPDATE curriculum_stages SET '
+                'mappo_cols = 20, mappo_rows = 20, '
+                'ppo_cols = 25, ppo_rows = 25, '
+                'mappo_creatures = 10, ppo_creatures = 16, '
+                'es_parallel = 1, ppo_parallel = 4 '
+                'WHERE stage_number BETWEEN 1 AND 3')
+
+    # Mid creature curriculum (4-10, Purpose / Harvest / Process / Jobs /
+    # Trade / Schedule / Reputation): standard arenas at baseline density.
+    con.execute('UPDATE curriculum_stages SET '
+                'mappo_cols = 25, mappo_rows = 25, '
+                'ppo_cols = 30, ppo_rows = 30, '
+                'mappo_creatures = 12, ppo_creatures = 20, '
+                'es_parallel = 1, ppo_parallel = 4 '
+                'WHERE stage_number BETWEEN 4 AND 10')
+
+    # Late creature stages (11-14, Combat / Lifecycle / Religion / Mastery):
+    # larger arena + more creatures to give room for conditions + packs
+    # once those systems come online. ES parallelism helps here because
+    # novelty-exploration is valuable against non-stationarity.
+    con.execute('UPDATE curriculum_stages SET '
+                'mappo_cols = 30, mappo_rows = 30, '
+                'ppo_cols = 40, ppo_rows = 40, '
+                'mappo_creatures = 16, ppo_creatures = 24, '
+                'es_parallel = 2, ppo_parallel = 4 '
+                'WHERE stage_number BETWEEN 11 AND 14')
+
+    # Monster curriculum (15-25): bigger world, higher density — pack
+    # behavior needs room to form + roam. Left at defaults for now per
+    # the 'figure monster params later' scope note.
+    con.execute('UPDATE curriculum_stages SET '
+                'mappo_cols = 40, mappo_rows = 40, '
+                'ppo_cols = 50, ppo_rows = 50, '
+                'mappo_creatures = 20, ppo_creatures = 30, '
+                'es_parallel = 1, ppo_parallel = 4 '
+                'WHERE stage_number >= 15')
+
+    # ------------------------------------------------------------------
+    # Imitation / DAgger defaults.
+    # StatWeighted is a strong teacher for basic motor + resource tasks
+    # (movement, pickup, food). It's a poor teacher for complex social /
+    # combat / lifecycle decisions. Enable only where the teacher's
+    # action distribution actually approximates the target policy.
+    # ------------------------------------------------------------------
+
+    # Stages 1-3: full strength (3 epochs). Teacher + task are tightly
+    # aligned; NN bootstraps near teacher parity in minutes.
+    con.execute("UPDATE curriculum_stages SET "
+                "imitation_epochs = 3, "
+                "run_order = 'imitation,mappo,es,ppo' "
+                "WHERE stage_number BETWEEN 1 AND 3")
+
+    # Stages 4-5 (Purpose / Harvest): still useful but teacher can't
+    # reason about goal chains — 1 epoch warmup, then RL takes over.
+    con.execute("UPDATE curriculum_stages SET "
+                "imitation_epochs = 1, "
+                "run_order = 'imitation,mappo,es,ppo' "
+                "WHERE stage_number BETWEEN 4 AND 5")
+
+    # Stages 6+: imitation disabled. Teacher doesn't know about jobs,
+    # trade, quests, combat tactics, conditions, packs — pretraining
+    # against it would regress the NN.
+    # (default run_order='mappo,es,ppo' is inherited here)
+
     # ==================================================================
     # MONSTER SPECIES (9 starter archetypes)
     # ==================================================================
