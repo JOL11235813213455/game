@@ -349,6 +349,17 @@ def compute_dynamic_mask(creature, context: dict = None) -> np.ndarray:
     if not creature.loans or creature.gold <= 0:
         mask[Action.REPAY_LOAN] = 0
 
+    # Phase 7 arousal gating — some actions are only valid in
+    # certain arousal states (calm pair, no combat-spells while calm).
+    # Skipped entirely when the creature's arousal FSM hasn't been
+    # built (equivalent to 'calm' default; only listed actions that
+    # require non-calm states would be blocked).
+    if hasattr(creature, 'arousal_action_allowed'):
+        from classes.creature._arousal import get_action_gates
+        for act, _allowed in get_action_gates().items():
+            if not creature.arousal_action_allowed(act):
+                mask[act] = 0
+
     return mask
 
 

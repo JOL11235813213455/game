@@ -601,6 +601,8 @@ def migrate_db():
             "ALTER TABLE curriculum_stages ADD COLUMN pack_states_enabled INTEGER NOT NULL DEFAULT 0",
             # Phase 4: species-configurable rank formula
             "ALTER TABLE species ADD COLUMN rank_formula TEXT NOT NULL DEFAULT 'hybrid'",
+            # Phase 7 FSM: combat arousal states
+            "ALTER TABLE curriculum_stages ADD COLUMN arousal_enabled INTEGER NOT NULL DEFAULT 0",
             """CREATE TABLE IF NOT EXISTS training_pairs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,

@@ -17,6 +17,7 @@ from classes.creature._relationships import RelationshipsMixin
 from classes.creature._conversation import ConversationMixin
 from classes.creature._conditions import ConditionsMixin
 from classes.creature._lifecycle import LifecycleMixin
+from classes.creature._arousal import ArousalMixin
 from classes.creature._utility import UtilityMixin
 from classes.creature._goals import GoalMixin
 from classes.creature._regen import RegenMixin
@@ -35,6 +36,7 @@ class Creature(
     ConversationMixin,
     ConditionsMixin,
     LifecycleMixin,
+    ArousalMixin,
     UtilityMixin,
     GoalMixin,
     RegenMixin,

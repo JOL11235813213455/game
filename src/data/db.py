@@ -551,6 +551,10 @@ def _migrate(con: sqlite3.Connection) -> None:
         # 'hybrid' for new creatures; monsters use their own default
         # ('might') via MONSTER_SPECIES lookup regardless.
         "ALTER TABLE species ADD COLUMN rank_formula TEXT NOT NULL DEFAULT 'hybrid'",
+        # Phase 7 FSM: combat arousal states. Default 0; enable at
+        # Stage 6 alongside Phases 1+4. Stat-mod modulation is tiny so
+        # this only matters once combat mechanics are in play.
+        "ALTER TABLE curriculum_stages ADD COLUMN arousal_enabled INTEGER NOT NULL DEFAULT 0",
         """CREATE TABLE IF NOT EXISTS training_pairs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,

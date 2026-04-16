@@ -214,7 +214,8 @@ CREATE TABLE IF NOT EXISTS curriculum_stages (
     resume_from_stage  INTEGER,
     conditions_enabled INTEGER NOT NULL DEFAULT 0,
     cycles_enabled     INTEGER NOT NULL DEFAULT 0,
-    pack_states_enabled INTEGER NOT NULL DEFAULT 0
+    pack_states_enabled INTEGER NOT NULL DEFAULT 0,
+    arousal_enabled    INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS creature_stats (
     creature_key TEXT NOT NULL REFERENCES creatures(key),

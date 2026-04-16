@@ -5710,6 +5710,87 @@ finally:
     _sr.formula_for_species = _orig_lookup
 
 # ==========================================================================
+print("\n=== Combat Arousal (Phase 7) ===")
+from classes.creature._arousal import (AROUSAL_STATES, AROUSAL_STATE_IDX,
+                                         AROUSAL_TIMEOUTS, get_action_gates)
+
+_arsim_arena = generate_arena(cols=10, rows=10, num_creatures=1)
+_arsim = Simulation(_arsim_arena)
+_arc = _arsim.creatures[0]
+
+# Default: pre-FSM creature reports 'calm'
+check("default arousal_state is 'calm'", _arc.arousal_state == 'calm')
+
+# Transition calm → alert on hostile sighting
+_arc.arousal_on_hostile_seen(_arsim)
+check("hostile_seen → alert", _arc.arousal_state == 'alert')
+
+# Stat mod: alert gives +2 PER
+_per_baseline = _arc.stats.base.get(Stat.PER, 10)
+check(f"alert +2 PER (baseline {_per_baseline} → {_arc.stats.active[Stat.PER]()})",
+      _arc.stats.active[Stat.PER]() == _per_baseline + 2)
+
+# alert + combat → engaged
+_arc.arousal_on_combat(_arsim)
+check("combat event → engaged",
+      _arc.arousal_state == 'engaged')
+
+# engaged mods: +1 AGL, -1 PER, -1 INT
+_int_baseline = _arc.stats.base.get(Stat.INT, 10)
+check(f"engaged -1 INT ({_int_baseline} → {_arc.stats.active[Stat.INT]()})",
+      _arc.stats.active[Stat.INT]() == _int_baseline - 1)
+
+# Advance sim past engaged timeout — should transition to cooling_down
+_arsim.now += AROUSAL_TIMEOUTS['engaged_to_cooling'] + 100
+_arsim._drain_scheduled_events()
+check("engaged → cooling_down after timeout",
+      _arc.arousal_state == 'cooling_down')
+
+# Continue: cooling_down → recovering
+_arsim.now += AROUSAL_TIMEOUTS['cooling_to_recovering'] + 100
+_arsim._drain_scheduled_events()
+check("cooling_down → recovering",
+      _arc.arousal_state == 'recovering')
+
+# Recovering → calm
+_arsim.now += AROUSAL_TIMEOUTS['recovering_to_calm'] + 100
+_arsim._drain_scheduled_events()
+check("recovering → calm",
+      _arc.arousal_state == 'calm')
+
+# Stat mods clear when back to calm
+check("calm baseline PER restored",
+      _arc.stats.active[Stat.PER]() == _per_baseline)
+
+# Re-escalation: combat event jumps calm → engaged directly
+_arc.arousal_on_combat(_arsim)
+check("combat from calm → engaged (emergency)",
+      _arc.arousal_state == 'engaged')
+
+# Action gating — PAIR is calm-only
+from classes.actions import Action
+check("PAIR in action gates table",
+      Action.PAIR in get_action_gates())
+check("engaged creature cannot PAIR",
+      not _arc.arousal_action_allowed(Action.PAIR))
+
+# Reset to calm to verify PAIR opens up.
+# Each transition reschedules the next timer from sim.now, so we
+# need to advance + drain in a loop to walk through all timeouts.
+for _ in range(5):
+    _arsim.now += AROUSAL_TIMEOUTS['recovering_to_calm'] + 100
+    _arsim._drain_scheduled_events()
+check(f"fully cooled creature is calm ({_arc.arousal_state})",
+      _arc.arousal_state == 'calm')
+check("calm creature can PAIR",
+      _arc.arousal_action_allowed(Action.PAIR))
+
+# Observation slots populated
+_ar_obs = build_observation(_arc, _arsim.cols, _arsim.rows)
+check("observation length matches with arousal active",
+      len(_ar_obs) == OBSERVATION_SIZE)
+
+# ==========================================================================
 print(f"\n{'='*50}")
 print(f"Results: {PASS} passed, {FAIL} failed out of {PASS+FAIL} tests")
 if FAIL:

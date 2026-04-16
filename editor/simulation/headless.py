@@ -157,6 +157,8 @@ class Simulation:
         self.subscribe_event('lifecycle_death_expire', self._dispatch_death_expire)
         # Phase 3 world cycles: weather-transition expiry
         self.subscribe_event('weather_transition', self._dispatch_weather_transition)
+        # Phase 7 combat arousal: timer-driven state decays
+        self.subscribe_event('arousal_timer', self._dispatch_arousal_timer)
         # Seed the first weather transition so the FSM advances when
         # cycles are enabled. When cycles_enabled=False, we skip this
         # and the weather FSM stays pinned to its initial state.
@@ -200,6 +202,14 @@ class Simulation:
         c = _C.by_uid(uid)
         if c is not None:
             c.on_condition_expired(self, name)
+
+    def _dispatch_arousal_timer(self, payload) -> None:
+        """Arousal-decay timer fired — route trigger back to creature."""
+        uid, trigger = payload
+        from classes.creature import Creature as _C
+        c = _C.by_uid(uid)
+        if c is not None:
+            c.on_arousal_timer(self, trigger)
 
     def _dispatch_weather_transition(self, payload) -> None:
         """Weather timer fired — advance weather FSM + reschedule."""

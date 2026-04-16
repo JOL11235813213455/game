@@ -1327,6 +1327,9 @@ def _load_curriculum_stage(stage_number: int) -> dict:
     # Phase 4 FSM: pack coordination states
     stage['pack_states_enabled'] = (
         bool(row['pack_states_enabled']) if 'pack_states_enabled' in cols else False)
+    # Phase 7 FSM: combat arousal states
+    stage['arousal_enabled'] = (
+        bool(row['arousal_enabled']) if 'arousal_enabled' in cols else False)
     return stage
 
 

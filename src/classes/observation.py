@@ -463,6 +463,20 @@ def build_observation(creature, cols: int, rows: int,
     obs.append(egg.gestation_days / 30.0 if egg else 0.0)
     obs.append(1.0 if egg and egg.is_abomination else 0.0)
 
+    # ==== SECTION 10a_3: AROUSAL (Phase 7 FSM) — 2 floats ====
+    # arousal_state_idx (0..4 normalized), arousal_time_in_state
+    # (seconds in current state, clipped to 0..1 over 60s horizon).
+    _section_starts['self_arousal'] = len(obs)
+    from classes.creature._arousal import AROUSAL_STATE_IDX
+    _ar_fsm = getattr(creature, '_arousal_fsm', None)
+    if _ar_fsm is not None:
+        obs.append(AROUSAL_STATE_IDX.get(_ar_fsm.current, 0) / 4.0)
+        now_ms = observation_tick * 500 if observation_tick else 0
+        obs.append(min(1.0, _ar_fsm.time_in_state(now_ms) / 60_000.0))
+    else:
+        obs.append(0.0)   # default 'calm'
+        obs.append(0.0)
+
     # ==== SECTION 10a_1: PACK (Phase 4 FSM) — 5 floats ====
     # For pack members (monsters today): state_idx, size_norm,
     # centroid_dx, centroid_dy, in_pack flag. Creatures always see
