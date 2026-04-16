@@ -14,26 +14,7 @@ HIGH IMPACT — Blocks curriculum stages 15-25 (monster training)
 
 MEDIUM IMPACT — Weakens monster learning
 -----------------------------------------
-- MonsterNet training optimizer: stages 15-20 mark monster_trainable
-  but the training runner currently runs monsters on heuristic only
-  and doesn't collect monster rollouts / apply gradient updates. The
-  imitation pretrain pipeline (monster_pretrain.py) is built and
-  produces usable weights, but the PPO-style online RL for MonsterNet
-  is not wired into train.py yet. Needs: monster rollout buffer,
-  monster reward collection per tick, MonsterNet.update() call at
-  buffer full, optional LR schedule per stage.
-- PackNet training optimizer: same situation as MonsterNet. REINFORCE
-  or low-cadence PPO needed for pack decisions. Pretrained weights
-  from monster_pretrain --skip-monster already exist; online training
-  is the missing piece.
-- MonsterNet loading in training runner: sim.monster_net is set to
-  None by default. Train pipeline should load the pretrained .npz
-  (or a stage-specified checkpoint) and set sim.monster_net so
-  monsters use the NN instead of heuristic.
-- Monster reward wiring into training loop: monster_reward.compute()
-  is implemented but not called inside run_mappo/run_ppo for each
-  monster. Needs per-monster reward snapshot + delta computation
-  similar to the creature path.
+(none remaining)
 
 LOW IMPACT — Polish
 --------------------
@@ -53,6 +34,16 @@ LOW IMPACT — Polish
   sprite definitions or reuse of existing creature sprites.
 - Monster animation bindings: walk_north, attack, death, etc. not
   defined in DB for monster sprites.
+- PackNet online gradient updates: MonsterTrainer currently trains
+  MonsterNet via PPO and exposes PackNet for inference through a
+  shim, but the pack NN doesn't receive gradient updates from
+  rollouts yet (heuristic outputs serve as imitation target; online
+  REINFORCE could replace that for tuning beyond heuristic quality).
+  Pretrained PackNet weights already usable via monster_pretrain.py.
+- League training for Phase 3 co-evolution: the alternating-epoch
+  schedule (stages 23-25) is seeded in the curriculum but a proper
+  snapshot pool for league-style training isn't wired. Stage 23
+  currently trains both populations simultaneously under reduced LR.
 
 FUTURE / NOT STARTED
 =====================
@@ -106,8 +97,7 @@ Creature System
 Monster System
 - Monster class: top-level (NOT Creature subclass), shares CombatMixin/
   MovementMixin/InventoryMixin/RegenMixin, stubs for social methods
-  (get_relationship/record_interaction/gain_exp) so shared combat
-  paths work against monster targets
+  so shared combat paths work against monster targets
 - MonsterSpecies DB: 9 seeded archetypes with stats + lifecycle/
   territory/dominance/diet/sprite configuration
 - Pack class (Trackable): separate M/F dominance hierarchies, auto-
@@ -133,6 +123,12 @@ Monster System
 - Imitation pretraining (editor/simulation/monster_pretrain.py):
   TorchMonsterNet + TorchPackNet, supervised cross-entropy training,
   DAgger iteration, .npz export to models/
+- MonsterTrainer (editor/simulation/monster_train.py):
+  TorchMonsterPolicy with actor-critic heads, per-monster rollout
+  buffers, PPO update with masked logits, attach_to_sim replaces the
+  heuristic with NN-driven actions, build_from_pretrained loads .npz
+  weights into the training policy, export_weights writes
+  inference-format .npz back to models/
 - Meat item subclass: species tag, spoilage tick, cooked/preserved flags
 - Monster editor tab (parallel to Species tab)
 - Training Pairs table + editor tab: bind creature/goal/monster/pack
@@ -157,8 +153,8 @@ Monster Runtime
   each tick
 - Dominance challenges: contest-type packs roll probabilistic
   challenges; rank swaps on successful challenge
-- Pregnancy + egg laying + hatching: gestation timer, Meat-tagged
-  monster eggs, hatch path routes through new Monster spawn
+- Pregnancy + egg laying + hatching: gestation timer, monster eggs
+  tagged for monster hatch path routes through new Monster spawn
 - Arena integration: spawn_monsters_for_stage reads stage subset
   and populates arena['monsters'] + arena['packs']; natural weapons
   auto-equipped on spawn; non-overlapping territory placement
@@ -177,12 +173,17 @@ RL Training Pipeline
 - Monster environment toggles: monsters_enabled, creature_frozen,
   monster_trainable, pack_trainable, monster_species_subset
 - creature_frozen toggle: run_mappo/run_ppo skip the CreatureNet
-  and GoalNet gradient step when stage flag is set (buffers drain
-  silently, log zero loss)
+  and GoalNet gradient step when stage flag is set
+- monster_trainable toggle: run_mappo/run_ppo attach a MonsterTrainer
+  that loads pretrained .npz (if present), replaces the heuristic
+  policy on sim.monster_net, collects rollouts per tick, runs PPO
+  updates when the pooled buffer hits rollout_len, and exports
+  trained weights back to SAVE_DIR on completion
 - Monster injection: _inject_monsters helper adds
   spawn_monsters_for_stage to arenas for stages with monsters_enabled
 - 5-layer TorchCreatureNet (1837 -> 1536 -> 1024 -> 768 -> 384 -> 192 -> 32)
 - TorchGoalNet for hierarchical purpose selection
+- TorchMonsterPolicy + TorchPackPolicy (online RL via MonsterTrainer)
 - TorchMonsterNet + TorchPackNet (imitation pretrain)
 - PPO with GAE, entropy bonus, gradient clipping
 - MAPPO multi-agent + ES evolutionary + PPO single-agent pipeline
@@ -232,6 +233,16 @@ Editor
 - Items, spells, recipes, jobs, quests, dialogue, gods
 - Training: standard, curriculum (with run/stop/viewer), models, pairs
 - SQL editor with ERD and data dictionary
+
+Tests (835 passing)
+- 760 existing creature mechanics tests
+- 60 monster tests: species loading, class construction, pack membership,
+  territory scaling, observation, NN forward shape, INT-gated masks,
+  meat spoilage, death drops, cannibalism, alpha death (collapse/
+  promotion), territory overlap, monster dispatch, sim integration,
+  creature observation of monsters
+- 15 MonsterTrainer tests: attach, shim replacement, PPO update,
+  loss tracking, weight export
 
 Presentation
 - Composite sprite rendering with layer connections and keyframe

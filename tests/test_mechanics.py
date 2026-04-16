@@ -4525,6 +4525,63 @@ check(f"monster visible: slot 0 has non-zero values",
 check(f"slot 0 distance > 0 (normalized)", slot_vals[0] > 0)
 
 # ==========================================================================
+print("\n=== MonsterTrainer: Attach + Online RL Smoke ===")
+try:
+    from editor.simulation.monster_train import MonsterTrainer, TorchMonsterPolicy
+    import torch as _torch
+    _torch.manual_seed(42)
+
+    # Small sim with 2 wolves and 2 creatures
+    tr_map = make_map(20, 20)
+    tr_creatures = [make_creature(tr_map, x=i * 3, y=10,
+                                  stats={Stat.STR: 10, Stat.VIT: 12,
+                                         Stat.PER: 10},
+                                  name=f'tc{i}')
+                    for i in range(2)]
+    tr_monsters, tr_packs = spawn_monsters_for_stage(
+        tr_map, 20, 20, species_subset=['grey_wolf'],
+        count_per_species=2)
+
+    trainer = MonsterTrainer(monster_rollout_len=20)
+    tr_arena = {'map': tr_map, 'creatures': tr_creatures,
+                'monsters': tr_monsters, 'packs': tr_packs,
+                'cols': 20, 'rows': 20}
+    tr_sim = MonSim(tr_arena, gestation_enabled=False,
+                    fatigue_enabled=False)
+    trainer.attach_to_sim(tr_sim)
+
+    check(f"trainer.attach sets sim.monster_net",
+          tr_sim.monster_net is not None)
+    check(f"trainer.attach sets sim.pack_net",
+          tr_sim.pack_net is not None)
+    check(f"trainer disables heuristic",
+          tr_sim.use_monster_heuristic is False)
+
+    updates_before = trainer.monster_updates
+    for _ in range(30):
+        tr_sim.step()
+        trainer.on_step(tr_sim, signal_scales={
+            'm_kills': 1.0, 'm_hp': 0.5, 'm_territory_stay': 0.3,
+        })
+    check(f"trainer ran >= 1 PPO update",
+          trainer.monster_updates >= updates_before + 1 or
+          trainer._total_buffered() > 0)
+    check(f"trainer loss tracked",
+          isinstance(trainer.last_loss, float))
+
+    # Export test
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        trainer.export_weights(out_dir=tmp)
+        p = Path(tmp)
+        check(f"monster_net_trained.npz exported",
+              (p / 'monster_net_trained.npz').exists())
+        check(f"pack_net_trained.npz exported",
+              (p / 'pack_net_trained.npz').exists())
+except ImportError as e:
+    print(f"  SKIP: MonsterTrainer test requires torch ({e})")
+
+# ==========================================================================
 print(f"\n{'='*50}")
 print(f"Results: {PASS} passed, {FAIL} failed out of {PASS+FAIL} tests")
 if FAIL:

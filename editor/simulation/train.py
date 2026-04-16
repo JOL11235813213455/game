@@ -377,11 +377,19 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
     arena = generate_arena(**arena_kwargs)
     arena = _inject_monsters(arena, stage)
     sim = Simulation(arena, **sim_kwargs)
-    # Monsters always run via heuristic until monster optimizer lands.
-    sim.use_monster_heuristic = True
-    # Creature-frozen stages (15-20) skip the PPO update step below via
-    # a local flag the rollout loop checks.
     _creature_frozen = bool(stage and stage.get('creature_frozen'))
+    # Attach MonsterTrainer if this stage trains monsters. Otherwise
+    # monsters use the heuristic priority cascade.
+    _monster_trainer = None
+    if stage and stage.get('monster_trainable'):
+        from editor.simulation.monster_train import MonsterTrainer
+        pretrain_path = SAVE_DIR / 'monster_net_pretrained.npz'
+        _monster_trainer = MonsterTrainer.build_from_pretrained(
+            monster_weights=str(pretrain_path) if pretrain_path.exists() else None,
+        )
+        _monster_trainer.attach_to_sim(sim)
+    else:
+        sim.use_monster_heuristic = True
 
     for c in sim.creatures:
         c.behavior = None
@@ -528,6 +536,21 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
         for c in sim.creatures:
             if c.is_alive:
                 c.process_ticks(sim.now)
+        # Monster tick + trainer update (no-op when no monsters are present)
+        if sim.monsters:
+            from classes.monster_runtime import monster_tick
+            monster_tick(sim.monsters, sim.packs, sim.now, sim.cols, sim.rows,
+                         monster_net=sim.monster_net,
+                         pack_net=sim.pack_net,
+                         game_clock=sim.game_clock,
+                         use_heuristic=sim.use_monster_heuristic)
+            for m in sim.monsters:
+                if m.is_alive:
+                    m.process_ticks(sim.now)
+            sim.monsters = [m for m in sim.monsters if m.is_alive]
+            sim.packs = [p for p in sim.packs if p.size > 0]
+            if _monster_trainer is not None:
+                _monster_trainer.on_step(sim, signal_scales=signal_scales)
         if sim.step_count % 50 == 0:
             sim.game_map.grow_resources()
 
@@ -684,6 +707,11 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             print(f'  Step {step+1}: avg_reward={avg:.6f}, alive={sim.alive_count}, clock={_day:02d}:{_hr:02d}:{_mn:02d}')
 
     print(f'  MAPPO complete. Episodes: {len(episode_rewards)}')
+    # Export monster/pack weights if the trainer was active
+    if _monster_trainer is not None:
+        _monster_trainer.export_weights(out_dir=str(SAVE_DIR))
+        print(f'  MonsterNet updates: {_monster_trainer.monster_updates}, '
+              f'last loss: {_monster_trainer.last_loss:.4f}')
     return net
 
 
@@ -827,8 +855,17 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
     arena = generate_arena(**arena_kwargs)
     arena = _inject_monsters(arena, stage)
     sim = Simulation(arena, **sim_kwargs)
-    sim.use_monster_heuristic = True
     _creature_frozen = bool(stage and stage.get('creature_frozen'))
+    _monster_trainer = None
+    if stage and stage.get('monster_trainable'):
+        from editor.simulation.monster_train import MonsterTrainer
+        pretrain_path = SAVE_DIR / 'monster_net_pretrained.npz'
+        _monster_trainer = MonsterTrainer.build_from_pretrained(
+            monster_weights=str(pretrain_path) if pretrain_path.exists() else None,
+        )
+        _monster_trainer.attach_to_sim(sim)
+    else:
+        sim.use_monster_heuristic = True
 
     agent = sim.creatures[0]
     agent.behavior = None
@@ -950,6 +987,21 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
         for c in sim.creatures:
             if c is not agent and c.is_alive:
                 c.update(sim.now, sim.cols, sim.rows)
+        # Monster tick + trainer update (no-op when no monsters are present)
+        if sim.monsters:
+            from classes.monster_runtime import monster_tick
+            monster_tick(sim.monsters, sim.packs, sim.now, sim.cols, sim.rows,
+                         monster_net=sim.monster_net,
+                         pack_net=sim.pack_net,
+                         game_clock=sim.game_clock,
+                         use_heuristic=sim.use_monster_heuristic)
+            for m in sim.monsters:
+                if m.is_alive:
+                    m.process_ticks(sim.now)
+            sim.monsters = [m for m in sim.monsters if m.is_alive]
+            sim.packs = [p for p in sim.packs if p.size > 0]
+            if _monster_trainer is not None:
+                _monster_trainer.on_step(sim, signal_scales=signal_scales)
 
         # Reward
         from classes.reward import compute_reward, make_reward_snapshot
@@ -1078,6 +1130,10 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             print(f'  Step {step+1}: avg_reward={avg:.4f}, clock={_day:02d}:{_hr:02d}:{_mn:02d}')
 
     print(f'  PPO complete.')
+    if _monster_trainer is not None:
+        _monster_trainer.export_weights(out_dir=str(SAVE_DIR))
+        print(f'  MonsterNet updates: {_monster_trainer.monster_updates}, '
+              f'last loss: {_monster_trainer.last_loss:.4f}')
     return net
 
 
