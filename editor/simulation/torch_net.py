@@ -300,6 +300,16 @@ class PPO:
         self.max_grad_norm = max_grad_norm
         self.optimizer = torch.optim.Adam(net.parameters(), lr=lr)
 
+    def set_lr(self, lr: float) -> None:
+        for pg in self.optimizer.param_groups:
+            pg['lr'] = lr
+
+    def set_ent_coef(self, ent_coef: float) -> None:
+        self.ent_coef = ent_coef
+
+    def get_lr(self) -> float:
+        return self.optimizer.param_groups[0]['lr']
+
     def compute_gae(self, rewards, values, dones):
         """Generalized Advantage Estimation."""
         n = len(rewards)

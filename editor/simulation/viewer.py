@@ -111,6 +111,24 @@ def _draw_parallel_view(screen, state, font, font_sm, font_lg):
         f'Parallel {phase} — {n_workers} workers', True, C_YELLOW), (10, y))
     y += 22
 
+    # Progress bar + %complete + ETA (present in info when set by
+    # _run_ppo_parallel). Skip silently when the producer didn't
+    # include progress keys.
+    pct = info.get('progress_pct')
+    steps_done = info.get('steps_done')
+    steps_total = info.get('steps_total')
+    eta_text = info.get('eta_text', '--')
+    if pct is not None and steps_total:
+        bar_w = max(200, sw - 220)
+        bar_h = 14
+        pygame.draw.rect(screen, C_GRAY, (10, y, bar_w, bar_h), 1)
+        fill_w = int((bar_w - 2) * min(1.0, pct / 100.0))
+        if fill_w > 0:
+            pygame.draw.rect(screen, C_GREEN, (11, y + 1, fill_w, bar_h - 2))
+        label = f'{pct:5.1f}%  {steps_done}/{steps_total}  ETA {eta_text}'
+        screen.blit(font.render(label, True, C_WHITE), (bar_w + 20, y))
+        y += bar_h + 6
+
     if n_workers == 0:
         screen.blit(font.render('Waiting for worker data...', True, C_GRAY), (10, y))
         return

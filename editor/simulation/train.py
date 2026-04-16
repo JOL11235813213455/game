@@ -345,6 +345,72 @@ def _creature_final_state(c) -> dict:
     }
 
 
+class HparamScheduler:
+    """Intra-phase LR + entropy scheduler for a single PPO object.
+
+    Two independent mechanisms:
+      1. Cosine LR decay from initial_lr -> initial_lr * lr_min_ratio
+         across `total_steps` env steps. Call step(env_step) before
+         each PPO update.
+      2. Adaptive entropy-coef decay. Tracks a rolling window of the
+         policy entropy reported by ppo.update(). When the window
+         average drops below `entropy_drop_threshold` * peak, the
+         ent_coef is multiplied by `ent_decay` (floored at
+         initial * ent_floor_ratio). Call observe_entropy() after
+         each PPO update.
+
+    The two mechanisms mirror the standard on-policy RL schedules
+    (cosine LR is mostly cosmetic wins, ~2-5% typically; adaptive
+    entropy matters more because a fixed ent_coef either over-
+    explores late or under-explores early).
+    """
+
+    def __init__(self, ppo, total_steps: int,
+                 lr_min_ratio: float = 0.1,
+                 ent_floor_ratio: float = 0.1,
+                 ent_decay: float = 0.7,
+                 entropy_window: int = 20,
+                 entropy_drop_threshold: float = 0.5):
+        import math as _math
+        self._math = _math
+        self.ppo = ppo
+        self.total_steps = max(1, int(total_steps))
+        self.initial_lr = ppo.get_lr()
+        self.initial_ent_coef = ppo.ent_coef
+        self.lr_min = self.initial_lr * lr_min_ratio
+        self.ent_floor = self.initial_ent_coef * ent_floor_ratio
+        self.ent_decay = ent_decay
+        self.entropy_window = entropy_window
+        self.entropy_drop_threshold = entropy_drop_threshold
+        self._entropy_hist: list[float] = []
+        self._peak_entropy = 0.0
+        self._ent_drops = 0
+
+    def step(self, env_step: int) -> None:
+        progress = min(1.0, env_step / self.total_steps)
+        lr = self.lr_min + 0.5 * (self.initial_lr - self.lr_min) * (
+            1 + self._math.cos(self._math.pi * progress))
+        self.ppo.set_lr(lr)
+
+    def observe_entropy(self, entropy: float) -> None:
+        self._entropy_hist.append(entropy)
+        if len(self._entropy_hist) > self.entropy_window:
+            self._entropy_hist.pop(0)
+        self._peak_entropy = max(self._peak_entropy, entropy)
+        if len(self._entropy_hist) < self.entropy_window:
+            return
+        avg = sum(self._entropy_hist) / len(self._entropy_hist)
+        if self._peak_entropy <= 0:
+            return
+        if avg < self.entropy_drop_threshold * self._peak_entropy:
+            new_coef = max(self.ent_floor, self.ppo.ent_coef * self.ent_decay)
+            if new_coef < self.ppo.ent_coef - 1e-9:
+                self.ppo.set_ent_coef(new_coef)
+                self._entropy_hist.clear()
+                self._peak_entropy = 0.0
+                self._ent_drops += 1
+
+
 # ---------------------------------------------------------------------------
 # Training Phases
 # ---------------------------------------------------------------------------
@@ -356,13 +422,24 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
               sim_kwargs: dict = None,
               action_mask: np.ndarray = None,
               viewer_extra: dict = None,
-              stage: dict = None) -> TorchCreatureNet:
+              stage: dict = None,
+              adaptive_hparams: bool = True,
+              out_metrics: dict = None) -> TorchCreatureNet:
     """Phase 1: Multi-agent PPO — all creatures share weights.
 
     If goal_net is provided, runs hierarchical goal selection every
     GOAL_INTERVAL steps for each creature.
+
+    When ``adaptive_hparams`` is True (default), a HparamScheduler
+    decays the PPO learning rate on a cosine across the phase and
+    drops the entropy coefficient when policy entropy plateaus.
+
+    If ``out_metrics`` is provided, the function writes a summary of
+    phase-level metrics into it (final_reward_avg, baseline_reward_avg,
+    lr_final, ent_coef_final, ent_drops).
     """
     print(f'\n=== MAPPO Phase ({steps} steps) ===')
+    scheduler = HparamScheduler(ppo, steps) if adaptive_hparams else None
     arena_kwargs = arena_kwargs or {
         'cols': 25, 'rows': 25, 'num_creatures': 16,
         'mask_probability': 0.1,
@@ -604,12 +681,18 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
                 buffer.clear()
                 info = {'policy_loss': 0.0, 'value_loss': 0.0, 'entropy': 0.0}
             else:
+                if scheduler is not None:
+                    scheduler.step(step)
                 info = ppo.update(obs_b, act_b, rew_b, val_b, lp_b, done_b,
                                   action_masks_arr=masks_b)
                 buffer.clear()
+                if scheduler is not None:
+                    scheduler.observe_entropy(info['entropy'])
             _log('mappo/policy_loss', info['policy_loss'], step)
             _log('mappo/value_loss', info['value_loss'], step)
             _log('mappo/entropy', info['entropy'], step)
+            _log('mappo/lr', ppo.get_lr(), step)
+            _log('mappo/ent_coef', ppo.ent_coef, step)
             if sink:
                 sink.record_training_update(info['entropy'], info['value_loss'],
                                             info['policy_loss'])
@@ -712,6 +795,19 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
         _monster_trainer.export_weights(out_dir=str(SAVE_DIR))
         print(f'  MonsterNet updates: {_monster_trainer.monster_updates}, '
               f'last loss: {_monster_trainer.last_loss:.4f}')
+    if out_metrics is not None and episode_rewards:
+        n = len(episode_rewards)
+        head = max(1, n // 5)
+        tail = max(1, n // 5)
+        out_metrics.update({
+            'phase': 'mappo',
+            'baseline_reward_avg': float(np.mean(episode_rewards[:head])),
+            'final_reward_avg': float(np.mean(episode_rewards[-tail:])),
+            'episodes': n,
+            'lr_final': ppo.get_lr(),
+            'ent_coef_final': ppo.ent_coef,
+            'ent_drops': scheduler._ent_drops if scheduler else 0,
+        })
     return net
 
 
@@ -828,9 +924,15 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             sim_kwargs: dict = None,
             action_mask: np.ndarray = None,
             viewer_extra: dict = None,
-            stage: dict = None) -> TorchCreatureNet:
-    """Phase 3: Single-agent PPO against diverse opponents."""
+            stage: dict = None,
+            adaptive_hparams: bool = True,
+            out_metrics: dict = None) -> TorchCreatureNet:
+    """Phase 3: Single-agent PPO against diverse opponents.
+
+    See run_mappo for details on ``adaptive_hparams`` / ``out_metrics``.
+    """
     print(f'\n=== PPO Phase ({steps} steps) ===')
+    scheduler = HparamScheduler(ppo, steps) if adaptive_hparams else None
     arena_kwargs = arena_kwargs or {
         'cols': 25, 'rows': 25, 'num_creatures': 16,
         'mask_probability': 0.1,
@@ -1044,12 +1146,18 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
                 buffer.clear()
                 info = {'policy_loss': 0.0, 'value_loss': 0.0, 'entropy': 0.0}
             else:
+                if scheduler is not None:
+                    scheduler.step(step)
                 info = ppo.update(obs_b, act_b, rew_b, val_b, lp_b, done_b,
                                   action_masks_arr=masks_b)
                 buffer.clear()
+                if scheduler is not None:
+                    scheduler.observe_entropy(info['entropy'])
             _log('ppo/policy_loss', info['policy_loss'], step)
             _log('ppo/value_loss', info['value_loss'], step)
             _log('ppo/entropy', info['entropy'], step)
+            _log('ppo/lr', ppo.get_lr(), step)
+            _log('ppo/ent_coef', ppo.ent_coef, step)
             if sink:
                 sink.record_training_update(info['entropy'], info['value_loss'],
                                             info['policy_loss'])
@@ -1134,6 +1242,19 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
         _monster_trainer.export_weights(out_dir=str(SAVE_DIR))
         print(f'  MonsterNet updates: {_monster_trainer.monster_updates}, '
               f'last loss: {_monster_trainer.last_loss:.4f}')
+    if out_metrics is not None and episode_rewards:
+        n = len(episode_rewards)
+        head = max(1, n // 5)
+        tail = max(1, n // 5)
+        out_metrics.update({
+            'phase': 'ppo',
+            'baseline_reward_avg': float(np.mean(episode_rewards[:head])),
+            'final_reward_avg': float(np.mean(episode_rewards[-tail:])),
+            'episodes': n,
+            'lr_final': ppo.get_lr(),
+            'ent_coef_final': ppo.ent_coef,
+            'ent_drops': scheduler._ent_drops if scheduler else 0,
+        })
     return net
 
 
@@ -1308,7 +1429,8 @@ def _run_ppo_parallel(net, ppo, steps, arena_kwargs, signal_scales,
         'rollout_len': rollout_per_worker,
     }
 
-    print(f'  Parallel PPO: {n_workers} workers × {rollout_per_worker} steps')
+    print(f'  Parallel PPO: {n_workers} workers × {rollout_per_worker} steps, '
+          f'target={steps}')
 
     def _export_weights(torch_net):
         sd = torch_net.state_dict()
@@ -1329,13 +1451,40 @@ def _run_ppo_parallel(net, ppo, steps, arena_kwargs, signal_scales,
 
     from editor.simulation.train_state import write_parallel_state
 
+    def _fmt_eta(seconds: float) -> str:
+        if seconds <= 0 or not np.isfinite(seconds):
+            return '--'
+        s = int(seconds)
+        h, rem = divmod(s, 3600)
+        m, s = divmod(rem, 60)
+        if h: return f'{h}h{m:02d}m'
+        if m: return f'{m}m{s:02d}s'
+        return f'{s}s'
+
+    phase_t0 = time.time()
+    iter_count = 0
+    last_print_t = phase_t0
+
     with ParallelTrainer(n_workers, 'ppo', config) as trainer:
         while total_collected < steps:
+            pct = 100.0 * total_collected / max(1, steps)
+            elapsed = time.time() - phase_t0
+            eta = (elapsed * (steps - total_collected) / max(1, total_collected)
+                   if total_collected > 0 else float('inf'))
+            progress_info = {
+                **(viewer_extra or {}),
+                'status': 'collecting rollouts...',
+                'progress_pct': round(pct, 1),
+                'steps_done': total_collected,
+                'steps_total': steps,
+                'elapsed_seconds': round(elapsed, 1),
+                'eta_seconds': round(eta, 1) if np.isfinite(eta) else None,
+                'eta_text': _fmt_eta(eta),
+            }
             write_parallel_state(
                 [{'worker_id': i, 'alive': 0, 'total': 0, 'avg_reward': 0,
                   'samples': 0, 'status': 'collecting'} for i in range(n_workers)],
-                phase='PPO', step=total_collected,
-                info={**(viewer_extra or {}), 'status': 'collecting rollouts...'})
+                phase='PPO', step=total_collected, info=progress_info)
 
             weights = _export_weights(net)
             rollouts = trainer.collect_rollouts(weights)
@@ -1350,6 +1499,12 @@ def _run_ppo_parallel(net, ppo, steps, arena_kwargs, signal_scales,
                     merged['values'], merged['log_probs'], merged['dones'],
                     action_masks_arr=merged['masks'])
 
+            iter_count += 1
+            pct = 100.0 * min(1.0, total_collected / max(1, steps))
+            elapsed = time.time() - phase_t0
+            eta = (elapsed * (steps - total_collected) / max(1, total_collected)
+                   if total_collected > 0 else 0.0)
+
             worker_stats = []
             for r in rollouts:
                 worker_stats.append({
@@ -1359,14 +1514,31 @@ def _run_ppo_parallel(net, ppo, steps, arena_kwargs, signal_scales,
                     'avg_reward': float(r['rewards'].mean()) if len(r['rewards']) > 0 else 0,
                     'samples': len(r['rewards']),
                 })
+            avg_r_iter = (float(merged['rewards'].mean())
+                          if n_samples > 0 else 0.0)
+            end_info = {
+                **(viewer_extra or {}),
+                'progress_pct': round(pct, 1),
+                'steps_done': total_collected,
+                'steps_total': steps,
+                'elapsed_seconds': round(elapsed, 1),
+                'eta_seconds': round(eta, 1),
+                'eta_text': _fmt_eta(eta),
+                'iter': iter_count,
+                'avg_reward': round(avg_r_iter, 4),
+            }
             write_parallel_state(worker_stats, phase='PPO',
-                                  step=total_collected,
-                                  info=viewer_extra or {})
+                                 step=total_collected, info=end_info)
 
-            if total_collected % 5000 < n_samples:
-                avg_r = float(merged['rewards'].mean()) if n_samples > 0 else 0
-                print(f'    Step ~{total_collected}: avg_reward={avg_r:.4f}, '
-                      f'samples={n_samples} from {n_workers} workers')
+            # Console progress — throttled to at most once every 5s
+            # so short rollouts don't spam, but the line always includes
+            # the %complete + ETA for quick visual tracking.
+            now = time.time()
+            if now - last_print_t >= 5.0 or total_collected >= steps:
+                print(f'    [{pct:5.1f}%] step {total_collected}/{steps}  '
+                      f'iter {iter_count}  avg_reward={avg_r_iter:+.4f}  '
+                      f'elapsed={_fmt_eta(elapsed)}  ETA={_fmt_eta(eta)}')
+                last_print_t = now
 
     return net
 
@@ -1525,6 +1697,8 @@ def train_curriculum_stage(stage_number: int, model_name: str,
         except Exception as e:
             print(f'  (no auto-resume target: {e})')
 
+    parent_final_reward = None
+    parent_phase_used = None
     if resume_target:
         try:
             parts = resume_target.split(':', 1)
@@ -1533,6 +1707,13 @@ def train_curriculum_stage(stage_number: int, model_name: str,
             net, row_info = _load_model_from_db(net, rname, rver)
             parent_version = row_info['version']
             print(f'  Resumed from: {rname} v{parent_version}')
+            try:
+                import json as _json
+                _ps = _json.loads(row_info.get('training_stats') or '{}')
+                parent_final_reward = _ps.get('final_reward_avg')
+                parent_phase_used = _ps.get('final_reward_phase')
+            except Exception:
+                pass
         except Exception as e:
             print(f'  Resume failed ({e}) — starting fresh')
 
@@ -1589,6 +1770,9 @@ def train_curriculum_stage(stage_number: int, model_name: str,
         'curriculum_stage': f"S{stage_number} {stage['name']}",
     }
 
+    mappo_metrics: dict = {}
+    ppo_metrics: dict = {}
+
     # MAPPO — always sequential (every creature builds observations,
     # parallelism doesn't help — bottleneck is per-creature obs cost)
     if stage['mappo_steps'] > 0:
@@ -1600,7 +1784,8 @@ def train_curriculum_stage(stage_number: int, model_name: str,
                         sim_kwargs=sim_kwargs,
                         action_mask=stage['action_mask'],
                         viewer_extra=_viewer_extra,
-                        stage=stage)
+                        stage=stage,
+                        out_metrics=mappo_metrics)
         net.export_to_numpy(SAVE_DIR / 'mappo.npz')
         print(f'  MAPPO complete in {time.time() - mappo_t0:.0f}s')
 
@@ -1646,7 +1831,8 @@ def train_curriculum_stage(stage_number: int, model_name: str,
                           sim_kwargs=sim_kwargs,
                           action_mask=stage['action_mask'],
                           viewer_extra=_viewer_extra,
-                          stage=stage)
+                          stage=stage,
+                          out_metrics=ppo_metrics)
         print(f'  PPO complete in {time.time() - ppo_t0:.0f}s')
 
     total_seconds = time.time() - pipeline_t0
@@ -1670,11 +1856,52 @@ def train_curriculum_stage(stage_number: int, model_name: str,
         'gestation_enabled': stage['gestation_enabled'],
         'fatigue_enabled': stage['fatigue_enabled'],
     }
+    # Pick the terminal phase's final reward as the stage KPI. PPO
+    # trumps MAPPO when both ran, since PPO is the refinement phase
+    # and always runs last. If neither ran (frozen stage), the KPI
+    # stays None and regression checks are skipped.
+    phase_metrics = ppo_metrics if ppo_metrics else mappo_metrics
+    stage_final_reward = phase_metrics.get('final_reward_avg')
+    stage_baseline_reward = phase_metrics.get('baseline_reward_avg')
+
+    regression_flag = False
+    regression_note = ''
+    if stage_final_reward is not None and parent_final_reward is not None:
+        # Compare parent vs. child using a ln ratio per the repo
+        # convention (see feedback_ln_transform memory). A drop of
+        # more than ~10% ( ln < -0.105 ) is flagged as regression.
+        import math as _m
+        denom = abs(parent_final_reward) if parent_final_reward != 0 else 1e-6
+        ratio = (stage_final_reward - parent_final_reward) / denom
+        if ratio < -0.10:
+            regression_flag = True
+            regression_note = (
+                f' [REGRESSION vs parent v{parent_version}: '
+                f'{parent_final_reward:.3f} -> {stage_final_reward:.3f} '
+                f'({ratio*100:+.1f}%)]')
+            print(f'\n  ⚠  REGRESSION: final_reward_avg dropped '
+                  f'{parent_final_reward:.3f} -> {stage_final_reward:.3f} '
+                  f'({ratio*100:+.1f}%) vs parent v{parent_version}')
+            print(f'     Stage weights are being saved anyway — '
+                  f'rerun with adjusted hparams or revert to parent '
+                  f'({model_name}:{parent_version}).')
+        else:
+            print(f'\n  ✓ final_reward_avg: '
+                  f'{parent_final_reward:.3f} -> {stage_final_reward:.3f} '
+                  f'({ratio*100:+.1f}%)')
+
     training_stats = {
         'total_seconds': round(total_seconds, 1),
         'curriculum_stage': stage_number,
+        'final_reward_avg': stage_final_reward,
+        'baseline_reward_avg': stage_baseline_reward,
+        'final_reward_phase': phase_metrics.get('phase'),
+        'mappo_metrics': mappo_metrics or None,
+        'ppo_metrics': ppo_metrics or None,
+        'regression_vs_parent': regression_flag,
+        'parent_final_reward': parent_final_reward,
     }
-    notes = f'Curriculum stage {stage_number}: {stage["name"]}'
+    notes = f'Curriculum stage {stage_number}: {stage["name"]}' + regression_note
     version = _save_model_to_db(
         net, model_name, parent_version,
         training_params, training_stats, total_seconds,
