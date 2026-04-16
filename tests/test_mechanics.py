@@ -5791,6 +5791,76 @@ check("observation length matches with arousal active",
       len(_ar_obs) == OBSERVATION_SIZE)
 
 # ==========================================================================
+print("\n=== Game Mode FSM (Phase 5) ===")
+from main.game_mode import (GameModeFSM, TopState, SubState,
+                              InputRouter, MAX_STACK_DEPTH)
+
+# Initial state
+_gm = GameModeFSM()
+check("GameMode starts in main_menu", _gm.top == TopState.MAIN_MENU)
+check("main_menu freezes_sim", _gm.freezes_sim() is True)
+
+# start_game → playing (normal)
+_gm.start_game()
+check("start_game → playing", _gm.top == TopState.PLAYING)
+check("current sub is normal", _gm.current_sub == SubState.NORMAL)
+check("normal play does NOT freeze sim", _gm.freezes_sim() is False)
+
+# Push inventory — freezes sim
+_gm.push(SubState.INVENTORY)
+check("pushed INVENTORY", _gm.current_sub == SubState.INVENTORY)
+check("INVENTORY freezes sim", _gm.freezes_sim() is True)
+
+# Stack additional overlays up to max
+_gm.push(SubState.DIALOGUE)
+_gm.push(SubState.TRADE)
+check(f"stack depth = {len(_gm.overlay_stack)}",
+      len(_gm.overlay_stack) == MAX_STACK_DEPTH)
+# Further push is rejected
+_denied = _gm.push(SubState.MAP_VIEW)
+check("push beyond MAX_STACK_DEPTH denied",
+      _denied is False and len(_gm.overlay_stack) == MAX_STACK_DEPTH)
+
+# Pop returns top → back down the stack
+_popped = _gm.pop()
+check("popped TRADE", _popped == SubState.TRADE)
+check("current sub now DIALOGUE",
+      _gm.current_sub == SubState.DIALOGUE)
+
+# Pause flag is parallel; freezes even when sub doesn't
+_gm2 = GameModeFSM()
+_gm2.start_game()
+_gm2.paused = True
+check("paused freezes sim in NORMAL",
+      _gm2.freezes_sim() is True)
+_gm2.push(SubState.MAP_VIEW)
+check("paused still freezes sim in MAP_VIEW",
+      _gm2.freezes_sim() is True)
+_gm2.paused = False
+check("map_view alone does NOT freeze sim",
+      _gm2.freezes_sim() is False)
+
+# InputRouter dispatch
+_router = InputRouter(bindings={105: 'open_inventory', 27: 'escape'})
+check("router returns mapped action",
+      _router.handle(105) == 'open_inventory')
+check("unmapped key returns None",
+      _router.handle(999) is None)
+
+# GameModeFSM.handle_key uses per-state routers
+_gm3 = GameModeFSM()
+_gm3.start_game()
+_gm3.routers[SubState.NORMAL] = InputRouter(bindings={105: 'open_inventory'})
+_gm3.routers[SubState.INVENTORY] = InputRouter(bindings={27: 'close_inventory'})
+check("handle_key in NORMAL returns open_inventory",
+      _gm3.handle_key(105) == 'open_inventory')
+_gm3.push(SubState.INVENTORY)
+check("handle_key in INVENTORY returns close_inventory",
+      _gm3.handle_key(27) == 'close_inventory')
+check("unhandled key returns None",
+      _gm3.handle_key(105) is None)
+
+# ==========================================================================
 print(f"\n{'='*50}")
 print(f"Results: {PASS} passed, {FAIL} failed out of {PASS+FAIL} tests")
 if FAIL:
