@@ -224,7 +224,22 @@ CREATE TABLE IF NOT EXISTS curriculum_stages (
     mappo_rows         INTEGER NOT NULL DEFAULT 0,
     ppo_cols           INTEGER NOT NULL DEFAULT 0,
     ppo_rows           INTEGER NOT NULL DEFAULT 0,
-    arena_map          TEXT    NOT NULL DEFAULT ''
+    arena_map          TEXT    NOT NULL DEFAULT '',
+    run_order              TEXT    NOT NULL DEFAULT 'mappo,es,ppo',
+    imitation_epochs       INTEGER NOT NULL DEFAULT 0,
+    imitation_batch_size   INTEGER NOT NULL DEFAULT 256,
+    imitation_teacher      TEXT    NOT NULL DEFAULT 'StatWeighted',
+    imitation_parallel     INTEGER NOT NULL DEFAULT 1,
+    league_iterations      INTEGER NOT NULL DEFAULT 0,
+    league_pool_size       INTEGER NOT NULL DEFAULT 4,
+    league_parallel        INTEGER NOT NULL DEFAULT 1,
+    pbt_population         INTEGER NOT NULL DEFAULT 0,
+    pbt_mutation_rate      REAL    NOT NULL DEFAULT 0.2,
+    pbt_exploit_threshold  REAL    NOT NULL DEFAULT 0.25,
+    curiosity_weight       REAL    NOT NULL DEFAULT 0.0,
+    curiosity_hidden       INTEGER NOT NULL DEFAULT 64,
+    offline_replay_path    TEXT    NOT NULL DEFAULT '',
+    offline_replay_epochs  INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS creature_stats (
     creature_key TEXT NOT NULL REFERENCES creatures(key),

@@ -576,6 +576,33 @@ def _migrate(con: sqlite3.Connection) -> None:
         # output. Lets specific stages train on hand-crafted layouts
         # (boss arenas, river crossings, etc.). Empty = procedural.
         "ALTER TABLE curriculum_stages ADD COLUMN arena_map TEXT NOT NULL DEFAULT ''",
+        # Pipeline run_order — comma-separated list of phase names
+        # executed in sequence. Default 'mappo,es,ppo' preserves the
+        # historical behavior. Extend with 'imitation,league,pbt,
+        # curiosity,offline_replay' as phases are implemented.
+        "ALTER TABLE curriculum_stages ADD COLUMN run_order TEXT NOT NULL DEFAULT 'mappo,es,ppo'",
+        # Imitation / DAgger pre-pass. Trains the policy via supervised
+        # learning from a heuristic teacher's action choices. 0 epochs
+        # = skip. Massive wall-clock saving on early stages because
+        # the policy doesn't waste 50K steps learning not to bump walls.
+        "ALTER TABLE curriculum_stages ADD COLUMN imitation_epochs     INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE curriculum_stages ADD COLUMN imitation_batch_size INTEGER NOT NULL DEFAULT 256",
+        "ALTER TABLE curriculum_stages ADD COLUMN imitation_teacher    TEXT    NOT NULL DEFAULT 'StatWeighted'",
+        "ALTER TABLE curriculum_stages ADD COLUMN imitation_parallel   INTEGER NOT NULL DEFAULT 1",
+        # League self-play pass (stub for now — schema ready).
+        "ALTER TABLE curriculum_stages ADD COLUMN league_iterations INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE curriculum_stages ADD COLUMN league_pool_size  INTEGER NOT NULL DEFAULT 4",
+        "ALTER TABLE curriculum_stages ADD COLUMN league_parallel   INTEGER NOT NULL DEFAULT 1",
+        # PBT inner loop (stub — population-based training).
+        "ALTER TABLE curriculum_stages ADD COLUMN pbt_population        INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE curriculum_stages ADD COLUMN pbt_mutation_rate     REAL    NOT NULL DEFAULT 0.2",
+        "ALTER TABLE curriculum_stages ADD COLUMN pbt_exploit_threshold REAL    NOT NULL DEFAULT 0.25",
+        # Curiosity (RND/ICM novelty reward bonus — stub).
+        "ALTER TABLE curriculum_stages ADD COLUMN curiosity_weight REAL    NOT NULL DEFAULT 0.0",
+        "ALTER TABLE curriculum_stages ADD COLUMN curiosity_hidden INTEGER NOT NULL DEFAULT 64",
+        # Offline replay (train on saved trajectories — stub).
+        "ALTER TABLE curriculum_stages ADD COLUMN offline_replay_path   TEXT    NOT NULL DEFAULT ''",
+        "ALTER TABLE curriculum_stages ADD COLUMN offline_replay_epochs INTEGER NOT NULL DEFAULT 0",
         """CREATE TABLE IF NOT EXISTS training_pairs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,

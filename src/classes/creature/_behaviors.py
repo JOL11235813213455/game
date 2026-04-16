@@ -281,3 +281,53 @@ class StatWeightedBehavior:
             'target': target, 'now': 0,
             'combat_enabled': getattr(creature, '_combat_enabled', True),
         })
+
+    def pick_action(self, creature, cols: int, rows: int) -> int:
+        """Return the stat-weighted action choice without dispatching.
+
+        Used by the imitation / DAgger phase as a teacher oracle: the
+        student observes states, then labels them with this method's
+        recommended action. Mirrors the weighting logic in ``think``
+        but returns the choice instead of executing it.
+        """
+        from classes.actions import Action
+
+        str_mod = (creature.stats.active[Stat.STR]() - 10) // 2
+        agl_mod = (creature.stats.active[Stat.AGL]() - 10) // 2
+        int_mod = (creature.stats.active[Stat.INT]() - 10) // 2
+        chr_mod = (creature.stats.active[Stat.CHR]() - 10) // 2
+        per_mod = (creature.stats.active[Stat.PER]() - 10) // 2
+
+        hp_ratio = creature.stats.active[Stat.HP_CURR]() / max(
+            1, creature.stats.active[Stat.HP_MAX]())
+        stam_ratio = creature.stats.active[Stat.CUR_STAMINA]() / max(
+            1, creature.stats.active[Stat.MAX_STAMINA]())
+        hunger = getattr(creature, 'hunger', 0.0)
+
+        target = next((o for o in creature.nearby() if creature.can_see(o)), None)
+        nearest_dist = creature._sight_distance(target) if target else 999
+
+        candidates = [
+            (Action.MOVE, 8 + agl_mod),
+            (Action.WAIT, 20 if stam_ratio < 0.2 else 2),
+        ]
+        if hunger < 0:
+            candidates.append((Action.USE_ITEM, int(5 + abs(hunger) * 10)))
+        tile = (creature.current_map.tiles.get(creature.location)
+                if creature.current_map else None)
+        if tile and (tile.inventory.items or getattr(tile, 'gold', 0) > 0):
+            candidates.append((Action.PICKUP, 6 + per_mod))
+        if target and nearest_dist <= 1:
+            candidates.append((Action.MELEE_ATTACK, max(1, 5 + str_mod)))
+            candidates.append((Action.TALK, max(1, 3 + chr_mod)))
+        if target and nearest_dist <= 5 and str_mod >= 2:
+            candidates.append((Action.INTIMIDATE, max(1, 3 + str_mod)))
+        if hp_ratio < 0.3 and target:
+            candidates.append((Action.FLEE, 15))
+        if stam_ratio > 0.7:
+            candidates.append((Action.GUARD, max(1, 2 + per_mod)))
+        weights = [max(1, w) for _, w in candidates]
+        total = sum(weights)
+        probs = [w / total for w in weights]
+        idx = random.choices(range(len(candidates)), weights=probs, k=1)[0]
+        return int(candidates[idx][0])

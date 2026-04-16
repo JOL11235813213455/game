@@ -916,6 +916,198 @@ def run_es(net: TorchCreatureNet, generations: int = 50,
     return net
 
 
+def run_imitation(net: TorchCreatureNet,
+                  teacher_name: str = 'StatWeighted',
+                  epochs: int = 3,
+                  batch_size: int = 256,
+                  rollout_steps: int = 4000,
+                  arena_kwargs: dict = None,
+                  sim_kwargs: dict = None,
+                  signal_scales: dict = None,
+                  action_mask: np.ndarray = None,
+                  out_metrics: dict = None) -> TorchCreatureNet:
+    """Imitation / DAgger pre-pass.
+
+    Collects (observation, teacher_action) pairs from a heuristic
+    teacher running in the arena, then trains the policy head via
+    supervised cross-entropy to mimic the teacher's choices.
+
+    The teacher is a behavior module (default: StatWeightedBehavior
+    — picks actions from stat-based heuristics). Scales massively
+    better than pure-RL warmup: the policy learns "don't bump walls"
+    in minutes of compute instead of tens of thousands of PPO steps.
+
+    DAgger (Dataset Aggregation, Ross et al. 2011) style: each epoch
+    collects fresh rollouts under the CURRENT student policy (not the
+    teacher's) but labels them with the teacher's action choices.
+    This fixes the distribution-mismatch problem of pure behavioral
+    cloning — the student sees states it would actually visit.
+
+    Args:
+        net: policy network (updated in-place and returned)
+        teacher_name: name of the behavior module to use as teacher.
+            Currently only 'StatWeighted' is wired; more teachers
+            can be added to _TEACHER_FACTORY below.
+        epochs: number of DAgger outer loops
+        batch_size: supervised-learning minibatch size
+        rollout_steps: transitions collected per epoch
+
+    Returns: net with updated policy weights.
+    """
+    print(f'\n=== Imitation / DAgger Phase '
+          f'(teacher={teacher_name}, {epochs} epochs × {rollout_steps} steps) ===')
+    from classes.observation import build_observation
+    from classes.actions import dispatch, compute_dynamic_mask, NUM_ACTIONS
+    from classes.world_object import WorldObject
+
+    arena_kwargs = arena_kwargs or {
+        'cols': 25, 'rows': 25, 'num_creatures': 16,
+        'mask_probability': 0.0,
+    }
+    sim_kwargs = sim_kwargs or {}
+
+    # Teacher factory — lookup behavior module by name.
+    _TEACHER_FACTORY = {}
+    try:
+        from classes.creature import StatWeightedBehavior
+        _TEACHER_FACTORY['StatWeighted'] = StatWeightedBehavior
+    except ImportError:
+        pass
+
+    teacher_cls = _TEACHER_FACTORY.get(teacher_name)
+    if teacher_cls is None:
+        print(f'  ⚠  unknown teacher {teacher_name!r} — '
+              f'available: {list(_TEACHER_FACTORY)}. Skipping imitation.')
+        return net
+
+    # Supervised objective: cross-entropy between student's action
+    # logits and teacher's chosen action index. Light-touch LR since
+    # this is a pre-pass, not the main training loop.
+    import torch.optim as _optim
+    optimizer = _optim.Adam(net.parameters(), lr=1e-3)
+    loss_fn = nn.CrossEntropyLoss()
+
+    losses_per_epoch = []
+    accuracies_per_epoch = []
+
+    for epoch in range(epochs):
+        arena = generate_arena(**arena_kwargs)
+        sim = Simulation(arena, **sim_kwargs)
+
+        # Attach the teacher behavior to each creature. The teacher
+        # will pick the "correct" action given each observation.
+        for c in sim.creatures:
+            c.behavior = None  # we call teacher manually for labeling
+            c.unregister_tick('behavior')
+        teacher = teacher_cls()
+
+        # Collect (obs, teacher_action) pairs. During a DAgger epoch
+        # we let the CURRENT student drive acting so the distribution
+        # of observations matches what the student would encounter
+        # after training — then label those observations with the
+        # teacher's recommendation.
+        obs_buf: list = []
+        lbl_buf: list = []
+        mask_buf: list = []
+
+        for step in range(rollout_steps):
+            if hasattr(sim, 'sync_hot_array'):
+                sim.sync_hot_array()
+            for c in sim.creatures:
+                if not c.is_alive:
+                    continue
+                obs = build_observation(
+                    c, sim.cols, sim.rows,
+                    world_data=sim.world_data,
+                    game_clock=sim.game_clock,
+                    observation_tick=sim.step_count)
+                obs_arr = np.array(obs, dtype=np.float32)
+                dyn_mask = compute_dynamic_mask(
+                    c, {'cols': sim.cols, 'rows': sim.rows, 'now': sim.now})
+                combined_mask = (action_mask * dyn_mask
+                                 if action_mask is not None else dyn_mask)
+
+                # Teacher's label: what would the heuristic pick?
+                teacher_action = teacher.pick_action(c, sim.cols, sim.rows)
+                # Guard: teacher might return an action the mask
+                # forbids (e.g., sleep during combat). Skip labeling
+                # that sample so we don't train on bad targets.
+                if combined_mask[teacher_action] == 0:
+                    continue
+                obs_buf.append(obs_arr)
+                lbl_buf.append(int(teacher_action))
+                mask_buf.append(combined_mask.astype(np.float32))
+
+                # Student drives actual behavior (DAgger distribution)
+                s_action, _lp, _v = net.get_action(
+                    obs_arr, action_mask=combined_mask)
+                target = next((o for o in c.nearby(include_ghosts=False)
+                               if c.can_see(o)), None)
+                dispatch(c, s_action, {'cols': sim.cols, 'rows': sim.rows,
+                                       'target': target, 'now': sim.now})
+
+            sim.now += sim.tick_ms
+            sim.step_count += 1
+            sim.game_clock.update(1.0)
+
+        if not obs_buf:
+            print(f'  Epoch {epoch+1}: no labeled samples, skipping update')
+            continue
+
+        # Supervised update — minibatches over the collected dataset.
+        obs_t = torch.FloatTensor(np.array(obs_buf))
+        lbl_t = torch.LongTensor(np.array(lbl_buf))
+        mask_t = torch.FloatTensor(np.array(mask_buf))
+
+        n = len(obs_t)
+        perm = np.random.permutation(n)
+        total_loss = 0.0
+        total_correct = 0
+        n_batches = 0
+        for start in range(0, n - batch_size + 1, batch_size):
+            idx = perm[start:start + batch_size]
+            b_obs = obs_t[idx]
+            b_lbl = lbl_t[idx]
+            b_mask = mask_t[idx]
+            # net.forward returns (action_logits, state_value). We
+            # only need logits for the supervised classification.
+            logits, _value = net.forward(b_obs)
+            # Batched per-sample mask: zero out disallowed actions
+            # before softmax so the teacher's label is compared
+            # against only the valid action distribution.
+            logits = logits.masked_fill(b_mask == 0, -1e10)
+            loss = loss_fn(logits, b_lbl)
+            optimizer.zero_grad()
+            loss.backward()
+            nn.utils.clip_grad_norm_(net.parameters(), 0.5)
+            optimizer.step()
+            total_loss += loss.item()
+            total_correct += int((logits.argmax(dim=-1) == b_lbl).sum())
+            n_batches += 1
+
+        avg_loss = total_loss / max(1, n_batches)
+        accuracy = total_correct / max(1, n_batches * batch_size)
+        losses_per_epoch.append(avg_loss)
+        accuracies_per_epoch.append(accuracy)
+        _log('imitation/loss', avg_loss, epoch)
+        _log('imitation/accuracy', accuracy, epoch)
+        print(f'  Epoch {epoch+1}/{epochs}: '
+              f'labeled={n}, loss={avg_loss:.4f}, accuracy={accuracy*100:.1f}%')
+
+    if out_metrics is not None:
+        out_metrics.update({
+            'phase': 'imitation',
+            'teacher': teacher_name,
+            'epochs': len(losses_per_epoch),
+            'final_loss': losses_per_epoch[-1] if losses_per_epoch else None,
+            'final_accuracy': accuracies_per_epoch[-1] if accuracies_per_epoch else None,
+            'losses': losses_per_epoch,
+            'accuracies': accuracies_per_epoch,
+        })
+    print(f'  Imitation complete.')
+    return net
+
+
 def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             checkpoint_dir: Path = None,
             arena_kwargs: dict = None, rollout_len: int = 2048,
@@ -1353,6 +1545,52 @@ def _load_curriculum_stage(stage_number: int) -> dict:
     # Optional custom arena map by name (empty = procedural).
     stage['arena_map'] = (
         row['arena_map'] if 'arena_map' in cols else '')
+
+    # Pipeline run_order — ordered list of phase names to execute.
+    # Default preserves the legacy MAPPO → ES → PPO sequence for
+    # stages seeded before the new_phases migration.
+    stage['run_order'] = (
+        row['run_order'] if 'run_order' in cols and row['run_order']
+        else 'mappo,es,ppo')
+
+    # Imitation / DAgger pre-pass params
+    stage['imitation_epochs'] = (
+        int(row['imitation_epochs']) if 'imitation_epochs' in cols else 0)
+    stage['imitation_batch_size'] = (
+        int(row['imitation_batch_size']) if 'imitation_batch_size' in cols else 256)
+    stage['imitation_teacher'] = (
+        row['imitation_teacher'] if 'imitation_teacher' in cols else 'StatWeighted')
+    stage['imitation_parallel'] = (
+        int(row['imitation_parallel']) if 'imitation_parallel' in cols else 1)
+
+    # League self-play (stub)
+    stage['league_iterations'] = (
+        int(row['league_iterations']) if 'league_iterations' in cols else 0)
+    stage['league_pool_size'] = (
+        int(row['league_pool_size']) if 'league_pool_size' in cols else 4)
+    stage['league_parallel'] = (
+        int(row['league_parallel']) if 'league_parallel' in cols else 1)
+
+    # PBT inner loop (stub)
+    stage['pbt_population'] = (
+        int(row['pbt_population']) if 'pbt_population' in cols else 0)
+    stage['pbt_mutation_rate'] = (
+        float(row['pbt_mutation_rate']) if 'pbt_mutation_rate' in cols else 0.2)
+    stage['pbt_exploit_threshold'] = (
+        float(row['pbt_exploit_threshold']) if 'pbt_exploit_threshold' in cols else 0.25)
+
+    # Curiosity (stub)
+    stage['curiosity_weight'] = (
+        float(row['curiosity_weight']) if 'curiosity_weight' in cols else 0.0)
+    stage['curiosity_hidden'] = (
+        int(row['curiosity_hidden']) if 'curiosity_hidden' in cols else 64)
+
+    # Offline replay (stub)
+    stage['offline_replay_path'] = (
+        row['offline_replay_path'] if 'offline_replay_path' in cols else '')
+    stage['offline_replay_epochs'] = (
+        int(row['offline_replay_epochs']) if 'offline_replay_epochs' in cols else 0)
+
     return stage
 
 
@@ -2003,11 +2241,18 @@ def train_curriculum_stage(stage_number: int, model_name: str,
 
     mappo_metrics: dict = {}
     ppo_metrics: dict = {}
+    imitation_metrics: dict = {}
 
-    # MAPPO — always sequential (every creature builds observations,
-    # parallelism doesn't help — bottleneck is per-creature obs cost)
-    if stage['mappo_steps'] > 0:
-        mappo_t0 = time.time()
+    # ---- Phase dispatcher ----
+    # Parses stage['run_order'] and calls the corresponding handler
+    # in sequence. Handlers take a shared context bag so adding new
+    # phases is local: register in PHASE_HANDLERS and done. Each
+    # phase mutates the shared `net` (via nonlocal closure below).
+    def _phase_mappo():
+        nonlocal net
+        if stage['mappo_steps'] <= 0:
+            return
+        t0 = time.time()
         net = run_mappo(net, ppo, steps=stage['mappo_steps'],
                         arena_kwargs=arena_kwargs_mappo,
                         goal_net=goal_net, goal_ppo=goal_ppo,
@@ -2018,11 +2263,13 @@ def train_curriculum_stage(stage_number: int, model_name: str,
                         stage=stage,
                         out_metrics=mappo_metrics)
         net.export_to_numpy(SAVE_DIR / 'mappo.npz')
-        print(f'  MAPPO complete in {time.time() - mappo_t0:.0f}s')
+        print(f'  MAPPO complete in {time.time() - t0:.0f}s')
 
-    # ES (skip if generations == 0)
-    if stage['es_generations'] > 0:
-        es_t0 = time.time()
+    def _phase_es():
+        nonlocal net
+        if stage['es_generations'] <= 0:
+            return
+        t0 = time.time()
         if _es_parallel > 1:
             net = _run_es_parallel(
                 net, generations=stage['es_generations'],
@@ -2038,11 +2285,13 @@ def train_curriculum_stage(stage_number: int, model_name: str,
                          steps_per_variant=stage['es_steps'],
                          arena_kwargs=arena_kwargs_ppo,
                          sim_kwargs=sim_kwargs)
-        print(f'  ES complete in {time.time() - es_t0:.0f}s')
+        print(f'  ES complete in {time.time() - t0:.0f}s')
 
-    # PPO
-    if stage['ppo_steps'] > 0:
-        ppo_t0 = time.time()
+    def _phase_ppo():
+        nonlocal net, ppo
+        if stage['ppo_steps'] <= 0:
+            return
+        t0 = time.time()
         ppo = PPO(net, lr=stage['learning_rate'], ent_coef=stage['ent_coef'])
         if _ppo_parallel > 1:
             net = _run_ppo_parallel(
@@ -2065,7 +2314,55 @@ def train_curriculum_stage(stage_number: int, model_name: str,
                           viewer_extra=_viewer_extra,
                           stage=stage,
                           out_metrics=ppo_metrics)
-        print(f'  PPO complete in {time.time() - ppo_t0:.0f}s')
+        print(f'  PPO complete in {time.time() - t0:.0f}s')
+
+    def _phase_imitation():
+        """Imitation / DAgger pre-pass. Supervised learning from a
+        heuristic teacher's action choices. See run_imitation()."""
+        nonlocal net
+        if stage['imitation_epochs'] <= 0:
+            return
+        t0 = time.time()
+        net = run_imitation(
+            net, teacher_name=stage['imitation_teacher'],
+            epochs=stage['imitation_epochs'],
+            batch_size=stage['imitation_batch_size'],
+            arena_kwargs=arena_kwargs_mappo,
+            sim_kwargs=sim_kwargs,
+            signal_scales=signal_scales,
+            action_mask=stage['action_mask'],
+            out_metrics=imitation_metrics)
+        print(f'  Imitation complete in {time.time() - t0:.0f}s')
+
+    def _phase_stub(phase_name: str):
+        """Shared handler for phases whose schema + UI exists but the
+        actual RL loop hasn't been implemented yet. Prints a warning
+        and moves on, so a misplaced run_order entry doesn't crash.
+        """
+        def _run():
+            print(f'  ⚠  run_order phase {phase_name!r} is not yet '
+                  f'implemented — skipping')
+        return _run
+
+    PHASE_HANDLERS = {
+        'imitation':      _phase_imitation,
+        'mappo':          _phase_mappo,
+        'es':             _phase_es,
+        'ppo':            _phase_ppo,
+        'league':         _phase_stub('league'),
+        'pbt':            _phase_stub('pbt'),
+        'curiosity':      _phase_stub('curiosity'),
+        'offline_replay': _phase_stub('offline_replay'),
+    }
+
+    run_order = [p.strip() for p in stage['run_order'].split(',') if p.strip()]
+    print(f'  Pipeline: {" → ".join(run_order)}')
+    for phase_name in run_order:
+        handler = PHASE_HANDLERS.get(phase_name)
+        if handler is None:
+            print(f'  ⚠  unknown phase {phase_name!r} in run_order — skipping')
+            continue
+        handler()
 
     total_seconds = time.time() - pipeline_t0
     training_params = {
