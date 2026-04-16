@@ -16,6 +16,7 @@ import time
 import random
 import numpy as np
 import torch
+import torch.nn as nn
 from pathlib import Path
 
 _EDITOR_DIR = Path(__file__).parent.parent
