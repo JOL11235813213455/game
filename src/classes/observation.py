@@ -463,6 +463,17 @@ def build_observation(creature, cols: int, rows: int,
     obs.append(egg.gestation_days / 30.0 if egg else 0.0)
     obs.append(1.0 if egg and egg.is_abomination else 0.0)
 
+    # ==== SECTION 10a1: LIFECYCLE (Phase 2 FSM) — 2 floats ====
+    # lifecycle_state_idx: 0..6 normalized by max index (6 = dead),
+    # so dead = 1.0, egg = 0, adult = 3/6.
+    # age_progress: creature.age / max_age_estimate (clipped 0..1).
+    _section_starts['self_lifecycle'] = len(obs)
+    from classes.creature._lifecycle import LIFECYCLE_STATE_IDX
+    _lc = getattr(creature, 'lifecycle_state', 'adult')
+    obs.append(LIFECYCLE_STATE_IDX.get(_lc, 3) / 6.0)
+    _age = getattr(creature, 'age', 0) or 0
+    obs.append(min(1.0, _age / 100.0))
+
     # ==== SECTION 10a2: CONDITIONS (Phase 1 FSM) — 17 floats ====
     # For each of the 8 canonical conditions: (is_active, severity_norm).
     # Plus one float for the compound action_state index, normalized.

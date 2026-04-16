@@ -145,6 +145,8 @@ class Simulation:
         # events back to the creature that owns them via UID lookup.
         self.subscribe_event('condition_tick', self._dispatch_condition_tick)
         self.subscribe_event('condition_expired', self._dispatch_condition_expired)
+        # Phase 2 lifecycle: dying-window timer expiry → final death
+        self.subscribe_event('lifecycle_death_expire', self._dispatch_death_expire)
 
         # Initialize snapshots
         for c in self.creatures:
@@ -182,6 +184,29 @@ class Simulation:
         c = _C.by_uid(uid)
         if c is not None:
             c.on_condition_expired(self, name)
+
+    def _dispatch_death_expire(self, payload) -> None:
+        """Dying-window timer fired — finalize the death.
+
+        Payload is the creature's uid. If the creature has already
+        left the dying state (healed / already dead), this is a no-op.
+        """
+        uid = payload
+        # Dead creatures are removed from _uid_registry, so we walk
+        # Trackable instances to also catch them in the dying state
+        # just before die() is called.
+        from classes.creature import Creature as _C
+        c = _C.by_uid(uid)
+        if c is None:
+            # Might be in dying state with HP>0 but is_alive still True;
+            # by_uid only filters on is_alive. If we reach here and c
+            # is None, creature is already finalized — nothing to do.
+            return
+        if c.lifecycle_state != 'dying':
+            return
+        # Transition to dead + invoke the full cleanup path.
+        c.transition_lifecycle('death_confirmed', sim=self)
+        c.die()
 
     def _drain_scheduled_events(self) -> None:
         """Dispatch all events whose expiry has passed.

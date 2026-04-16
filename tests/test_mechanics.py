@@ -5387,6 +5387,104 @@ check("action_state forced to 'dead' on death",
       _dying.action_state is not None and _dying.action_state.current == 'dead')
 
 # ==========================================================================
+print("\n=== Lifecycle FSM (Phase 2) ===")
+from classes.creature._lifecycle import (LIFECYCLE_STATES,
+                                           LIFECYCLE_STATE_IDX,
+                                           DEFAULT_DYING_WINDOW_MS)
+
+_lc_arena = generate_arena(cols=10, rows=10, num_creatures=1)
+_lcsim = Simulation(_lc_arena)
+_lcc = _lcsim.creatures[0]
+
+# Default lifecycle state is 'adult' (pre-FSM creatures act like adults)
+check("default lifecycle_state is 'adult'", _lcc.lifecycle_state == 'adult')
+
+# Mature from juvenile: start as juvenile via _ensure_lifecycle_fsm
+_lcc._ensure_lifecycle_fsm(initial='juvenile')
+check("initial='juvenile' seeds FSM",
+      _lcc.lifecycle_state == 'juvenile')
+# Juvenile stat mods apply (-4 STR, +2 AGL, -2 INT)
+_juv_str_baseline = _lcc.stats.base.get(Stat.STR, 0)
+_lcc._apply_lifecycle_stat_mods('juvenile')
+_juv_str = _lcc.stats.active[Stat.STR]()
+check(f"juvenile -4 STR ({_juv_str_baseline} -> {_juv_str})",
+      _juv_str == _juv_str_baseline - 4)
+
+_lcc.transition_lifecycle('mature', sim=_lcsim)
+check("juvenile → adult on 'mature' trigger",
+      _lcc.lifecycle_state == 'adult')
+# Stat mods for adult are zero — STR returns to baseline
+check("STR restored to baseline after mature",
+      _lcc.stats.active[Stat.STR]() == _juv_str_baseline)
+
+# Age to elder: stat mods shift (-2 STR, -2 AGL, +3 INT)
+_adult_int = _lcc.stats.active[Stat.INT]()
+_lcc.transition_lifecycle('age', sim=_lcsim)
+check("adult → elder on 'age' trigger",
+      _lcc.lifecycle_state == 'elder')
+check(f"elder +3 INT ({_adult_int} -> {_lcc.stats.active[Stat.INT]()})",
+      _lcc.stats.active[Stat.INT]() == _adult_int + 3)
+
+# Event emission: lifecycle.<state> fires on transition
+_heard = []
+_lcsim.subscribe_event('lifecycle.dying', lambda p: _heard.append(('dying', p)))
+_lcsim.subscribe_event('lifecycle.dead',  lambda p: _heard.append(('dead',  p)))
+
+# Dying window: enter_dying schedules a death timer
+_lcc2_arena = generate_arena(cols=10, rows=10, num_creatures=1)
+_lcc2sim = Simulation(_lcc2_arena)
+_lcc2 = _lcc2sim.creatures[0]
+_lcc2sim.subscribe_event('lifecycle.dying', lambda p: _heard.append(('dying2', p)))
+_lcc2sim.subscribe_event('lifecycle.dead',  lambda p: _heard.append(('dead2', p)))
+
+_lcc2.enter_dying(_lcc2sim)
+check("enter_dying sets state to 'dying'",
+      _lcc2.lifecycle_state == 'dying')
+check("dying event fired",
+      any(e[0] == 'dying2' for e in _heard))
+check("death timer scheduled",
+      len(_lcc2sim.events) >= 1)
+
+# Advance past the dying window → death finalized
+_lcc2sim.now += DEFAULT_DYING_WINDOW_MS + 500
+_lcc2sim._drain_scheduled_events()
+check("lifecycle_state='dead' after window",
+      _lcc2.lifecycle_state == 'dead')
+check("dead event fired",
+      any(e[0] == 'dead2' for e in _heard))
+
+# Resolve dying with 'heal': cancels timer, returns to adult
+_lcc3_arena = generate_arena(cols=10, rows=10, num_creatures=1)
+_lcc3sim = Simulation(_lcc3_arena)
+_lcc3 = _lcc3sim.creatures[0]
+_lcc3.enter_dying(_lcc3sim)
+check("lcc3 dying", _lcc3.lifecycle_state == 'dying')
+_lcc3.resolve_dying(_lcc3sim, 'heal')
+check("resolve_dying('heal') → adult",
+      _lcc3.lifecycle_state == 'adult')
+# Timer should be cancelled — advancing past the window must NOT
+# kill the healed creature
+_lcc3sim.now += DEFAULT_DYING_WINDOW_MS + 1000
+_lcc3sim._drain_scheduled_events()
+check("healed dying creature survives window",
+      _lcc3.lifecycle_state == 'adult')
+
+# killing_blow: instant dead, bypasses window
+_lcc4_arena = generate_arena(cols=10, rows=10, num_creatures=1)
+_lcc4sim = Simulation(_lcc4_arena)
+_lcc4 = _lcc4sim.creatures[0]
+_lcc4.enter_dying(_lcc4sim, from_killing_blow=True)
+check("killing_blow skips dying window",
+      _lcc4.lifecycle_state == 'dead')
+
+# Observation includes lifecycle fields
+_lc_obs = build_observation(_lcc, _lcsim.cols, _lcsim.rows)
+check("observation still matches OBSERVATION_SIZE",
+      len(_lc_obs) == OBSERVATION_SIZE)
+check("lifecycle slots are present (elder = 4/6)",
+      any(abs(v - (4.0 / 6.0)) < 1e-6 for v in _lc_obs))
+
+# ==========================================================================
 print(f"\n{'='*50}")
 print(f"Results: {PASS} passed, {FAIL} failed out of {PASS+FAIL} tests")
 if FAIL:
