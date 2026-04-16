@@ -819,22 +819,26 @@ def seed():
     # with old signals dropped to ~0.3 of full strength.
     def _stage(num, name, desc, signals, hunger, combat, gestation,
                mappo, es_gens, es_vars, es_steps, ppo, lr=0.0003, ent=0.05,
-               resume=None, allowed_actions=None, fatigue_enabled=True):
+               resume=None, allowed_actions=None, fatigue_enabled=True,
+               mappo_creatures=0, ppo_creatures=0,
+               es_parallel=1, ppo_parallel=1):
         con.execute(
             'INSERT OR REPLACE INTO curriculum_stages '
             '(stage_number, name, description, active_signals, signal_scales, '
             'hunger_drain, combat_enabled, gestation_enabled, '
             'mappo_steps, es_generations, es_variants, es_steps, ppo_steps, '
             'learning_rate, ent_coef, resume_from_stage, '
-            'allowed_actions, fatigue_enabled) '
-            'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+            'allowed_actions, fatigue_enabled, '
+            'mappo_creatures, ppo_creatures, es_parallel, ppo_parallel) '
+            'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
             (num, name, desc,
              _json.dumps(list(signals.keys())),
              _json.dumps(signals),
              1 if hunger else 0, 1 if combat else 0, 1 if gestation else 0,
              mappo, es_gens, es_vars, es_steps, ppo, lr, ent, resume,
              _json.dumps(allowed_actions or []),
-             1 if fatigue_enabled else 0)
+             1 if fatigue_enabled else 0,
+             mappo_creatures, ppo_creatures, es_parallel, ppo_parallel)
         )
 
     # Stage 1: Wander — learn to move purposefully

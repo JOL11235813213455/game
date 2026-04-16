@@ -555,6 +555,16 @@ def _migrate(con: sqlite3.Connection) -> None:
         # Stage 6 alongside Phases 1+4. Stat-mod modulation is tiny so
         # this only matters once combat mechanics are in play.
         "ALTER TABLE curriculum_stages ADD COLUMN arousal_enabled INTEGER NOT NULL DEFAULT 0",
+        # Per-stage parallelism + creature counts. Previously a global
+        # 'parallel' function arg applied to both ES and PPO; now each
+        # curriculum stage declares its own values so complex stages
+        # (combat, social) can use more workers than simple stages
+        # (wander, pickup). Default 0 means "fall back to the legacy
+        # function arg or num_creatures default."
+        "ALTER TABLE curriculum_stages ADD COLUMN mappo_creatures INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE curriculum_stages ADD COLUMN ppo_creatures   INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE curriculum_stages ADD COLUMN es_parallel     INTEGER NOT NULL DEFAULT 1",
+        "ALTER TABLE curriculum_stages ADD COLUMN ppo_parallel    INTEGER NOT NULL DEFAULT 1",
         """CREATE TABLE IF NOT EXISTS training_pairs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,

@@ -1330,6 +1330,17 @@ def _load_curriculum_stage(stage_number: int) -> dict:
     # Phase 7 FSM: combat arousal states
     stage['arousal_enabled'] = (
         bool(row['arousal_enabled']) if 'arousal_enabled' in cols else False)
+
+    # Per-stage parallelism + creature counts (0 = inherit from function
+    # arg or num_creatures default; >0 = use the stage's value).
+    stage['mappo_creatures'] = (
+        int(row['mappo_creatures']) if 'mappo_creatures' in cols else 0)
+    stage['ppo_creatures'] = (
+        int(row['ppo_creatures']) if 'ppo_creatures' in cols else 0)
+    stage['es_parallel'] = (
+        int(row['es_parallel']) if 'es_parallel' in cols else 1)
+    stage['ppo_parallel'] = (
+        int(row['ppo_parallel']) if 'ppo_parallel' in cols else 1)
     return stage
 
 
@@ -1928,8 +1939,21 @@ def train_curriculum_stage(stage_number: int, model_name: str,
         'cycles_enabled':       stage['cycles_enabled'],
     }
 
-    _mappo_n = mappo_creatures or num_creatures
-    _ppo_n = ppo_creatures or num_creatures
+    # Resolution order for per-phase knobs:
+    #   1. Explicit function arg (CLI override, non-None)
+    #   2. Curriculum stage DB value (>0 means authored)
+    #   3. num_creatures default
+    _mappo_n = (mappo_creatures if mappo_creatures is not None
+                else (stage.get('mappo_creatures') or num_creatures))
+    _ppo_n = (ppo_creatures if ppo_creatures is not None
+              else (stage.get('ppo_creatures') or num_creatures))
+    # Parallelism: legacy `parallel` function arg applies to BOTH
+    # phases when set (>1). Otherwise each phase reads its own
+    # stage column.
+    _es_parallel = parallel if parallel > 1 else stage.get('es_parallel', 1)
+    _ppo_parallel = parallel if parallel > 1 else stage.get('ppo_parallel', 1)
+    print(f'  Parallelism: ES={_es_parallel} workers, PPO={_ppo_parallel} workers')
+    print(f'  Creatures: MAPPO={_mappo_n}, PPO={_ppo_n}')
     arena_kwargs_mappo = {
         'cols': mappo_cols or arena_cols,
         'rows': mappo_rows or arena_rows,
@@ -1971,7 +1995,7 @@ def train_curriculum_stage(stage_number: int, model_name: str,
     # ES (skip if generations == 0)
     if stage['es_generations'] > 0:
         es_t0 = time.time()
-        if parallel > 1:
+        if _es_parallel > 1:
             net = _run_es_parallel(
                 net, generations=stage['es_generations'],
                 variants=stage['es_variants'],
@@ -1979,7 +2003,7 @@ def train_curriculum_stage(stage_number: int, model_name: str,
                 arena_kwargs=arena_kwargs_ppo,
                 sim_kwargs=sim_kwargs,
                 signal_scales=signal_scales,
-                n_workers=parallel)
+                n_workers=_es_parallel)
         else:
             net = run_es(net, generations=stage['es_generations'],
                          variants=stage['es_variants'],
@@ -1992,14 +2016,14 @@ def train_curriculum_stage(stage_number: int, model_name: str,
     if stage['ppo_steps'] > 0:
         ppo_t0 = time.time()
         ppo = PPO(net, lr=stage['learning_rate'], ent_coef=stage['ent_coef'])
-        if parallel > 1:
+        if _ppo_parallel > 1:
             net = _run_ppo_parallel(
                 net, ppo, steps=stage['ppo_steps'],
                 arena_kwargs=arena_kwargs_ppo,
                 signal_scales=signal_scales,
                 sim_kwargs=sim_kwargs,
                 action_mask=stage['action_mask'],
-                n_workers=parallel,
+                n_workers=_ppo_parallel,
                 viewer_extra=_viewer_extra,
                 out_metrics=ppo_metrics)
         else:

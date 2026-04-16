@@ -603,6 +603,11 @@ def migrate_db():
             "ALTER TABLE species ADD COLUMN rank_formula TEXT NOT NULL DEFAULT 'hybrid'",
             # Phase 7 FSM: combat arousal states
             "ALTER TABLE curriculum_stages ADD COLUMN arousal_enabled INTEGER NOT NULL DEFAULT 0",
+            # Per-stage parallelism + creature counts (see src/data/db.py)
+            "ALTER TABLE curriculum_stages ADD COLUMN mappo_creatures INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE curriculum_stages ADD COLUMN ppo_creatures   INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE curriculum_stages ADD COLUMN es_parallel     INTEGER NOT NULL DEFAULT 1",
+            "ALTER TABLE curriculum_stages ADD COLUMN ppo_parallel    INTEGER NOT NULL DEFAULT 1",
             """CREATE TABLE IF NOT EXISTS training_pairs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
