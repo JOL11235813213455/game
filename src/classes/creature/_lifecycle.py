@@ -137,16 +137,21 @@ class LifecycleMixin:
         # Rebuild stat mods for the new state
         self._apply_lifecycle_stat_mods(new)
         # Emit a generic lifecycle event + a state-specific one so
-        # subscribers can listen narrowly or broadly.
+        # subscribers can listen narrowly or broadly. Payload carries
+        # (uid, old_state, new_state, creature_ref) — the ref lets
+        # lifecycle.dead handlers find the creature even when
+        # Creature.by_uid(uid) returns None (dying → dead transitions
+        # have HP=0 so by_uid filters them out).
         if sim is not None:
+            payload = (self.uid, old, new, self)
             for handler in sim._event_handlers.get(f'lifecycle.{new}', ()):
                 try:
-                    handler((self.uid, old, new))
+                    handler(payload)
                 except Exception:
                     pass
             for handler in sim._event_handlers.get('lifecycle.any', ()):
                 try:
-                    handler((self.uid, old, new))
+                    handler(payload)
                 except Exception:
                     pass
         return True

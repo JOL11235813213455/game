@@ -171,6 +171,15 @@ class Simulation:
         self.subscribe_event('weather_transition', self._dispatch_weather_transition)
         # Phase 7 combat arousal: timer-driven state decays
         self.subscribe_event('arousal_timer', self._dispatch_arousal_timer)
+        # Mourning system subscribes to lifecycle.dying + lifecycle.dead
+        # so grief fires from FSM events rather than only from direct
+        # die() calls. notify_death is idempotent so the legacy path
+        # remains a safe fallback.
+        try:
+            from classes.mourning import register_mourning_handlers
+            register_mourning_handlers(self)
+        except ImportError:
+            pass
         # Seed the first weather transition so the FSM advances when
         # cycles are enabled. When cycles_enabled=False, we skip this
         # and the weather FSM stays pinned to its initial state.

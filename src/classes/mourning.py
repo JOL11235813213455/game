@@ -218,8 +218,17 @@ def notify_death(dead_creature, now: int = 0):
     reach tick.
 
     Must be called BEFORE Creature.die() tears down the graph.
+
+    Idempotent: second call for the same creature is a no-op via the
+    ``_mourning_fired`` flag. This lets both the lifecycle.dead event
+    handler AND the direct die() path call it safely — whichever
+    arrives first wins; the other is a silent no-op.
     """
     from classes.creature import Creature
+
+    if getattr(dead_creature, '_mourning_fired', False):
+        return
+    dead_creature._mourning_fired = True
 
     dead_uid = dead_creature.uid
     death_map = getattr(dead_creature.current_map, 'name', '') or ''
@@ -442,3 +451,39 @@ def clear_grief(creature):
     for mod in list(creature.stats.mods):
         if mod['source'].startswith('grief_'):
             creature.stats.remove_mods_by_source(mod['source'])
+
+
+# -----------------------------------------------------------------------
+# Lifecycle event integration (Phase 2 FSM wire-up)
+# -----------------------------------------------------------------------
+
+def register_mourning_handlers(sim):
+    """Subscribe mourning to lifecycle events on the given Simulation.
+
+    After this, ``lifecycle.dead`` events automatically route through
+    ``notify_death``. The direct die() call path still calls
+    notify_death as a fallback for creatures that bypass the dying
+    window — notify_death is idempotent via ``_mourning_fired``.
+
+    Called once per Simulation construction (see Simulation.__init__).
+    """
+    def _on_lifecycle_dead(payload):
+        # Payload: (uid, old_state, new_state, creature_ref)
+        if len(payload) < 4:
+            return
+        _uid, _old, _new, creature = payload
+        now = getattr(sim, 'now', 0)
+        try:
+            notify_death(creature, now=now)
+        except Exception:
+            pass
+
+    def _on_lifecycle_dying(payload):
+        # Optional hook for "allies react to imminent death" behavior.
+        # Currently no-op — the 3-second window already lets allies
+        # heal via their normal policy, no special distress state yet.
+        # Subscribers wanting early-warning grief can plug in here.
+        return
+
+    sim.subscribe_event('lifecycle.dead', _on_lifecycle_dead)
+    sim.subscribe_event('lifecycle.dying', _on_lifecycle_dying)
