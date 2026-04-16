@@ -10,3 +10,8 @@ editor/training.db
 editor/runs/*
 *.jsonl
 editor/models/_live_state.json
+
+# Runtime databases and per-worker training artifacts — regenerated
+# from seed, purged from history 2026-04-16 via filter-repo.
+src/data/game.db
+editor/models/_live_worker_*.json
