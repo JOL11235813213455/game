@@ -166,7 +166,10 @@ def build_observation(creature, cols: int, rows: int,
     )
 
     obs = []
-    _section_starts = {}  # populated during build for mask system
+    # Local section-start registry updated during build. The most recent
+    # build's offsets are copied into the module-level _LAST_SECTION_STARTS
+    # on return so SECTION_RANGES can be refreshed lazily.
+    _section_starts = {}
     stats = creature.stats
     s = stats.active  # shorthand
 
@@ -1351,17 +1354,74 @@ def build_observation(creature, cols: int, rows: int,
         obs.extend([0.0] * 4)
 
     # ==== SECTION 23b: MONSTER PERCEPTION SLOTS (30) ====
-    # Pre-allocated zero slots for future monster observation. 5 slots with
-    # 6 values each: distance, size_norm, threat, is_fleeing, pack_size,
-    # in_territory. Always zero during creature-only curriculum stages
-    # (1-14); populated when monsters enter the world (stage 21+).
-    # Keeps OBSERVATION_SIZE stable across curriculum phases — no
-    # checkpoint retraining needed when monsters arrive.
-    obs.extend([0.0] * 30)
+    # 5 slots × 6 fields each (distance, size_norm, threat, is_fleeing,
+    # pack_size, in_territory). Zero when no monsters visible, which
+    # is the normal case for curriculum stages 1-14.
+    visible_monsters = []
+    from classes.monster import Monster as _Monster
+    m_map = creature.current_map
+    if m_map is not None:
+        mx, my = creature.location.x, creature.location.y
+        for mon in _Monster.on_same_map(m_map):
+            d = abs(mon.location.x - mx) + abs(mon.location.y - my)
+            if d <= sight:
+                visible_monsters.append((d, mon))
+        visible_monsters.sort(key=lambda p: p[0])
+    _section_starts['monster_slots'] = len(obs)
+
+    _MON_SIZE_NORM = {'tiny': 0.0, 'small': 0.2, 'medium': 0.4,
+                      'large': 0.6, 'huge': 0.8, 'colossal': 1.0}
+    MAX_MON_SLOTS = 5
+    for i in range(MAX_MON_SLOTS):
+        if i < len(visible_monsters):
+            dist, mon = visible_monsters[i]
+            # distance normalized to sight range
+            obs.append(min(1.0, dist / max(1, sight)))
+            obs.append(_MON_SIZE_NORM.get(getattr(mon, 'size', 'medium'), 0.4))
+            # rough threat score: STR + weapon damage (if any)
+            mstr = mon.stats.active[Stat.STR]() if hasattr(mon, 'stats') else 10
+            mdmg = mon.stats.active[Stat.MELEE_DMG]() if hasattr(mon, 'stats') else 0
+            threat = (mstr + mdmg) / 40.0
+            obs.append(min(1.0, threat))
+            obs.append(1.0 if getattr(mon, '_is_fleeing', False) else 0.0)
+            pack_sz = mon.pack.size if getattr(mon, 'pack', None) else 1
+            obs.append(min(1.0, pack_sz / 10.0))
+            # in_territory: is the creature inside this monster's pack territory?
+            in_terr = 0.0
+            if getattr(mon, 'pack', None) is not None:
+                center = mon.pack.territory_center
+                dx = creature.location.x - center.x
+                dy = creature.location.y - center.y
+                if math.sqrt(dx * dx + dy * dy) <= mon.pack.territory_radius():
+                    in_terr = 1.0
+            obs.append(in_terr)
+        else:
+            obs.extend([0.0] * 6)
 
     # ==== SECTION 23c: MONSTER SUMMARY (3) ====
-    # monster_count_nearby, nearest_monster_distance, in_monster_territory
-    obs.extend([0.0] * 3)
+    # monster_count_nearby, nearest_monster_distance, in_any_monster_territory
+    _section_starts['monster_summary'] = len(obs)
+    obs.append(min(1.0, len(visible_monsters) / 10.0))
+    if visible_monsters:
+        obs.append(visible_monsters[0][0] / max(1, sight))
+    else:
+        obs.append(1.0)  # 1.0 = nothing nearby (max normalized distance)
+    # in_any_monster_territory: does any Pack's territory circle cover this tile?
+    in_any_terr = 0.0
+    try:
+        from classes.pack import Pack as _Pack
+        for pack in _Pack.all():
+            if pack.game_map is not creature.current_map:
+                continue
+            center = pack.territory_center
+            dx = creature.location.x - center.x
+            dy = creature.location.y - center.y
+            if math.sqrt(dx * dx + dy * dy) <= pack.territory_radius():
+                in_any_terr = 1.0
+                break
+    except Exception:
+        pass
+    obs.append(in_any_terr)
 
     # ==== SECTION 24: TEMPORAL IMMEDIATE (14) ====
     prev = prev_snapshot or {}
@@ -1518,7 +1578,16 @@ def build_observation(creature, cols: int, rows: int,
     else:
         obs.extend([0.0] * 3)
 
+    # Record final length + propagate section starts for SECTION_RANGES
+    _section_starts['_end'] = len(obs)
+    global _LAST_SECTION_STARTS
+    _LAST_SECTION_STARTS = dict(_section_starts)
     return obs
+
+
+# Module-level snapshot of the most recent build's section starts.
+# Used to refresh SECTION_RANGES after the first build.
+_LAST_SECTION_STARTS: dict = {}
 
 
 # Observation size — will be set after first call
@@ -1587,6 +1656,26 @@ SECTION_RANGES = {
     'reward_signals':   (772, 789),
     'transforms':       (789, OBSERVATION_SIZE),
 }
+
+
+def _refresh_monster_section_ranges():
+    """Overwrite monster_slots/monster_summary ranges with actual offsets
+    captured during the OBSERVATION_SIZE probe. The earlier section ranges
+    are approximate and based on pre-refactor layouts; the monster
+    sections sit after per_engaged at a position that depends on the
+    precise sizes of earlier dynamic sections (per_engaged grows with
+    species count, for example).
+    """
+    starts = _LAST_SECTION_STARTS
+    if 'monster_slots' in starts and 'monster_summary' in starts:
+        SECTION_RANGES['monster_slots'] = (
+            starts['monster_slots'], starts['monster_summary'])
+        SECTION_RANGES['monster_summary'] = (
+            starts['monster_summary'], starts['monster_summary'] + 3)
+
+
+# Refresh monster section ranges now that the probe has run
+_refresh_monster_section_ranges()
 
 # Semantic groups for easy mask building
 SECTION_GROUPS = {
