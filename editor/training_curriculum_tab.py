@@ -424,15 +424,15 @@ class TrainingCurriculumTab(ttk.Frame):
         add_tooltip(btn_watch, 'Open the live training viewer in a separate window')
         row += 1
 
-        # Model name + arena config
+        # Model name. Parallelism is now per-phase per-stage (see
+        # Pipeline grid above) so the old global Parallel field has
+        # been retired — each stage declares its own ES / PPO worker
+        # count in the DB.
         cfg_row = ttk.Frame(f)
         cfg_row.grid(row=row, column=0, columnspan=2, sticky='w', padx=6, pady=2)
         ttk.Label(cfg_row, text='Model name:').pack(side=tk.LEFT)
         self.v_model_name = tk.StringVar(value='curriculum')
         ttk.Entry(cfg_row, textvariable=self.v_model_name, width=20).pack(side=tk.LEFT, padx=4)
-        ttk.Label(cfg_row, text='Parallel:').pack(side=tk.LEFT, padx=(8, 0))
-        self.v_parallel = tk.StringVar(value='1')
-        ttk.Entry(cfg_row, textvariable=self.v_parallel, width=3).pack(side=tk.LEFT)
         row += 1
 
         # (Arena size + creatures + map now live on the Pipeline rows
@@ -686,13 +686,15 @@ class TrainingCurriculumTab(ttk.Frame):
         cmd = [
             sys.executable, '-u', '-m', 'editor.simulation.train',
             '--model', model_name,
+            # Per-stage values are read from the curriculum_stages DB
+            # at run time. These CLI flags are kept as overrides only
+            # when non-zero; default '0' means "use the DB value."
             '--mappo-cols', self.v_mappo_cols.get(),
             '--mappo-rows', self.v_mappo_rows.get(),
             '--mappo-creatures', self.v_mappo_creatures.get(),
             '--ppo-cols', self.v_ppo_cols.get(),
             '--ppo-rows', self.v_ppo_rows.get(),
             '--ppo-creatures', self.v_ppo_creatures.get(),
-            '--parallel', self.v_parallel.get(),
         ] + extra_args
         try:
             self._process = subprocess.Popen(
