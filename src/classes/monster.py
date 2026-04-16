@@ -296,6 +296,24 @@ class Monster(
         """Monsters don't level up via XP. Track kills via _kills counter only."""
         return None
 
+    @property
+    def is_child(self) -> bool:
+        """Monsters are adult at age >= 5 (rough). Needed for movement
+        passthrough checks — parent-child family passthrough is a
+        creature-only concept, so always returns False for monsters."""
+        return False
+
+    @property
+    def carried_weight(self) -> float:
+        """Sum of held item weights. Used by encumbrance in MovementMixin."""
+        total = sum(getattr(i, 'weight', 0) * getattr(i, 'quantity', 1)
+                    for i in self.inventory.items)
+        return total
+
+    def _check_trap(self, tile):
+        """Monsters don't trigger creature-laid traps currently."""
+        return None
+
     def on_pack_signal(self, signal_name: str, value):
         """Receive an event-driven signal from the Pack."""
         if signal_name == 'sleep':

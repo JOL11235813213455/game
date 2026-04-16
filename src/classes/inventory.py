@@ -240,8 +240,8 @@ class Meat(Consumable):
                  **kwargs):
         # Hunger restoration maps to Consumable's heal_amount conceptually,
         # but we use meat_value directly when a creature eats meat.
-        kwargs.setdefault('is_food', True)
         super().__init__(*args, **kwargs)
+        self.is_food = True
         self.species = species
         self.meat_value = meat_value
         self.spoil_tick = spoil_tick

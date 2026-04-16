@@ -4180,6 +4180,351 @@ check(f"at least one egg hatched into the simulation (trials={trials+1})",
       hatched >= 1)
 
 # ==========================================================================
+print("\n=== Monster Species Loading ===")
+from data.db import MONSTER_SPECIES
+
+check(f">= 9 monster species loaded (got {len(MONSTER_SPECIES)})",
+      len(MONSTER_SPECIES) >= 9)
+for key in ['grey_wolf', 'honey_bees', 'cave_bear', 'dire_orc']:
+    check(f"  {key} in MONSTER_SPECIES", key in MONSTER_SPECIES)
+
+wolf_cfg = MONSTER_SPECIES['grey_wolf']
+check(f"wolf diet = carnivore", wolf_cfg['diet'] == 'carnivore')
+check(f"wolf split_size = 10", wolf_cfg['split_size'] == 10)
+check(f"wolf territory_scales = True", wolf_cfg['territory_scales'] is True)
+
+bee_cfg = MONSTER_SPECIES['honey_bees']
+check(f"bees dominance = fixed", bee_cfg['dominance_type'] == 'fixed')
+check(f"bees collapse_on_alpha_death", bee_cfg['collapse_on_alpha_death'] is True)
+check(f"bees territory_scales = False", bee_cfg['territory_scales'] is False)
+
+# ==========================================================================
+print("\n=== Monster Class Construction ===")
+from classes.monster import Monster
+
+mm = make_map(20, 20)
+wolf = Monster(current_map=mm, location=MapKey(5, 5, 0),
+               species='grey_wolf', sex='male', age=20)
+check(f"wolf species = grey_wolf", wolf.species == 'grey_wolf')
+check(f"wolf size = medium", wolf.size == 'medium')
+check(f"wolf diet = carnivore", wolf.diet == 'carnivore')
+check(f"wolf dominance_type = contest", wolf.dominance_type == 'contest')
+check(f"wolf meat_value = 0.3", abs(wolf.meat_value - 0.3) < 0.01)
+check(f"wolf stats.base[STR] = 14", wolf.stats.base.get(Stat.STR) == 14)
+check(f"wolf has stubbed get_relationship", wolf.get_relationship(wolf) is None)
+
+# ==========================================================================
+print("\n=== Pack: Membership, Ranking, Alpha ===")
+from classes.pack import Pack
+
+pm = make_map(20, 20)
+alpha_wolf = Monster(current_map=pm, location=MapKey(10, 10, 0),
+                     species='grey_wolf', sex='male',
+                     stats={Stat.STR: 18, Stat.VIT: 16, Stat.AGL: 14})
+beta_wolf = Monster(current_map=pm, location=MapKey(11, 10, 0),
+                    species='grey_wolf', sex='male',
+                    stats={Stat.STR: 12, Stat.VIT: 12, Stat.AGL: 10})
+pack = Pack(species='grey_wolf', territory_center=MapKey(10, 10, 0), game_map=pm)
+pack.add_member(alpha_wolf)
+pack.add_member(beta_wolf)
+
+check(f"pack size = 2", pack.size == 2)
+check(f"alpha is highest-stat wolf", pack.alpha_male is alpha_wolf)
+check(f"alpha_wolf.is_alpha True", alpha_wolf.is_alpha is True)
+check(f"beta_wolf.is_alpha False", beta_wolf.is_alpha is False)
+check(f"alpha_wolf.rank = 0", alpha_wolf.rank == 0)
+check(f"beta_wolf.rank = 1", beta_wolf.rank == 1)
+
+# ==========================================================================
+print("\n=== Pack: Territory Scaling ===")
+# Wolf territory scales with pack size
+solo_pack = Pack(species='grey_wolf', territory_center=MapKey(5, 5, 0), game_map=pm)
+solo_wolf = Monster(current_map=pm, location=MapKey(5, 5, 0),
+                    species='grey_wolf', sex='male')
+solo_pack.add_member(solo_wolf)
+solo_territory = solo_pack.effective_territory_size()
+full_territory = pack.effective_territory_size()
+check(f"solo wolf pack has smaller territory ({solo_territory:.2f} < {full_territory:.2f})",
+      solo_territory < full_territory)
+
+# Bees have fixed territory regardless of size
+bees_pack = Pack(species='honey_bees', territory_center=MapKey(12, 12, 0), game_map=pm)
+bee1 = Monster(current_map=pm, location=MapKey(12, 12, 0),
+               species='honey_bees', sex='female')
+bees_pack.add_member(bee1)
+bees_solo = bees_pack.effective_territory_size()
+# The cohesion modulation still applies, but the size-scaling doesn't.
+check(f"bee pack territory NOT scaled with size",
+      not bees_pack.territory_scales)
+
+# ==========================================================================
+print("\n=== Monster Observation + NN ===")
+from classes.monster_observation import build_monster_observation, MONSTER_OBSERVATION_SIZE
+from classes.monster_net import MonsterNet
+from classes.monster_actions import compute_monster_mask, MonsterAction
+
+obs = build_monster_observation(alpha_wolf, 20, 20)
+check(f"monster obs length = MONSTER_OBSERVATION_SIZE ({MONSTER_OBSERVATION_SIZE})",
+      len(obs) == MONSTER_OBSERVATION_SIZE)
+
+mnet = MonsterNet()
+import numpy as np
+probs = mnet.forward(np.array(obs, dtype=np.float32))
+check(f"MonsterNet output shape = 11", len(probs) == 11)
+check(f"MonsterNet probs sum ~ 1", abs(probs.sum() - 1.0) < 0.01)
+
+# INT-gated mask: bees (INT=2) only allow Move/Attack/Flee/Harvest-if-herbivore
+bee_mask = compute_monster_mask(bee1)
+allowed_bee = [i for i, v in enumerate(bee_mask) if v > 0]
+check(f"bee mask restricted (got {allowed_bee})",
+      int(MonsterAction.PATROL) not in allowed_bee and
+      int(MonsterAction.HOWL) not in allowed_bee)
+check(f"bee mask includes MOVE", int(MonsterAction.MOVE) in allowed_bee)
+check(f"bee mask includes ATTACK", int(MonsterAction.ATTACK) in allowed_bee)
+
+wolf_mask = compute_monster_mask(alpha_wolf)
+allowed_wolf = [i for i, v in enumerate(wolf_mask) if v > 0]
+check(f"wolf (INT=8) mask includes HOWL", int(MonsterAction.HOWL) in allowed_wolf)
+check(f"wolf (INT=8) mask includes PATROL", int(MonsterAction.PATROL) in allowed_wolf)
+
+# ==========================================================================
+print("\n=== Meat Item: Species Tag + Spoilage ===")
+from classes.inventory import Meat
+
+meat = Meat(name='wolf_meat', weight=0.5, value=1.0, quantity=1,
+            species='grey_wolf', meat_value=0.3,
+            spoil_tick=1000, is_monster_meat=True)
+check(f"meat has species tag", meat.species == 'grey_wolf')
+check(f"fresh meat not spoiled at now=500", not meat.is_spoiled(500))
+check(f"meat spoiled at now=1500", meat.is_spoiled(1500))
+check(f"preserved meat never spoils",
+      Meat(name='p', weight=0, value=0, quantity=1, species='x',
+           meat_value=0.3, spoil_tick=0, is_preserved=True).is_spoiled(99999) is False)
+
+# ==========================================================================
+print("\n=== Monster Death Drops Meat ===")
+from classes.maps import Tile
+
+dm = make_map(10, 10)
+death_wolf = Monster(current_map=dm, location=MapKey(4, 4, 0),
+                     species='grey_wolf', sex='male')
+tile = dm.tiles[MapKey(4, 4, 0)]
+check(f"tile has no meat pre-death",
+      not any(isinstance(i, Meat) for i in tile.inventory.items))
+
+death_wolf.die()
+meats = [i for i in tile.inventory.items if isinstance(i, Meat)]
+check(f"tile has 1 meat item post-death", len(meats) == 1)
+if meats:
+    m = meats[0]
+    check(f"meat.species = grey_wolf", m.species == 'grey_wolf')
+    check(f"meat.is_monster_meat = True", m.is_monster_meat is True)
+    check(f"meat.meat_value = 0.3", abs(m.meat_value - 0.3) < 0.01)
+
+# ==========================================================================
+print("\n=== Cannibalism: Rumor Broadcast + Piety Loss ===")
+from classes.relationship_graph import GRAPH
+
+cm = make_map(10, 10)
+eater = make_creature(cm, x=5, y=5,
+                      stats={Stat.STR: 10, Stat.VIT: 12, Stat.PER: 14},
+                      name='Eater')
+eater.species = 'human'
+witness = make_creature(cm, x=6, y=5, stats={Stat.PER: 14}, name='Witness')
+eater.deity = 'Solmara'
+eater.piety = 0.5
+
+# Create cannibal meat (same species)
+cannibal_meat = Meat(name='human_flesh', weight=0.3, value=1.0, quantity=1,
+                     species='human', meat_value=0.3, spoil_tick=999999,
+                     is_monster_meat=False)
+eater.inventory.items.append(cannibal_meat)
+
+piety_before = eater.piety
+eater.use_item(cannibal_meat)
+check(f"cannibalism counter incremented",
+      getattr(eater, '_cannibalism_events', 0) == 1)
+rel = GRAPH.get_edge(witness.uid, eater.uid)
+check(f"witness records negative sentiment toward eater",
+      rel is not None and rel[0] < 0)
+check(f"eater piety decreased ({piety_before} -> {eater.piety})",
+      eater.piety < piety_before)
+
+# Non-cannibal meat: no penalty
+wolf_meat = Meat(name='wolf_flesh', weight=0.3, value=1.0, quantity=1,
+                 species='grey_wolf', meat_value=0.3, spoil_tick=999999)
+eater2 = make_creature(cm, x=1, y=1, name='Eater2')
+eater2.species = 'human'
+eater2.inventory.items.append(wolf_meat)
+eater2.use_item(wolf_meat)
+check(f"eating non-cannibal meat: no event",
+      getattr(eater2, '_cannibalism_events', 0) == 0)
+
+# ==========================================================================
+print("\n=== Alpha Death Collapse (bees) vs Promotion (wolves) ===")
+am = make_map(10, 10)
+bee_pack = Pack(species='honey_bees',
+                territory_center=MapKey(5, 5, 0), game_map=am)
+queen = Monster(current_map=am, location=MapKey(5, 5, 0),
+                species='honey_bees', sex='female',
+                stats={Stat.STR: 5, Stat.VIT: 5})
+worker1 = Monster(current_map=am, location=MapKey(5, 5, 0),
+                  species='honey_bees', sex='female',
+                  stats={Stat.STR: 2, Stat.VIT: 2})
+worker2 = Monster(current_map=am, location=MapKey(5, 5, 0),
+                  species='honey_bees', sex='female',
+                  stats={Stat.STR: 2, Stat.VIT: 2})
+bee_pack.add_member(queen)
+bee_pack.add_member(worker1)
+bee_pack.add_member(worker2)
+check(f"queen is alpha", bee_pack.alpha_female is queen)
+
+# Queen dies -> pack collapses, survivors become solitary
+bee_pack.remove_member(queen)
+check(f"bee pack collapsed (size=0)", bee_pack.size == 0)
+# Survivors should each have their own 1-member pack
+check(f"worker1 in own pack", worker1.pack is not None and worker1.pack is not bee_pack)
+check(f"worker2 in own pack", worker2.pack is not None and worker2.pack is not bee_pack)
+check(f"worker1 pack size = 1",
+      worker1.pack is not None and worker1.pack.size == 1)
+
+# Wolves don't collapse: beta promotes
+wolf_pack2 = Pack(species='grey_wolf',
+                  territory_center=MapKey(8, 8, 0), game_map=am)
+a_wolf = Monster(current_map=am, location=MapKey(8, 8, 0),
+                 species='grey_wolf', sex='male',
+                 stats={Stat.STR: 18, Stat.VIT: 16, Stat.AGL: 14})
+b_wolf = Monster(current_map=am, location=MapKey(8, 9, 0),
+                 species='grey_wolf', sex='male',
+                 stats={Stat.STR: 14, Stat.VIT: 14, Stat.AGL: 12})
+wolf_pack2.add_member(a_wolf)
+wolf_pack2.add_member(b_wolf)
+wolf_pack2.remove_member(a_wolf)
+check(f"wolf pack survives alpha removal", wolf_pack2.size == 1)
+check(f"beta promoted to alpha", b_wolf.is_alpha is True)
+
+# ==========================================================================
+print("\n=== Pack Territory Overlap + Hostility ===")
+tm = make_map(40, 40)
+pa = Pack(species='grey_wolf', territory_center=MapKey(10, 10, 0), game_map=tm)
+wa = Monster(current_map=tm, location=MapKey(10, 10, 0),
+             species='grey_wolf', sex='male')
+pa.add_member(wa)
+
+# Pack B close to A (overlapping)
+pb = Pack(species='grey_wolf', territory_center=MapKey(12, 10, 0), game_map=tm)
+wb = Monster(current_map=tm, location=MapKey(12, 10, 0),
+             species='grey_wolf', sex='male')
+pb.add_member(wb)
+
+# Pack C far from A (not overlapping)
+pc = Pack(species='grey_wolf', territory_center=MapKey(35, 35, 0), game_map=tm)
+wc = Monster(current_map=tm, location=MapKey(35, 35, 0),
+             species='grey_wolf', sex='male')
+pc.add_member(wc)
+
+# Small packs can merge (combined size=2 <= split_size/2=5)
+check(f"pa can merge with pb (small compatible)", pa.can_merge_with(pb))
+check(f"pa is_hostile False (merge preempts hostility)",
+      pa.is_hostile_to(pb) is False)
+
+# ==========================================================================
+print("\n=== Monster Dispatch: MOVE, EAT ===")
+from classes.monster_dispatch import dispatch_monster
+
+dis_map = make_map(15, 15)
+dw = Monster(current_map=dis_map, location=MapKey(5, 5, 0),
+             species='grey_wolf', sex='male')
+dp = Pack(species='grey_wolf', territory_center=MapKey(8, 5, 0), game_map=dis_map)
+dp.add_member(dw)
+
+# MOVE should step toward pack target (territory sample)
+old_loc = dw.location
+res = dispatch_monster(dw, int(MonsterAction.MOVE),
+                       {'cols': 15, 'rows': 15, 'now': 0})
+check(f"MOVE dispatch returns result dict", isinstance(res, dict))
+
+# EAT: place meat on tile, dispatch EAT, verify hunger restored
+dw.hunger = 0.3
+eat_meat = Meat(name='m', weight=0.1, value=0.1, quantity=1,
+                species='deer', meat_value=0.3, spoil_tick=99999)
+dis_map.tiles[dw.location].inventory.items.append(eat_meat)
+hunger_before = dw.hunger
+res = dispatch_monster(dw, int(MonsterAction.EAT),
+                       {'cols': 15, 'rows': 15, 'now': 0})
+check(f"EAT succeeded", res['success'])
+check(f"hunger increased ({hunger_before} -> {dw.hunger})",
+      dw.hunger > hunger_before)
+check(f"meat removed from tile",
+      eat_meat not in dis_map.tiles[dw.location].inventory.items)
+
+# EAT own-species: flag ate_own_species
+self_meat = Meat(name='wolf', weight=0.1, value=0.1, quantity=1,
+                 species='grey_wolf', meat_value=0.3, spoil_tick=99999)
+dis_map.tiles[dw.location].inventory.items.append(self_meat)
+res = dispatch_monster(dw, int(MonsterAction.EAT),
+                       {'cols': 15, 'rows': 15, 'now': 0})
+check(f"monster eating own species: ate_own_species flag",
+      res.get('ate_own_species') is True)
+
+# ==========================================================================
+print("\n=== Monster Tick: Simulation Integration ===")
+from editor.simulation.headless import Simulation as MonSim
+from editor.simulation.arena import spawn_monsters_for_stage
+
+sim_map = make_map(20, 20)
+sim_creatures = []
+for i in range(2):
+    c = make_creature(sim_map, x=i * 3, y=10,
+                      stats={Stat.STR: 10, Stat.VIT: 12, Stat.PER: 10},
+                      name=f'cs{i}')
+    sim_creatures.append(c)
+
+ms, ps = spawn_monsters_for_stage(sim_map, 20, 20,
+    species_subset=['grey_wolf'],
+    count_per_species=2)
+check(f"spawn_monsters_for_stage returns monsters", len(ms) >= 1)
+check(f"spawn_monsters_for_stage returns packs", len(ps) >= 1)
+
+arena_with_mon = {'map': sim_map, 'creatures': sim_creatures,
+                  'monsters': ms, 'packs': ps,
+                  'cols': 20, 'rows': 20}
+monsim = MonSim(arena_with_mon, gestation_enabled=False,
+                fatigue_enabled=False)
+monsim.use_monster_heuristic = True
+for _ in range(10):
+    monsim.step()
+check(f"simulation ticked 10 steps with monsters", monsim.step_count == 10)
+check(f"monsters still active after sim ticks",
+      len(monsim.monsters) >= 1 or all(not m.is_alive for m in ms))
+
+# ==========================================================================
+print("\n=== Creature Observation Sees Monsters ===")
+from classes.observation import build_observation, SECTION_RANGES
+
+om = make_map(15, 15)
+cobs_hero = make_creature(om, x=7, y=7,
+                          stats={Stat.STR: 12, Stat.VIT: 12, Stat.PER: 14,
+                                 Stat.INT: 10, Stat.LCK: 10},
+                          name='obs_hero')
+# No monster visible → slots zero
+obs_no_mon = build_observation(cobs_hero, 15, 15)
+s, e = SECTION_RANGES['monster_slots']
+check(f"no monster: slots all zero",
+      all(v == 0.0 for v in obs_no_mon[s:e]))
+
+# Spawn a monster in sight range
+obs_wolf = Monster(current_map=om, location=MapKey(9, 7, 0),
+                   species='grey_wolf', sex='male')
+obs_pack = Pack(species='grey_wolf', territory_center=MapKey(9, 7, 0), game_map=om)
+obs_pack.add_member(obs_wolf)
+obs_with_mon = build_observation(cobs_hero, 15, 15)
+slot_vals = obs_with_mon[s:s+6]
+check(f"monster visible: slot 0 has non-zero values",
+      any(v != 0.0 for v in slot_vals))
+check(f"slot 0 distance > 0 (normalized)", slot_vals[0] > 0)
+
+# ==========================================================================
 print(f"\n{'='*50}")
 print(f"Results: {PASS} passed, {FAIL} failed out of {PASS+FAIL} tests")
 if FAIL:
