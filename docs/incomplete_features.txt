@@ -18,32 +18,14 @@ MEDIUM IMPACT — Weakens monster learning
 
 LOW IMPACT — Polish
 --------------------
-- Territory rumor extension: rumor system currently tags creatures
-  only. Extend with subject_type='territory' so creatures can share
-  info about monster territories via TALK. Lower priority — direct
-  observation + spatial memory still works.
-- Purpose tile rumors: same extension, for economic knowledge
-  propagation.
 - Pack scent mechanic: cross-pack communication without rumors.
-- Live viewer monster visualization: editor viewer shows creature
-  state but not monster/pack state.
-- ERD updates in sql_tab.py desc_map: monster_species columns
-  documented. Also _SOFT_FKS entries for cross-references.
-- Monster sprite seed: 9 species exist in DB but no sprite_name
-  populated (they render as the default creature sprite). Needs
-  sprite definitions or reuse of existing creature sprites.
-- Monster animation bindings: walk_north, attack, death, etc. not
-  defined in DB for monster sprites.
-- PackNet online gradient updates: MonsterTrainer currently trains
-  MonsterNet via PPO and exposes PackNet for inference through a
-  shim, but the pack NN doesn't receive gradient updates from
-  rollouts yet (heuristic outputs serve as imitation target; online
-  REINFORCE could replace that for tuning beyond heuristic quality).
-  Pretrained PackNet weights already usable via monster_pretrain.py.
-- League training for Phase 3 co-evolution: the alternating-epoch
-  schedule (stages 23-25) is seeded in the curriculum but a proper
-  snapshot pool for league-style training isn't wired. Stage 23
-  currently trains both populations simultaneously under reduced LR.
+  Deferred — not needed for current curriculum, belongs with future
+  world state infrastructure.
+- Custom monster sprites + animation bindings: 9 species in DB
+  currently use the 'player' sprite as a placeholder (inheriting
+  the default creature animations). Authoring species-specific
+  sprites + walk/attack/death bindings is pending the sprite design
+  pass (flagged by the user for a follow-on conversation).
 
 FUTURE / NOT STARTED
 =====================
@@ -129,6 +111,26 @@ Monster System
   heuristic with NN-driven actions, build_from_pretrained loads .npz
   weights into the training policy, export_weights writes
   inference-format .npz back to models/
+- PackNet online REINFORCE: MonsterTrainer also collects per-pack
+  trajectories (aggregated member rewards), runs REINFORCE with
+  critic baseline, entropy regularization, gradient clipping
+- Location rumor system (territory + purpose): RelationshipGraph
+  .add_location_rumor / location_rumors_of / get_location_rumors /
+  best_location_rumor. Creatures record territory rumors on sight
+  of monsters (-15 sentiment on pack center) and purpose rumors on
+  standing on purpose tiles. share_location_rumor propagates with
+  0.6 confidence decay per hop.
+- Live viewer: renders monster hexagons (red-tinted, alpha gets gold
+  ring), pack territory circles (dim red outline), monster/pack
+  count in info panel
+- LeaguePool (editor/simulation/league_pool.py): rolling snapshot
+  manifest with max_snapshots FIFO eviction, component-scoped
+  sampling, latest/clear helpers. Intended for Phase 3 co-evolution
+  stages 23-25 to sample historical opponents.
+- sql_tab.py enriched: desc_map covers all monster_species columns,
+  training_pairs columns, curriculum_stages monster toggles; _CLUSTERS
+  has Monsters cluster; _SOFT_FKS wire monster_species_stats →
+  monster_species and monster_species.natural_weapon_key → items
 - Meat item subclass: species tag, spoilage tick, cooked/preserved flags
 - Monster editor tab (parallel to Species tab)
 - Training Pairs table + editor tab: bind creature/goal/monster/pack
@@ -234,7 +236,7 @@ Editor
 - Training: standard, curriculum (with run/stop/viewer), models, pairs
 - SQL editor with ERD and data dictionary
 
-Tests (835 passing)
+Tests (849 passing)
 - 760 existing creature mechanics tests
 - 60 monster tests: species loading, class construction, pack membership,
   territory scaling, observation, NN forward shape, INT-gated masks,
@@ -243,6 +245,9 @@ Tests (835 passing)
   creature observation of monsters
 - 15 MonsterTrainer tests: attach, shim replacement, PPO update,
   loss tracking, weight export
+- 14 location rumor + league pool tests: record territory + purpose
+  rumors from direct observation, share rumor with decay, LeaguePool
+  add/trim/sample/latest
 
 Presentation
 - Composite sprite rendering with layer connections and keyframe

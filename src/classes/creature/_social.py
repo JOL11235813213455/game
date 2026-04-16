@@ -632,6 +632,101 @@ class SocialMixin:
         self._social_wins = getattr(self, '_social_wins', 0) + 1
         return True
 
+    def share_location_rumor(self, target, tick: int) -> bool:
+        """Share one high-confidence location rumor (territory or purpose)
+        with another creature during TALK.
+
+        Location rumors have a confidence-decay multiplier (0.6) on transfer
+        so the information loses fidelity with each hop.
+        """
+        if not self.can_see(target):
+            return False
+
+        # Pick the best rumor we've got (prefer territory for safety-seeking
+        # agents, but mix randomly 50/50 so both types propagate).
+        types_to_try = ('territory', 'purpose') if random.random() < 0.5 else ('purpose', 'territory')
+        shared_entry = None
+        shared_key = None
+        for t in types_to_try:
+            best = GRAPH.best_location_rumor(self.uid, t)
+            if best is not None:
+                shared_key, sentiment, confidence, data = best
+                shared_entry = (sentiment, confidence, data, t)
+                break
+        if shared_entry is None:
+            return False
+
+        sentiment, confidence, data, subject_type = shared_entry
+        decayed_confidence = confidence * 0.6
+        if decayed_confidence < 0.05:
+            return False
+
+        GRAPH.add_location_rumor(
+            holder_uid=target.uid,
+            subject_key=shared_key,
+            subject_type=subject_type,
+            source_uid=self.uid,
+            sentiment=sentiment,
+            confidence=decayed_confidence,
+            tick=tick,
+            data=data,
+        )
+        self._social_wins = getattr(self, '_social_wins', 0) + 1
+        return True
+
+    def record_nearby_location_rumors(self, tick: int):
+        """Passive recording of tile-based intel from direct perception.
+
+        Records two kinds of location rumors:
+          - territory: any monster in sight → negative sentiment on the
+            tile at that monster's pack center
+          - purpose: the creature's current tile if it has a non-None
+            purpose → positive sentiment on the tile
+        Both use confidence 1.0 (direct observation).
+        """
+        if self.current_map is None:
+            return
+        map_name = getattr(self.current_map, 'name', '') or ''
+
+        # Purpose tile: current tile
+        tile = self.current_map.tiles.get(self.location)
+        if tile is not None and getattr(tile, 'purpose', None):
+            key = (map_name, self.location.x, self.location.y)
+            GRAPH.add_location_rumor(
+                holder_uid=self.uid,
+                subject_key=key,
+                subject_type='purpose',
+                source_uid=self.uid,
+                sentiment=10.0,
+                confidence=1.0,
+                tick=tick,
+                data={'purpose': tile.purpose},
+            )
+
+        # Territory rumors from visible monsters
+        try:
+            from classes.monster import Monster as _M
+            for mon in _M.on_same_map(self.current_map):
+                if mon.pack is None:
+                    continue
+                d = abs(mon.location.x - self.location.x) + abs(mon.location.y - self.location.y)
+                if d <= self.stats.active[Stat.SIGHT_RANGE]():
+                    center = mon.pack.territory_center
+                    key = (map_name, center.x, center.y)
+                    GRAPH.add_location_rumor(
+                        holder_uid=self.uid,
+                        subject_key=key,
+                        subject_type='territory',
+                        source_uid=self.uid,
+                        sentiment=-15.0,
+                        confidence=1.0,
+                        tick=tick,
+                        data={'species': mon.species,
+                              'pack_size': mon.pack.size},
+                    )
+        except ImportError:
+            pass
+
     def solicit_rumor(self, target, tick: int) -> bool:
         """Ask another creature for gossip about someone you barely know.
 

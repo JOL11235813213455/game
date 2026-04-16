@@ -381,6 +381,8 @@ class SqlTab(ttk.Frame):
         ('processing_recipe_inputs', 'ingredient_item_key', 'items', 'key'),
         ('creatures', 'job_key', 'jobs', 'key'),
         ('jobs', 'schedule_template', 'schedules', 'key'),
+        ('monster_species_stats', 'species_name', 'monster_species', 'name'),
+        ('monster_species', 'natural_weapon_key', 'items', 'key'),
     ]
 
     # Clusters: groups of related tables laid out together
@@ -410,6 +412,11 @@ class SqlTab(ttk.Frame):
             'tables': ['species', 'species_stats', 'creatures', 'creature_stats'],
         },
         {
+            'label': 'Monsters',
+            'color': '#3a1a1a',
+            'tables': ['monster_species', 'monster_species_stats'],
+        },
+        {
             'label': 'Items',
             'color': '#1a2a2a',
             'tables': ['items', 'item_slots', 'item_frames', 'item_frame_recipe'],
@@ -423,7 +430,7 @@ class SqlTab(ttk.Frame):
         {
             'label': 'Training',
             'color': '#1a1a1a',
-            'tables': ['nn_models', 'curriculum_stages'],
+            'tables': ['nn_models', 'curriculum_stages', 'training_pairs'],
         },
         {
             'label': 'Spells',
@@ -786,6 +793,45 @@ class SqlTab(ttk.Frame):
             ('species', 'meat_value'): 'Hunger restored when consumed as food (NULL = auto from size)',
             ('species_stats', 'stat'): 'Stat name (strength, agility, etc.)',
             ('species_stats', 'value'): 'Base stat value for this species',
+            # monster_species
+            ('monster_species', 'name'): 'Unique monster species key (e.g. grey_wolf)',
+            ('monster_species', 'sprite_name'): 'Primary sprite (fallback: default monster)',
+            ('monster_species', 'composite_name'): 'Composite sprite for multi-layer rendering',
+            ('monster_species', 'tile_scale'): 'Visual size multiplier on the tile grid',
+            ('monster_species', 'size'): 'tiny|small|medium|large|huge|colossal — affects collision + default meat_value',
+            ('monster_species', 'meat_value'): 'Hunger restored when eaten (NULL = auto from size)',
+            ('monster_species', 'diet'): 'carnivore | herbivore | omnivore',
+            ('monster_species', 'compatible_tile'): 'Tile purpose/resource type for passive grazing',
+            ('monster_species', 'split_size'): 'Pack count that triggers splitting (1 = solitary)',
+            ('monster_species', 'territory_size'): 'MAX roaming std-dev in tiles (at pack.size=split_size-1 if scaling)',
+            ('monster_species', 'territory_scales'): '1 = territory shrinks with pack size (wolves), 0 = fixed (bees/ants)',
+            ('monster_species', 'dominance_type'): 'contest | fixed | none — rank mechanics',
+            ('monster_species', 'collapse_on_alpha_death'): '1 = pack dissolves when alpha dies (bees/ants)',
+            ('monster_species', 'active_hours'): 'diurnal | nocturnal | crepuscular',
+            ('monster_species', 'swimming'): '1 = can swim',
+            ('monster_species', 'ambush_tactics'): '1 = uses stealth-based engagement',
+            ('monster_species', 'protect_young'): '1 = aggressive when young nearby',
+            ('monster_species', 'natural_weapon_key'): 'items.key of the natural weapon dropped on death',
+            ('monster_species', 'egg_sprite'): 'Sprite for laid eggs',
+            ('monster_species_stats', 'stat'): 'Stat name (strength, agility, etc.)',
+            ('monster_species_stats', 'value'): 'Base stat value for this monster species',
+            # training_pairs
+            ('training_pairs', 'name'): 'Unique pair name (e.g. p001) binding all 4 model versions',
+            ('training_pairs', 'current_stage'): 'Next curriculum stage to run (1-25)',
+            ('training_pairs', 'creature_model_name'): 'Bound CreatureNet model name',
+            ('training_pairs', 'creature_model_version'): 'Bound CreatureNet version',
+            ('training_pairs', 'goal_model_name'): 'Bound GoalNet model name',
+            ('training_pairs', 'goal_model_version'): 'Bound GoalNet version',
+            ('training_pairs', 'monster_model_name'): 'Bound MonsterNet model name',
+            ('training_pairs', 'monster_model_version'): 'Bound MonsterNet version',
+            ('training_pairs', 'pack_model_name'): 'Bound PackNet model name',
+            ('training_pairs', 'pack_model_version'): 'Bound PackNet version',
+            # curriculum_stages (monster columns)
+            ('curriculum_stages', 'monsters_enabled'): '1 = spawn monsters during this stage',
+            ('curriculum_stages', 'creature_frozen'): '1 = skip creature NN gradient updates (monster training stages)',
+            ('curriculum_stages', 'monster_trainable'): '1 = attach MonsterTrainer and update MonsterNet via PPO',
+            ('curriculum_stages', 'pack_trainable'): '1 = update PackNet via REINFORCE (future)',
+            ('curriculum_stages', 'monster_species_subset'): 'JSON list of monster species keys to spawn (empty = all)',
             # creatures
             ('creatures', 'key'): 'Unique creature template identifier',
             ('creatures', 'species'): 'Species template this creature inherits from',

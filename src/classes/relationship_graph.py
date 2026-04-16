@@ -47,6 +47,15 @@ class RelationshipGraph(Trackable):
         self._rumors: dict[int, dict[int, list]] = {}
         self._deceits: dict[int, dict[int, list]] = {}
         self._generation: int = 0
+        # Location rumors: tile-level (territory or purpose) info that
+        # creatures share via TALK. Keyed by holder_uid → subject_key →
+        # list of (source_uid, subject_type, sentiment, confidence, tick,
+        # data). subject_key is a (map_name, x, y) triple. subject_type
+        # is 'territory' (danger) or 'purpose' (economic interest).
+        # data is an arbitrary dict (e.g. {'species': 'grey_wolf',
+        # 'pack_size': 4} for territory, {'purpose': 'trading'} for
+        # purpose tiles).
+        self._loc_rumors: dict[int, dict[tuple, list]] = {}
 
     # ======================================================================
     # Forward-edge access (hot path)
@@ -193,6 +202,78 @@ class RelationshipGraph(Trackable):
         else:
             d[subject_uid] = [entry]
 
+    # ======================================================================
+    # Location rumors (territory + purpose tiles)
+    # ======================================================================
+
+    def add_location_rumor(self, holder_uid: int, subject_key: tuple,
+                           subject_type: str, source_uid: int,
+                           sentiment: float, confidence: float, tick: int,
+                           data: dict | None = None):
+        """Record a rumor about a tile-level subject.
+
+        subject_type: 'territory' (monster pack danger) or 'purpose'
+            (creature goal tile, e.g. trading/farming).
+        subject_key: (map_name, x, y) tuple.
+        sentiment: -20..20. Negative = avoid (territory), positive = seek
+            (purpose).
+        confidence: 0..1. Decays via caller-applied multipliers on share.
+        data: optional dict with type-specific metadata.
+        """
+        d = self._loc_rumors.get(holder_uid)
+        if d is None:
+            d = {}
+            self._loc_rumors[holder_uid] = d
+        entry = (source_uid, subject_type, sentiment, confidence, tick,
+                 data or {})
+        existing = d.get(subject_key)
+        if existing is not None:
+            existing.append(entry)
+        else:
+            d[subject_key] = [entry]
+
+    def location_rumors_of(self, uid: int) -> dict:
+        """Return live dict of location rumors held by uid."""
+        d = self._loc_rumors.get(uid)
+        if d is None:
+            d = {}
+            self._loc_rumors[uid] = d
+        return d
+
+    def get_location_rumors(self, holder_uid: int,
+                            subject_key: tuple) -> list | None:
+        """Return the list of entries holder has about subject_key."""
+        d = self._loc_rumors.get(holder_uid)
+        if d is None:
+            return None
+        return d.get(subject_key)
+
+    def count_location_rumors_held(self, uid: int) -> int:
+        d = self._loc_rumors.get(uid)
+        if not d:
+            return 0
+        return sum(len(v) for v in d.values())
+
+    def best_location_rumor(self, holder_uid: int, subject_type: str) -> tuple | None:
+        """Return the highest-confidence rumor of a given type, or None.
+
+        Returns (subject_key, sentiment, confidence, data) or None.
+        """
+        d = self._loc_rumors.get(holder_uid)
+        if not d:
+            return None
+        best = None
+        best_conf = -1.0
+        for key, entries in d.items():
+            for e in entries:
+                src, st, sent, conf, tick, data = e
+                if st != subject_type:
+                    continue
+                if conf > best_conf:
+                    best_conf = conf
+                    best = (key, sent, conf, data)
+        return best
+
     def count_rumors_held(self, uid: int) -> int:
         """Total rumor entries held by ``uid`` across all subjects."""
         d = self._rumors.get(uid)
@@ -268,6 +349,7 @@ class RelationshipGraph(Trackable):
         self._edges.pop(uid, None)
         self._rumors.pop(uid, None)
         self._deceits.pop(uid, None)
+        self._loc_rumors.pop(uid, None)
         for outgoing in self._edges.values():
             outgoing.pop(uid, None)
         for rumor_dict in self._rumors.values():
@@ -281,6 +363,7 @@ class RelationshipGraph(Trackable):
         self._edges.clear()
         self._rumors.clear()
         self._deceits.clear()
+        self._loc_rumors.clear()
         self._generation += 1
 
     # ======================================================================

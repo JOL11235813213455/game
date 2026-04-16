@@ -333,6 +333,50 @@ def run_viewer(scenario: str = 'arena', cols: int = 25, rows: int = 25,
                                          (x * cell_size + cell_size - 3,
                                           y * cell_size + cell_size - 3, 2, 2))
 
+        # Pack territory circles (dim red outline) - draw behind monsters
+        for pack in getattr(sim, 'packs', []):
+            if pack.size == 0:
+                continue
+            cx = pack.territory_center.x * cell_size + cell_size // 2
+            cy = pack.territory_center.y * cell_size + cell_size // 2
+            radius_tiles = pack.territory_radius()
+            radius_px = int(radius_tiles * cell_size)
+            if radius_px > 2:
+                pygame.draw.circle(screen, (120, 30, 30),
+                                   (cx, cy), radius_px, 1)
+
+        # Monsters (red-tinted, distinct from creatures)
+        for m in getattr(sim, 'monsters', []):
+            if not m.is_alive:
+                continue
+            mx_px = m.location.x * cell_size + cell_size // 2
+            my_px = m.location.y * cell_size + cell_size // 2
+            size_px = {'tiny': 3, 'small': 4, 'medium': 5,
+                       'large': 7, 'huge': 9, 'colossal': 12}
+            r_px = size_px.get(m.size, 5)
+            # Red hex for hostile monsters; alpha gets a gold ring
+            m_color = (200, 40, 40) if m.sex == 'male' else (220, 80, 80)
+            # Hex shape via points
+            import math as _m
+            pts = []
+            for i in range(6):
+                ang = _m.pi / 3 * i
+                pts.append((mx_px + r_px * _m.cos(ang),
+                            my_px + r_px * _m.sin(ang)))
+            pygame.draw.polygon(screen, m_color, pts)
+            if getattr(m, 'is_alpha', False):
+                pygame.draw.polygon(screen, (255, 200, 60), pts, 2)
+
+            # HP bar
+            hp_max = max(1, m.stats.active[Stat.HP_MAX]())
+            hp_ratio = m.stats.active[Stat.HP_CURR]() / hp_max
+            bar_w = cell_size - 4
+            bar_x = m.location.x * cell_size + 2
+            bar_y = m.location.y * cell_size - 3
+            pygame.draw.rect(screen, C_RED, (bar_x, bar_y, bar_w, 2))
+            pygame.draw.rect(screen, C_GREEN, (bar_x, bar_y,
+                                               int(bar_w * hp_ratio), 2))
+
         # Creatures
         for c in sim.creatures:
             if not c.is_alive:
@@ -382,6 +426,11 @@ def run_viewer(scenario: str = 'arena', cols: int = 25, rows: int = 25,
         text(f'Tick: {sim.step_count}', C_YELLOW)
         text(f'Time: {sim.now / 1000:.0f}s')
         text(f'Alive: {sim.alive_count} / {len(sim.creatures)}')
+        _ms = getattr(sim, 'monsters', [])
+        _ps = getattr(sim, 'packs', [])
+        if _ms or _ps:
+            text(f'Monsters: {sum(1 for m in _ms if m.is_alive)} ({len(_ps)} packs)',
+                 C_RED)
         text(f'Speed: {sim_speed:.1f}x')
         text(f'{"PAUSED" if paused else "RUNNING"}', C_RED if paused else C_GREEN)
         y += 10

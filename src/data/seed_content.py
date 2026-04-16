@@ -1330,8 +1330,11 @@ def seed():
             'swimming', 'ambush_tactics', 'protect_young',
             'natural_weapon_key', 'egg_sprite',
         ]
+        # Placeholder sprite: reuse 'player' (the default creature sprite)
+        # until species-specific monster sprites are authored. Individual
+        # species can override via kwargs.
         defaults = {
-            'sprite_name': None, 'composite_name': None, 'tile_scale': 1.0,
+            'sprite_name': 'player', 'composite_name': None, 'tile_scale': 1.0,
             'size': 'medium', 'description': '', 'meat_value': None,
             'diet': 'carnivore', 'compatible_tile': None, 'split_size': 4,
             'territory_size': 8.0, 'territory_scales': True,

@@ -4582,6 +4582,92 @@ except ImportError as e:
     print(f"  SKIP: MonsterTrainer test requires torch ({e})")
 
 # ==========================================================================
+print("\n=== Location Rumors (territory + purpose) ===")
+GRAPH.clear()
+
+hm = make_map(15, 15)
+hm.name = 'rumor_map'
+hm.tiles[MapKey(7, 7, 0)].purpose = 'trading'
+
+scout = make_creature(hm, x=7, y=7, stats={Stat.PER: 14, Stat.CHR: 14},
+                      name='Scout')
+# Put a monster nearby so scout can record a territory rumor
+from classes.monster import Monster
+from classes.pack import Pack
+r_wolf = Monster(current_map=hm, location=MapKey(9, 7, 0),
+                 species='grey_wolf', sex='male')
+r_pack = Pack(species='grey_wolf', territory_center=MapKey(9, 7, 0),
+              game_map=hm)
+r_pack.add_member(r_wolf)
+
+scout.record_nearby_location_rumors(tick=100)
+n_rumors = GRAPH.count_location_rumors_held(scout.uid)
+check(f"scout recorded location rumors (got {n_rumors})", n_rumors >= 2)
+
+purp_best = GRAPH.best_location_rumor(scout.uid, 'purpose')
+check(f"best purpose rumor is scout's tile",
+      purp_best is not None and purp_best[0] == ('rumor_map', 7, 7))
+terr_best = GRAPH.best_location_rumor(scout.uid, 'territory')
+check(f"best territory rumor is wolf pack center",
+      terr_best is not None and terr_best[0] == ('rumor_map', 9, 7))
+check(f"territory sentiment is negative (danger)",
+      terr_best is not None and terr_best[1] < 0)
+check(f"purpose sentiment is positive (seek)",
+      purp_best is not None and purp_best[1] > 0)
+
+# Share rumor with a listener
+listener = make_creature(hm, x=8, y=7, stats={Stat.PER: 10}, name='Listener')
+check(f"listener starts with no rumors",
+      GRAPH.count_location_rumors_held(listener.uid) == 0)
+# Retry a few times for CHR-based share success rolls (currently always
+# succeeds because share_location_rumor has no chance gate; still OK)
+shared = scout.share_location_rumor(listener, tick=200)
+check(f"share succeeded", shared)
+listener_count = GRAPH.count_location_rumors_held(listener.uid)
+check(f"listener received rumor (count={listener_count})",
+      listener_count >= 1)
+
+# Shared rumor has decayed confidence
+listener_best_purp = GRAPH.best_location_rumor(listener.uid, 'purpose')
+listener_best_terr = GRAPH.best_location_rumor(listener.uid, 'territory')
+received = listener_best_purp or listener_best_terr
+if received is not None:
+    check(f"shared rumor confidence < 1.0 (got {received[2]:.2f})",
+          received[2] < 0.99)
+
+# ==========================================================================
+print("\n=== League Pool Snapshot Management ===")
+import tempfile
+import shutil as _shutil
+from editor.simulation.league_pool import LeaguePool
+
+with tempfile.TemporaryDirectory() as tmpdir:
+    pool = LeaguePool(pool_dir=tmpdir, max_snapshots=3)
+    # Create a dummy weight file
+    dummy = Path(tmpdir) / '_probe.npz'
+    np.savez(str(dummy), w1=np.zeros(3))
+
+    e1 = pool.add_snapshot('v1', {'creature': str(dummy)}, stage=1)
+    e2 = pool.add_snapshot('v2', {'creature': str(dummy)}, stage=2)
+    e3 = pool.add_snapshot('v3', {'creature': str(dummy)}, stage=3)
+    check(f"pool has 3 snapshots", len(pool.list_snapshots()) == 3)
+
+    # Trim enforcement — adding a 4th should drop the oldest
+    e4 = pool.add_snapshot('v4', {'creature': str(dummy)}, stage=4)
+    ids = [s['id'] for s in pool.list_snapshots()]
+    check(f"pool trimmed to max_snapshots (got {len(ids)})",
+          len(ids) == 3)
+    check(f"oldest (v1) was evicted",
+          not any(i.startswith('v1_') for i in ids))
+
+    # Sample
+    sample = pool.sample_snapshot(component='creature')
+    check(f"sample returns creature-equipped snapshot",
+          sample is not None and 'creature' in sample['weights'])
+    check(f"latest = v4",
+          pool.latest_snapshot()['name'] == 'v4')
+
+# ==========================================================================
 print(f"\n{'='*50}")
 print(f"Results: {PASS} passed, {FAIL} failed out of {PASS+FAIL} tests")
 if FAIL:
