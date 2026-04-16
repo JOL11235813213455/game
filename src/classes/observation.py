@@ -47,7 +47,7 @@ _SECTION_SIZES = {
     'hearing_section': 12,
 }
 # Per-engaged and identity are variable (species/deity count)
-PER_ENGAGED_SIZE = 51  # grew from 45: 4 placeholder zeros replaced + 6 new fields
+PER_ENGAGED_SIZE = 53  # 51 + Phase 2 lifecycle (target_lifecycle_idx, target_is_vulnerable)
 IDENTITY_BASE_SIZE = 14  # before species one-hot + deity
 
 
@@ -1369,6 +1369,16 @@ def build_observation(creature, cols: int, rows: int,
         obs.append(1.0 if (rel and rel[0] < -5) else 0.0)
         obs.append(1.0 if (rel and rel[0] > 5) else 0.0)
         obs.append(1.0)  # slot_occupied
+
+        # Phase 2 lifecycle exposure per slot (+2 floats):
+        #   target_lifecycle_idx — 0..6 normalized (egg..dead)
+        #   target_is_vulnerable — 1 if egg/gestating/juvenile/dying
+        # Gives the NN a direct "don't attack" signal without having
+        # to learn state semantics from indirect cues.
+        from classes.creature._lifecycle import LIFECYCLE_STATE_IDX
+        _ot_lc = getattr(other, 'lifecycle_state', 'adult')
+        obs.append(LIFECYCLE_STATE_IDX.get(_ot_lc, 3) / 6.0)
+        obs.append(1.0 if _ot_lc in ('egg', 'gestating', 'juvenile', 'dying') else 0.0)
 
         new_seen[o_uid] = (o_loc.x, o_loc.y)
 
