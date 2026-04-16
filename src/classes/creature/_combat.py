@@ -58,6 +58,16 @@ class CombatMixin:
             result['reason'] = 'not_adjacent'
             return result
 
+        # Phase 7 arousal: combat event → both parties to 'engaged'.
+        # Guarded on hasattr so Monsters / minimal fixtures without
+        # the mixin don't break.
+        _sim = getattr(self, '_active_sim', None)
+        if _sim is not None:
+            if hasattr(self, 'arousal_on_combat'):
+                self.arousal_on_combat(_sim)
+            if hasattr(target, 'arousal_on_combat'):
+                target.arousal_on_combat(_sim)
+
         # Weapon check — get equipped weapon or use unarmed defaults
         weapon = self.equipment.get(Slot.HAND_R) or self.equipment.get(Slot.HAND_L)
         if weapon and isinstance(weapon, Weapon):
@@ -183,6 +193,14 @@ class CombatMixin:
         if dist < 1:
             result['reason'] = 'too_close'
             return result
+
+        # Phase 7 arousal: ranged attacks also count as combat events
+        _sim = getattr(self, '_active_sim', None)
+        if _sim is not None:
+            if hasattr(self, 'arousal_on_combat'):
+                self.arousal_on_combat(_sim)
+            if hasattr(target, 'arousal_on_combat'):
+                target.arousal_on_combat(_sim)
 
         # Ammo check — natural weapons can have infinite_ammo (e.g. acid spit)
         ammo = None

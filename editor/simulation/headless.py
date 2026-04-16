@@ -149,6 +149,18 @@ class Simulation:
         self.events = ScheduledEventQueue()
         self._event_handlers: dict[str, list] = {}
 
+        # Attach a class-level sim reference so mixin methods (arousal
+        # triggers, condition application, lifecycle transitions) can
+        # find the active Simulation without threading it through every
+        # call site. Last-one-wins — a single sim at a time is the norm.
+        from classes.creature import Creature as _CCls
+        _CCls._active_sim = self
+        try:
+            from classes.monster import Monster as _MCls
+            _MCls._active_sim = self
+        except ImportError:
+            pass
+
         # Phase 1 status-effect plumbing: route condition tick/expiry
         # events back to the creature that owns them via UID lookup.
         self.subscribe_event('condition_tick', self._dispatch_condition_tick)

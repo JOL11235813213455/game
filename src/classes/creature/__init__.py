@@ -50,6 +50,13 @@ class Creature(
     sprite_name = 'player'
     z_index     = 3
     _uid_registry: dict[int, 'Creature'] = {}
+
+    # Class-level reference to the active Simulation. Set by
+    # Simulation.__init__ so mixin methods (arousal triggers,
+    # condition application, lifecycle transitions) can reach sim.events
+    # without threading sim through every call site. May be None outside
+    # a live sim (test fixtures, headless probes).
+    _active_sim = None
     _hot_array = None      # set by Simulation to CreatureHotArray instance
     _tile_grid = None      # set by Simulation to TileGrid instance
 

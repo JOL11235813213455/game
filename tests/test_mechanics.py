@@ -5790,6 +5790,24 @@ _ar_obs = build_observation(_arc, _arsim.cols, _arsim.rows)
 check("observation length matches with arousal active",
       len(_ar_obs) == OBSERVATION_SIZE)
 
+# Combat wiring: melee_attack triggers arousal on both attacker + target
+_wire_arena = generate_arena(cols=10, rows=10, num_creatures=2)
+_wire_sim = Simulation(_wire_arena)
+_atk, _def = _wire_sim.creatures[0], _wire_sim.creatures[1]
+# Place them adjacent for the attack to reach
+_atk.location = MapKey(5, 5, 0)
+_def.location = MapKey(6, 5, 0)
+# Ensure both have arousal FSM cleared and at 'calm'
+_atk._arousal_fsm = None
+_def._arousal_fsm = None
+check("pre-combat attacker calm", _atk.arousal_state == 'calm')
+check("pre-combat defender calm", _def.arousal_state == 'calm')
+_atk.melee_attack(_def, now=_wire_sim.now)
+check(f"post-attack attacker engaged ({_atk.arousal_state})",
+      _atk.arousal_state == 'engaged')
+check(f"post-attack defender engaged ({_def.arousal_state})",
+      _def.arousal_state == 'engaged')
+
 # ==========================================================================
 print("\n=== Game Mode FSM (Phase 5) ===")
 from main.game_mode import (GameModeFSM, TopState, SubState,
