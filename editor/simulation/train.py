@@ -1833,6 +1833,7 @@ def train_curriculum_stage(stage_number: int, model_name: str,
             print(f'  (no auto-resume target: {e})')
 
     parent_final_reward = None
+    parent_baseline_reward = None
     parent_phase_used = None
     if resume_target:
         try:
@@ -1856,10 +1857,14 @@ def train_curriculum_stage(stage_number: int, model_name: str,
                 else:
                     _ps = {}
                 parent_final_reward = _ps.get('final_reward_avg')
+                parent_baseline_reward = _ps.get('baseline_reward_avg')
                 parent_phase_used = _ps.get('final_reward_phase')
                 if parent_final_reward is not None:
+                    _pd = (parent_final_reward - parent_baseline_reward
+                           if parent_baseline_reward is not None else None)
+                    _pd_txt = f', delta {_pd:+.4f}' if _pd is not None else ''
                     print(f'  Parent final_reward_avg: {parent_final_reward:.4f} '
-                          f'(from {parent_phase_used} phase) — '
+                          f'(from {parent_phase_used} phase{_pd_txt}) — '
                           f'regression check armed')
             except Exception as _e:
                 # Print so silent failures are visible in the training log.
@@ -2021,29 +2026,55 @@ def train_curriculum_stage(stage_number: int, model_name: str,
 
     regression_flag = False
     regression_note = ''
+    # Prefer within-stage delta comparison: "how much did the policy
+    # IMPROVE during this stage's training vs. how much did it improve
+    # during the parent stage's training?" This is cross-stage-robust
+    # because adding / fading signal_scales between stages shifts the
+    # absolute reward level but leaves within-stage improvement as a
+    # clean apples-to-apples learning-rate signal. Fall back to raw-
+    # final comparison when baseline data isn't available (legacy
+    # parents saved before the metric was emitted).
     if stage_final_reward is not None and parent_final_reward is not None:
-        # Compare parent vs. child using a ln ratio per the repo
-        # convention (see feedback_ln_transform memory). A drop of
-        # more than ~10% ( ln < -0.105 ) is flagged as regression.
-        import math as _m
-        denom = abs(parent_final_reward) if parent_final_reward != 0 else 1e-6
-        ratio = (stage_final_reward - parent_final_reward) / denom
-        if ratio < -0.10:
-            regression_flag = True
-            regression_note = (
-                f' [REGRESSION vs parent v{parent_version}: '
-                f'{parent_final_reward:.3f} -> {stage_final_reward:.3f} '
-                f'({ratio*100:+.1f}%)]')
-            print(f'\n  ⚠  REGRESSION: final_reward_avg dropped '
-                  f'{parent_final_reward:.3f} -> {stage_final_reward:.3f} '
-                  f'({ratio*100:+.1f}%) vs parent v{parent_version}')
-            print(f'     Stage weights are being saved anyway — '
-                  f'rerun with adjusted hparams or revert to parent '
-                  f'({model_name}:{parent_version}).')
+        child_delta = (stage_final_reward - stage_baseline_reward
+                       if stage_baseline_reward is not None else None)
+        parent_delta = (parent_final_reward - parent_baseline_reward
+                        if parent_baseline_reward is not None else None)
+
+        if child_delta is not None and parent_delta is not None:
+            # Delta comparison: flag when child improvement is
+            # >20% worse than parent improvement. Tolerance higher
+            # than the raw-final version (was 10%) because within-
+            # stage deltas are noisier.
+            denom = max(0.01, abs(parent_delta))  # noise floor
+            ratio = (child_delta - parent_delta) / denom
+            label = (f'delta {parent_delta:+.4f} -> {child_delta:+.4f} '
+                     f'({ratio*100:+.1f}%)')
+            if ratio < -0.20:
+                regression_flag = True
+                regression_note = (f' [REGRESSION vs parent v{parent_version}: '
+                                   f'{label}]')
+                print(f'\n  ⚠  REGRESSION: within-stage improvement {label} '
+                      f'vs parent v{parent_version}')
+                print(f'     Stage weights saved anyway — rerun with adjusted '
+                      f'hparams or revert to {model_name}:{parent_version}.')
+            else:
+                print(f'\n  ✓ within-stage improvement: {label} vs parent '
+                      f'v{parent_version}')
         else:
-            print(f'\n  ✓ final_reward_avg: '
-                  f'{parent_final_reward:.3f} -> {stage_final_reward:.3f} '
-                  f'({ratio*100:+.1f}%)')
+            # Legacy fallback: parent didn't save baseline, use raw finals.
+            # Same 10% threshold as before.
+            denom = abs(parent_final_reward) if parent_final_reward != 0 else 1e-6
+            ratio = (stage_final_reward - parent_final_reward) / denom
+            label = (f'{parent_final_reward:.3f} -> {stage_final_reward:.3f} '
+                     f'({ratio*100:+.1f}%) [raw-final fallback; parent baseline missing]')
+            if ratio < -0.10:
+                regression_flag = True
+                regression_note = f' [REGRESSION vs parent v{parent_version}: {label}]'
+                print(f'\n  ⚠  REGRESSION: {label} vs parent v{parent_version}')
+                print(f'     Stage weights saved anyway — rerun with adjusted '
+                      f'hparams or revert to {model_name}:{parent_version}.')
+            else:
+                print(f'\n  ✓ final_reward_avg (fallback): {label}')
 
     training_stats = {
         'total_seconds': round(total_seconds, 1),
@@ -2054,6 +2085,7 @@ def train_curriculum_stage(stage_number: int, model_name: str,
         'mappo_metrics': mappo_metrics or None,
         'ppo_metrics': ppo_metrics or None,
         'regression_vs_parent': regression_flag,
+        'parent_baseline_reward': parent_baseline_reward,
         'parent_final_reward': parent_final_reward,
     }
     notes = f'Curriculum stage {stage_number}: {stage["name"]}' + regression_note
