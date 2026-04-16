@@ -278,6 +278,24 @@ class Monster(
     # Pack-signal event handlers (called by Pack when state changes)
     # ------------------------------------------------------------------
 
+    # ------------------------------------------------------------------
+    # Relationship stubs — Monster has no social graph but CombatMixin
+    # reads these during melee/ranged/grapple for the betrayal check.
+    # Always return None / noop so the creature-side shared combat
+    # code works uniformly against monster targets.
+    # ------------------------------------------------------------------
+
+    def get_relationship(self, other):
+        return None
+
+    def record_interaction(self, other, delta):
+        """Monsters don't track sentiment; absorb the call silently."""
+        return None
+
+    def gain_exp(self, amount: int):
+        """Monsters don't level up via XP. Track kills via _kills counter only."""
+        return None
+
     def on_pack_signal(self, signal_name: str, value):
         """Receive an event-driven signal from the Pack."""
         if signal_name == 'sleep':

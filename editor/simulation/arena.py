@@ -578,6 +578,134 @@ def generate_arena(cols: int = 20, rows: int = 20,
     }
 
 
+def spawn_monster(game_map, location, species: str,
+                  pack=None, sex: str = None, age: int = 20):
+    """Spawn a single Monster at the given location.
+
+    If `pack` is provided, register the monster with it.
+    """
+    from classes.monster import Monster
+    m = Monster(
+        current_map=game_map,
+        location=location,
+        species=species,
+        sex=sex,
+        age=age,
+    )
+    if pack is not None:
+        pack.add_member(m)
+
+    # Attach natural weapon if species defines one
+    _equip_natural_weapon(m)
+    return m
+
+
+def _equip_natural_weapon(monster):
+    """Clone the natural weapon from ITEMS and equip it."""
+    from data.db import ITEMS
+    from classes.inventory import Weapon, Slot
+    import copy as _copy
+    key = getattr(monster, 'natural_weapon_key', None)
+    if not key:
+        return
+    template = ITEMS.get(key)
+    if template is None or not isinstance(template, Weapon):
+        return
+    weapon = _copy.copy(template)
+    # Natural weapons auto-equip in HAND_R and don't drop on normal death
+    # (they drop via die() as Meat companion — see Monster.die)
+    monster.inventory.items.append(weapon)
+    monster.equipment[Slot.HAND_R] = weapon
+
+
+def spawn_monsters_for_stage(game_map, cols, rows,
+                             species_subset: list[str],
+                             count_per_species: int = 4,
+                             pack_size_cap: int = 4):
+    """Spawn monsters for a curriculum stage.
+
+    Each species gets one or more packs, placed with non-overlapping
+    territory circles. Returns (monsters, packs).
+    """
+    from classes.monster import Monster
+    from classes.pack import Pack
+    from classes.maps import MapKey
+    from data.db import MONSTER_SPECIES
+
+    monsters = []
+    packs = []
+
+    if not species_subset:
+        # Empty subset means "all species"
+        species_subset = list(MONSTER_SPECIES.keys())
+
+    # Collect candidate spawn tiles (walkable)
+    walkable_tiles = [key for key, t in game_map.tiles.items()
+                      if getattr(t, 'walkable', True)]
+    if not walkable_tiles:
+        return monsters, packs
+
+    placed_centers = []  # list of (MapKey, radius) for non-overlap check
+
+    for species in species_subset:
+        sp = MONSTER_SPECIES.get(species)
+        if sp is None:
+            continue
+        # Natural pack size to spawn: min(count_per_species, split_size-1)
+        split = int(sp.get('split_size', 4))
+        target_size = min(count_per_species,
+                          max(1, split - 1))
+        target_size = max(1, target_size)
+
+        # Try to find a territory center that doesn't overlap existing
+        # packs. Simple greedy scan.
+        center = None
+        for attempt in range(30):
+            candidate = random.choice(walkable_tiles)
+            terr_size = float(sp.get('territory_size', 8.0))
+            radius = terr_size * 3.0
+            # Check overlap with placed packs
+            ok = True
+            for placed_center, placed_radius in placed_centers:
+                dx = candidate.x - placed_center.x
+                dy = candidate.y - placed_center.y
+                if (dx * dx + dy * dy) ** 0.5 < (radius + placed_radius):
+                    ok = False
+                    break
+            if ok:
+                center = candidate
+                break
+        if center is None:
+            # Fallback: just pick any walkable
+            center = random.choice(walkable_tiles)
+
+        # Create pack
+        pack = Pack(species=species, territory_center=center,
+                    game_map=game_map)
+        packs.append(pack)
+        terr_size = float(sp.get('territory_size', 8.0))
+        placed_centers.append((center, terr_size * 3.0))
+
+        # Spawn members near center
+        for i in range(target_size):
+            # Random tile within territory radius
+            radius = int(terr_size)
+            dx = random.randint(-radius, radius)
+            dy = random.randint(-radius, radius)
+            sx = max(0, min(cols - 1, center.x + dx))
+            sy = max(0, min(rows - 1, center.y + dy))
+            spawn_loc = MapKey(sx, sy, 0)
+            if spawn_loc not in game_map.tiles:
+                spawn_loc = center
+            # Alternate sex
+            sex = 'male' if i % 2 == 0 else 'female'
+            m = spawn_monster(game_map, spawn_loc, species,
+                              pack=pack, sex=sex, age=20)
+            monsters.append(m)
+
+    return monsters, packs
+
+
 def _load_db_items():
     """Load all items from the DB and return instantiated objects by key."""
     import sqlite3, json

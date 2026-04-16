@@ -60,11 +60,21 @@ class Simulation:
         """
         self.game_map = arena['map']
         self.creatures = list(arena['creatures'])
+        # Optional monster + pack populations. Empty by default so existing
+        # creature-only training is untouched.
+        self.monsters = list(arena.get('monsters', []))
+        self.packs = list(arena.get('packs', []))
         self.cols = arena['cols']
         self.rows = arena['rows']
         self.tick_ms = tick_ms
         self.now = 0
         self.step_count = 0
+
+        # Networks for monster + pack inference. Set externally by the
+        # training runner. When None, monster_tick falls back to heuristic.
+        self.monster_net = None
+        self.pack_net = None
+        self.use_monster_heuristic = False
 
         # Curriculum env toggles — applied to every spawned creature
         self.hunger_drain_enabled = hunger_drain_enabled
@@ -248,6 +258,25 @@ class Simulation:
         for c in self.creatures:
             if c.is_alive:
                 c.update(self.now, self.cols, self.rows)
+
+        # Monster + pack tick (no-op when self.monsters is empty)
+        if self.monsters:
+            from classes.monster_runtime import monster_tick
+            monster_tick(self.monsters, self.packs, self.now,
+                         self.cols, self.rows,
+                         monster_net=self.monster_net,
+                         pack_net=self.pack_net,
+                         game_clock=self.game_clock,
+                         use_heuristic=self.use_monster_heuristic)
+            # Process monster ticks (regen, hunger drain, water) — same
+            # pattern as creatures
+            for m in self.monsters:
+                if m.is_alive:
+                    m.process_ticks(self.now)
+            # Drop dead monsters from the active list. Pack cleanup
+            # already fired inside Monster.die().
+            self.monsters = [m for m in self.monsters if m.is_alive]
+            self.packs = [p for p in self.packs if p.size > 0]
 
         # Deliver any sound events that fired during this tick to
         # creatures within range. Done after all creature updates so
