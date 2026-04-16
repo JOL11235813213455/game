@@ -24,13 +24,36 @@ sys.path.insert(0, str(_SRC_DIR))
 sys.path.insert(0, str(_EDITOR_DIR))
 
 from editor.simulation.torch_net import TorchCreatureNet, PPO, RolloutBuffer
-from editor.simulation.arena import generate_arena
+from editor.simulation.arena import generate_arena, spawn_monsters_for_stage
 from editor.simulation.headless import Simulation
 from classes.observation import OBSERVATION_SIZE, apply_preset_mask
 from classes.actions import NUM_ACTIONS
 from classes.creature import NeuralBehavior, StatWeightedBehavior
 from editor.simulation.net import CreatureNet
 from classes.relationship_graph import GRAPH
+
+
+def _inject_monsters(arena: dict, stage: dict | None):
+    """Spawn monsters into an arena based on curriculum stage config.
+
+    If the stage has monsters_enabled, add a monster population sized
+    by the species subset. Populates arena['monsters'] and arena['packs']
+    (empty lists if the stage has no monsters).
+    """
+    arena.setdefault('monsters', [])
+    arena.setdefault('packs', [])
+    if not stage or not stage.get('monsters_enabled'):
+        return arena
+    subset = stage.get('monster_species_subset', [])
+    monsters, packs = spawn_monsters_for_stage(
+        arena['map'], arena['cols'], arena['rows'],
+        species_subset=subset,
+        count_per_species=3,
+        pack_size_cap=4,
+    )
+    arena['monsters'].extend(monsters)
+    arena['packs'].extend(packs)
+    return arena
 
 SAVE_DIR = Path(__file__).parent.parent / 'models'
 SAVE_DIR.mkdir(exist_ok=True)
@@ -332,7 +355,8 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
               signal_scales: dict = None,
               sim_kwargs: dict = None,
               action_mask: np.ndarray = None,
-              viewer_extra: dict = None) -> TorchCreatureNet:
+              viewer_extra: dict = None,
+              stage: dict = None) -> TorchCreatureNet:
     """Phase 1: Multi-agent PPO — all creatures share weights.
 
     If goal_net is provided, runs hierarchical goal selection every
@@ -351,7 +375,13 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
     episode_rewards = []
     sim_kwargs = sim_kwargs or {}
     arena = generate_arena(**arena_kwargs)
+    arena = _inject_monsters(arena, stage)
     sim = Simulation(arena, **sim_kwargs)
+    # Monsters always run via heuristic until monster optimizer lands.
+    sim.use_monster_heuristic = True
+    # Creature-frozen stages (15-20) skip the PPO update step below via
+    # a local flag the rollout loop checks.
+    _creature_frozen = bool(stage and stage.get('creature_frozen'))
 
     for c in sim.creatures:
         c.behavior = None
@@ -545,9 +575,15 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
         # PPO update every rollout_len steps
         if len(buffer) >= rollout_len:
             obs_b, act_b, rew_b, val_b, lp_b, done_b, masks_b = buffer.get()
-            info = ppo.update(obs_b, act_b, rew_b, val_b, lp_b, done_b,
-                              action_masks_arr=masks_b)
-            buffer.clear()
+            if _creature_frozen:
+                # Curriculum stage froze creature net — skip the gradient
+                # step entirely. Buffer still drains.
+                buffer.clear()
+                info = {'policy_loss': 0.0, 'value_loss': 0.0, 'entropy': 0.0}
+            else:
+                info = ppo.update(obs_b, act_b, rew_b, val_b, lp_b, done_b,
+                                  action_masks_arr=masks_b)
+                buffer.clear()
             _log('mappo/policy_loss', info['policy_loss'], step)
             _log('mappo/value_loss', info['value_loss'], step)
             _log('mappo/entropy', info['entropy'], step)
@@ -557,8 +593,12 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
 
         # Goal PPO update
         if goal_buffer and goal_ppo and len(goal_buffer) >= 64:
-            g_info = goal_ppo.update(*goal_buffer.get())
-            goal_buffer.clear()
+            if _creature_frozen:
+                goal_buffer.clear()
+                g_info = {'policy_loss': 0.0, 'entropy': 0.0}
+            else:
+                g_info = goal_ppo.update(*goal_buffer.get())
+                goal_buffer.clear()
             _log('mappo/goal_policy_loss', g_info['policy_loss'], step)
             _log('mappo/goal_entropy', g_info['entropy'], step)
 
@@ -759,7 +799,8 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             signal_scales: dict = None,
             sim_kwargs: dict = None,
             action_mask: np.ndarray = None,
-            viewer_extra: dict = None) -> TorchCreatureNet:
+            viewer_extra: dict = None,
+            stage: dict = None) -> TorchCreatureNet:
     """Phase 3: Single-agent PPO against diverse opponents."""
     print(f'\n=== PPO Phase ({steps} steps) ===')
     arena_kwargs = arena_kwargs or {
@@ -784,7 +825,10 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
     episode_rewards = []
     sim_kwargs = sim_kwargs or {}
     arena = generate_arena(**arena_kwargs)
+    arena = _inject_monsters(arena, stage)
     sim = Simulation(arena, **sim_kwargs)
+    sim.use_monster_heuristic = True
+    _creature_frozen = bool(stage and stage.get('creature_frozen'))
 
     agent = sim.creatures[0]
     agent.behavior = None
@@ -944,9 +988,13 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
         # PPO update
         if len(buffer) >= rollout_len:
             obs_b, act_b, rew_b, val_b, lp_b, done_b, masks_b = buffer.get()
-            info = ppo.update(obs_b, act_b, rew_b, val_b, lp_b, done_b,
-                              action_masks_arr=masks_b)
-            buffer.clear()
+            if _creature_frozen:
+                buffer.clear()
+                info = {'policy_loss': 0.0, 'value_loss': 0.0, 'entropy': 0.0}
+            else:
+                info = ppo.update(obs_b, act_b, rew_b, val_b, lp_b, done_b,
+                                  action_masks_arr=masks_b)
+                buffer.clear()
             _log('ppo/policy_loss', info['policy_loss'], step)
             _log('ppo/value_loss', info['value_loss'], step)
             _log('ppo/entropy', info['entropy'], step)
@@ -956,8 +1004,12 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
 
         # Goal PPO update
         if goal_buffer and goal_ppo and len(goal_buffer) >= 64:
-            g_info = goal_ppo.update(*goal_buffer.get())
-            goal_buffer.clear()
+            if _creature_frozen:
+                goal_buffer.clear()
+                g_info = {'policy_loss': 0.0, 'entropy': 0.0}
+            else:
+                g_info = goal_ppo.update(*goal_buffer.get())
+                goal_buffer.clear()
             _log('ppo/goal_policy_loss', g_info['policy_loss'], step)
             _log('ppo/goal_entropy', g_info['entropy'], step)
 
@@ -1073,6 +1125,20 @@ def _load_curriculum_stage(stage_number: int) -> dict:
         mask = np.ones(NUM_ACTIONS, dtype=np.float32)  # empty = all allowed
     stage['action_mask'] = mask
     stage['fatigue_enabled'] = bool(row['fatigue_enabled'])
+    # Monster curriculum toggles (added by Monster feature). Older DBs
+    # may not have these columns — tolerate via keys() check.
+    cols = row.keys()
+    stage['monsters_enabled'] = (
+        bool(row['monsters_enabled']) if 'monsters_enabled' in cols else False)
+    stage['creature_frozen'] = (
+        bool(row['creature_frozen']) if 'creature_frozen' in cols else False)
+    stage['monster_trainable'] = (
+        bool(row['monster_trainable']) if 'monster_trainable' in cols else False)
+    stage['pack_trainable'] = (
+        bool(row['pack_trainable']) if 'pack_trainable' in cols else False)
+    stage['monster_species_subset'] = (
+        _json.loads(row['monster_species_subset'] or '[]')
+        if 'monster_species_subset' in cols else [])
     return stage
 
 
@@ -1477,7 +1543,8 @@ def train_curriculum_stage(stage_number: int, model_name: str,
                         signal_scales=signal_scales,
                         sim_kwargs=sim_kwargs,
                         action_mask=stage['action_mask'],
-                        viewer_extra=_viewer_extra)
+                        viewer_extra=_viewer_extra,
+                        stage=stage)
         net.export_to_numpy(SAVE_DIR / 'mappo.npz')
         print(f'  MAPPO complete in {time.time() - mappo_t0:.0f}s')
 
@@ -1522,7 +1589,8 @@ def train_curriculum_stage(stage_number: int, model_name: str,
                           signal_scales=signal_scales,
                           sim_kwargs=sim_kwargs,
                           action_mask=stage['action_mask'],
-                          viewer_extra=_viewer_extra)
+                          viewer_extra=_viewer_extra,
+                          stage=stage)
         print(f'  PPO complete in {time.time() - ppo_t0:.0f}s')
 
     total_seconds = time.time() - pipeline_t0
