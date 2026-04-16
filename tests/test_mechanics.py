@@ -5853,6 +5853,45 @@ check(f"lethal melee → target lifecycle 'dying' "
       f"lifecycle={_dwin_tgt.lifecycle_state})",
       _dwin_tgt.lifecycle_state == 'dying')
 
+# Action gating by action_state + lifecycle FSMs
+from classes.actions import compute_dynamic_mask, Action, NUM_ACTIONS
+
+_gate_arena = generate_arena(cols=10, rows=10, num_creatures=1)
+_gate_sim = Simulation(_gate_arena)
+_gatec = _gate_sim.creatures[0]
+
+# Baseline: normal + adult → many actions available
+_baseline_mask = compute_dynamic_mask(_gatec)
+check("baseline has more than just WAIT available",
+      _baseline_mask.sum() > 1)
+
+# Stun → only WAIT
+_gatec.apply_condition(_gate_sim, 'stunned', severity=1,
+                        duration_ms=5_000, skip_resist=True)
+_stun_mask = compute_dynamic_mask(_gatec)
+check(f"stunned creature: only WAIT available (mask sum={_stun_mask.sum()})",
+      _stun_mask.sum() == 1.0 and _stun_mask[Action.WAIT] == 1.0)
+_gatec.remove_condition(_gate_sim, 'stunned')
+
+# Sleeping → only WAIT
+_gatec.apply_condition(_gate_sim, 'sleeping', severity=1,
+                        duration_ms=5_000, skip_resist=True)
+_sleep_mask = compute_dynamic_mask(_gatec)
+check(f"sleeping creature: only WAIT (mask sum={_sleep_mask.sum()})",
+      _sleep_mask.sum() == 1.0 and _sleep_mask[Action.WAIT] == 1.0)
+_gatec.remove_condition(_gate_sim, 'sleeping')
+
+# Lifecycle: dying → only WAIT
+_gatec.enter_dying(_gate_sim)
+_dying_mask = compute_dynamic_mask(_gatec)
+check(f"dying creature: only WAIT (mask sum={_dying_mask.sum()})",
+      _dying_mask.sum() == 1.0 and _dying_mask[Action.WAIT] == 1.0)
+# Heal resolves dying → mask restored (creature is adult again)
+_gatec.resolve_dying(_gate_sim, 'heal')
+_post_heal_mask = compute_dynamic_mask(_gatec)
+check("healed creature's mask restored",
+      _post_heal_mask.sum() > 1)
+
 # ==========================================================================
 print("\n=== Game Mode FSM (Phase 5) ===")
 from main.game_mode import (GameModeFSM, TopState, SubState,

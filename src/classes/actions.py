@@ -360,6 +360,25 @@ def compute_dynamic_mask(creature, context: dict = None) -> np.ndarray:
             if not creature.arousal_action_allowed(act):
                 mask[act] = 0
 
+    # Phase 1 compound action_state gating — stunned/sleeping/dead
+    # creatures can't select any action except WAIT. (WAIT left open
+    # so sampling has at least one valid action; blocking the whole
+    # mask would break action-distribution sampling.) Only fires when
+    # the FSM has been built — pre-FSM creatures behave unchanged.
+    _action_fsm = getattr(creature, 'action_state', None)
+    if _action_fsm is not None and _action_fsm.current != 'normal':
+        mask[:] = 0
+        mask[Action.WAIT] = 1
+
+    # Phase 2 lifecycle gating — creatures not in a living, active
+    # lifecycle state (egg/gestating/dying/dead) can't act beyond
+    # WAIT. Runs AFTER arousal/action_state gates so the most
+    # restrictive check wins.
+    _lc = getattr(creature, 'lifecycle_state', 'adult')
+    if _lc in ('egg', 'gestating', 'dying', 'dead'):
+        mask[:] = 0
+        mask[Action.WAIT] = 1
+
     return mask
 
 
