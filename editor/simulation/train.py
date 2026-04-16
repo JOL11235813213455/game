@@ -1415,8 +1415,16 @@ def _run_mappo_parallel(net, ppo, steps, arena_kwargs, signal_scales,
 
 
 def _run_ppo_parallel(net, ppo, steps, arena_kwargs, signal_scales,
-                      sim_kwargs, action_mask, n_workers, viewer_extra=None):
-    """Parallel PPO: N workers run independent agent episodes."""
+                      sim_kwargs, action_mask, n_workers, viewer_extra=None,
+                      adaptive_hparams: bool = True,
+                      out_metrics: dict = None):
+    """Parallel PPO: N workers run independent agent episodes.
+
+    See run_ppo for semantics of ``adaptive_hparams`` and
+    ``out_metrics``. The scheduler runs on the main process only —
+    worker subprocesses get fresh weights each iteration, so only
+    the main PPO's lr/ent_coef need to evolve.
+    """
     from classes.parallel_training import ParallelTrainer
 
     rollout_per_worker = max(256, 2048 // n_workers)
@@ -1431,6 +1439,8 @@ def _run_ppo_parallel(net, ppo, steps, arena_kwargs, signal_scales,
 
     print(f'  Parallel PPO: {n_workers} workers × {rollout_per_worker} steps, '
           f'target={steps}')
+    scheduler = HparamScheduler(ppo, steps) if adaptive_hparams else None
+    iter_reward_avgs: list[float] = []
 
     def _export_weights(torch_net):
         sd = torch_net.state_dict()
@@ -1493,11 +1503,24 @@ def _run_ppo_parallel(net, ppo, steps, arena_kwargs, signal_scales,
             n_samples = len(merged['rewards'])
             total_collected += n_samples
 
+            update_info = None
             if n_samples > 0:
-                info = ppo.update(
+                if scheduler is not None:
+                    scheduler.step(total_collected)
+                update_info = ppo.update(
                     merged['obs'], merged['actions'], merged['rewards'],
                     merged['values'], merged['log_probs'], merged['dones'],
                     action_masks_arr=merged['masks'])
+                if scheduler is not None:
+                    scheduler.observe_entropy(update_info['entropy'])
+                # TensorBoard logs mirror the sequential path so the
+                # dashboard shows the same series regardless of
+                # parallel mode. Step-indexed on collected samples.
+                _log('ppo/policy_loss', update_info['policy_loss'], total_collected)
+                _log('ppo/value_loss', update_info['value_loss'], total_collected)
+                _log('ppo/entropy', update_info['entropy'], total_collected)
+                _log('ppo/lr', ppo.get_lr(), total_collected)
+                _log('ppo/ent_coef', ppo.ent_coef, total_collected)
 
             iter_count += 1
             pct = 100.0 * min(1.0, total_collected / max(1, steps))
@@ -1516,6 +1539,9 @@ def _run_ppo_parallel(net, ppo, steps, arena_kwargs, signal_scales,
                 })
             avg_r_iter = (float(merged['rewards'].mean())
                           if n_samples > 0 else 0.0)
+            if n_samples > 0:
+                iter_reward_avgs.append(avg_r_iter)
+                _log('ppo/iter_reward', avg_r_iter, total_collected)
             end_info = {
                 **(viewer_extra or {}),
                 'progress_pct': round(pct, 1),
@@ -1540,6 +1566,24 @@ def _run_ppo_parallel(net, ppo, steps, arena_kwargs, signal_scales,
                       f'elapsed={_fmt_eta(elapsed)}  ETA={_fmt_eta(eta)}')
                 last_print_t = now
 
+    if out_metrics is not None and iter_reward_avgs:
+        # Baseline = first 20% of iterations, final = last 20%.
+        # Matches run_ppo's convention (first/last 20% of episodes)
+        # so downstream regression checks compare apples to apples.
+        n = len(iter_reward_avgs)
+        head = max(1, n // 5)
+        tail = max(1, n // 5)
+        out_metrics.update({
+            'phase': 'ppo',
+            'baseline_reward_avg': float(np.mean(iter_reward_avgs[:head])),
+            'final_reward_avg': float(np.mean(iter_reward_avgs[-tail:])),
+            'episodes': n,
+            'lr_final': ppo.get_lr(),
+            'ent_coef_final': ppo.ent_coef,
+            'ent_drops': scheduler._ent_drops if scheduler else 0,
+            'parallel': True,
+            'n_workers': n_workers,
+        })
     return net
 
 
@@ -1821,7 +1865,8 @@ def train_curriculum_stage(stage_number: int, model_name: str,
                 sim_kwargs=sim_kwargs,
                 action_mask=stage['action_mask'],
                 n_workers=parallel,
-                viewer_extra=_viewer_extra)
+                viewer_extra=_viewer_extra,
+                out_metrics=ppo_metrics)
         else:
             net = run_ppo(net, ppo, steps=stage['ppo_steps'],
                           checkpoint_dir=SAVE_DIR,
