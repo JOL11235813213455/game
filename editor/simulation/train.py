@@ -1406,15 +1406,37 @@ def _run_mappo_parallel(net, ppo, steps, arena_kwargs, signal_scales,
                     merged['values'], merged['log_probs'], merged['dones'],
                     action_masks_arr=merged['masks'])
 
-            # Write viewer state
+            # Write viewer state — same episode-length accounting as
+            # parallel PPO so the viewer's episode rows populate during
+            # MAPPO too (they were blank before: viewer reads deaths/
+            # mean_ep_len/min/max/in_flight, parallel MAPPO didn't emit).
             worker_stats = []
             for r in rollouts:
+                dones = r.get('dones')
+                completed = []
+                in_flight = 0
+                if dones is not None and len(dones) > 0:
+                    run = 0
+                    for d in dones:
+                        run += 1
+                        if d:
+                            completed.append(run)
+                            run = 0
+                    in_flight = run
+                mean_comp = float(np.mean(completed)) if completed else 0.0
+                min_comp = min(completed) if completed else 0
+                max_comp = max(completed) if completed else 0
                 worker_stats.append({
                     'worker_id': r['worker_id'],
                     'alive': int((r['dones'] == 0).sum()) if len(r['dones']) > 0 else 0,
                     'total': len(r['rewards']),
                     'avg_reward': float(r['rewards'].mean()) if len(r['rewards']) > 0 else 0,
                     'samples': len(r['rewards']),
+                    'deaths': len(completed),
+                    'mean_ep_len': round(mean_comp, 1),
+                    'min_ep_len': min_comp,
+                    'max_ep_len': max_comp,
+                    'in_flight': in_flight,
                 })
             write_parallel_state(worker_stats, phase='MAPPO',
                                   step=total_collected,
