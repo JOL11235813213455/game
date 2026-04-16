@@ -41,7 +41,8 @@ _SECTION_SIZES = {
     'self_genetics': 7, 'self_reputation': 6,
     'tile_deep': 21, 'tile_liquid': 25, 'spatial_walls': 25, 'spatial_features': 12,
     'tile_items': MAX_TILE_ITEMS * 9, 'census': 45, 'census_audio': 3,
-    'world_time': 13, 'temporal': 14, 'trends': 11, 'time_since': 12,
+    'world_time': 6, 'monster_slots': 30, 'monster_summary': 3,
+    'temporal': 14, 'trends': 11, 'time_since': 12,
     'reward_signals': 17, 'social_topology': 17, 'water_awareness': 5,
     'hearing_section': 12,
 }
@@ -1331,21 +1332,16 @@ def build_observation(creature, cols: int, rows: int,
     from classes.sound import hearing_observation
     obs.extend(hearing_observation(creature, observation_tick or 0))
 
-    # ==== SECTION 23: WORLD / TIME (13) ====
+    # ==== SECTION 23: WORLD / TIME (6) ====
+    # Simplified: 2 time floats (is_daytime, light_level) + 4 god balances.
+    # Previous 9-value time block (sin/cos hour, sun/moon elevations, phases,
+    # day-of-year) collapsed into the two values that actually drive behavior.
     if game_clock:
-        h = game_clock.hour
-        obs.append(math.sin(h / 24.0 * 2 * math.pi))
-        obs.append(math.cos(h / 24.0 * 2 * math.pi))
         obs.append(1.0 if game_clock.is_day else 0.0)
-        obs.append(game_clock.sun_elevation)
-        obs.append(game_clock.moon_elevation)
-        obs.append(game_clock.moon_brightness)
-        obs.append(game_clock.moon_phase)
-        obs.append(game_clock.day / 365.0)
         light = game_clock.sun_elevation if game_clock.is_day else game_clock.moon_brightness * game_clock.moon_elevation
         obs.append(light)
     else:
-        obs.extend([0.0] * 9)
+        obs.extend([0.0] * 2)
 
     if world_data:
         for pair in [('Aelora','Xarith'), ('Solmara','Vaelkor'),
@@ -1353,6 +1349,19 @@ def build_observation(creature, cols: int, rows: int,
             obs.append(world_data.get_balance(pair[0]))
     else:
         obs.extend([0.0] * 4)
+
+    # ==== SECTION 23b: MONSTER PERCEPTION SLOTS (30) ====
+    # Pre-allocated zero slots for future monster observation. 5 slots with
+    # 6 values each: distance, size_norm, threat, is_fleeing, pack_size,
+    # in_territory. Always zero during creature-only curriculum stages
+    # (1-14); populated when monsters enter the world (stage 21+).
+    # Keeps OBSERVATION_SIZE stable across curriculum phases — no
+    # checkpoint retraining needed when monsters arrive.
+    obs.extend([0.0] * 30)
+
+    # ==== SECTION 23c: MONSTER SUMMARY (3) ====
+    # monster_count_nearby, nearest_monster_distance, in_monster_territory
+    obs.extend([0.0] * 3)
 
     # ==== SECTION 24: TEMPORAL IMMEDIATE (14) ====
     prev = prev_snapshot or {}
@@ -1569,12 +1578,14 @@ SECTION_RANGES = {
     'census_visible':   (378, 423),
     'census_audible':   (423, 426),
     'per_engaged':      (426, 696),
-    'world_time':       (696, 709),
-    'temporal':         (709, 723),
-    'trends':           (723, 734),
-    'time_since':       (734, 746),
-    'reward_signals':   (746, 763),
-    'transforms':       (763, OBSERVATION_SIZE),
+    'world_time':       (696, 702),       # shrunk from 13 to 6 (time simplified)
+    'monster_slots':    (702, 732),       # pre-allocated 5 slots x 6 floats
+    'monster_summary':  (732, 735),       # count, nearest dist, in_territory
+    'temporal':         (735, 749),
+    'trends':           (749, 760),
+    'time_since':       (760, 772),
+    'reward_signals':   (772, 789),
+    'transforms':       (789, OBSERVATION_SIZE),
 }
 
 # Semantic groups for easy mask building
@@ -1583,7 +1594,7 @@ SECTION_GROUPS = {
                'census_audible', 'per_engaged'],
     'combat': ['self_combat', 'self_weapon'],
     'vision': ['spatial_walls', 'spatial_features', 'tile_deep', 'tile_items',
-               'census_visible', 'per_engaged'],
+               'census_visible', 'per_engaged', 'monster_slots', 'monster_summary'],
     'hearing': ['census_audible'],
     'economy': ['self_economy', 'self_inv_texture', 'self_crafting', 'self_slots'],
     'religion': ['world_time'],  # god balances are in world_time + transforms

@@ -289,20 +289,15 @@ delta_piety                     float   piety now - last tick
 delta_equipment_kpi             float   sign(change) * ln(|change| + 1) / 5
 
 ================================================================================
-SECTION 20: WORLD / TIME (13 values)
+SECTION 20: WORLD / TIME (6 values)
 ================================================================================
 
-# Day/night cycle (from GameClock)
-world_hour_sin                  float   sin(hour / 24 * 2π) — circular encoding
-world_hour_cos                  float   cos(hour / 24 * 2π) — circular encoding
-world_is_day                    bool    1.0 if between sunrise and sunset
-world_sun_elevation             float   0-1 (0 = horizon, 1 = zenith)
-world_moon_elevation            float   0-1
-world_moon_brightness           float   0-1 (0 = new moon, 1 = full moon)
-world_moon_phase                float   0-1 (0 = full, 0.5 = new, 1 = full again)
-world_game_day                  float   day count / 365 (normalized)
+# Simplified from 13 values to 6. Time-of-day collapsed to a boolean and a
+# continuous light level — the two signals that actually drive behavior.
+# Moon phase, sun elevation, day-of-year removed as noise until a feature
+# actually consumes them.
 
-# Light level affects sight range and stealth effectiveness
+world_is_day                    bool    1.0 if between sunrise and sunset
 world_light_level               float   sun_elevation if day, moon_brightness * moon_elevation if night
 
 # God world balances (all 4 axes)
@@ -310,6 +305,33 @@ world_balance_order_chaos       float   -1 to 1
 world_balance_compassion_wrath  float   -1 to 1
 world_balance_truth_lies        float   -1 to 1
 world_balance_life_death        float   -1 to 1
+
+================================================================================
+SECTION 20b: MONSTER PERCEPTION SLOTS (30 values — 5 slots x 6 floats)
+================================================================================
+
+# Pre-allocated zero slots for future monster observation. During creature-only
+# curriculum stages (1-14), every value reads zero. When monsters enter the
+# world (stage 21+), slots populate from the creature's perception.
+# Reserved now to keep OBSERVATION_SIZE stable across curriculum phases.
+#
+# Per slot (repeated 5x):
+#   monster_slot_N_distance       float   Manhattan distance / sight_range
+#   monster_slot_N_size_norm      float   SIZE_UNITS / 32 (0=tiny, 1=colossal)
+#   monster_slot_N_threat         float   threat score / 20
+#   monster_slot_N_is_fleeing     bool    1.0 if the monster is running away
+#   monster_slot_N_pack_size      float   pack.size / 10
+#   monster_slot_N_in_territory   bool    1.0 if in this monster's pack territory
+
+================================================================================
+SECTION 20c: MONSTER SUMMARY (3 values)
+================================================================================
+
+# Aggregates across all visible monsters beyond the 5 slots.
+
+monsters_nearby_count           float   count / 10
+nearest_monster_distance        float   min distance / sight_range (1.0 if none)
+in_monster_territory            bool    1.0 if any pack's territory circle covers this tile
 
 ================================================================================
 SECTION 21: REWARD SIGNAL CURRENT VALUES (17 values)
