@@ -37,7 +37,8 @@ CREATE TABLE IF NOT EXISTS species (
     preferred_deity    TEXT,
     egg_sprite         TEXT REFERENCES sprites(name),
     model_name         TEXT,
-    model_version      INTEGER
+    model_version      INTEGER,
+    meat_value         REAL
 );
 CREATE TABLE IF NOT EXISTS species_stats (
     species_name TEXT NOT NULL REFERENCES species(name),

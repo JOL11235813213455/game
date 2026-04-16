@@ -499,6 +499,7 @@ def _migrate(con: sqlite3.Connection) -> None:
         "ALTER TABLE tile_sets ADD COLUMN speed_modifier REAL",
         "ALTER TABLE tile_templates ADD COLUMN bg_color TEXT",
         "ALTER TABLE tile_sets ADD COLUMN bg_color TEXT",
+        "ALTER TABLE species ADD COLUMN meat_value REAL",
     ]:
         try:
             con.execute(stmt)
@@ -578,6 +579,10 @@ def _load_species(con: sqlite3.Connection) -> None:
             block['prudishness'] = r['prudishness']
         block['size'] = r['size'] or 'medium'
         block['can_swim'] = bool(r['can_swim']) if 'can_swim' in r.keys() else False
+        _SIZE_MEAT = {'tiny': 0.05, 'small': 0.15, 'medium': 0.3,
+                      'large': 0.6, 'huge': 1.0, 'colossal': 1.5}
+        meat = r['meat_value'] if 'meat_value' in r.keys() else None
+        block['meat_value'] = meat if meat is not None else _SIZE_MEAT.get(block['size'], 0.3)
         if r['egg_sprite'] is not None:
             block['egg_sprite'] = r['egg_sprite']
         SPECIES[name] = block

@@ -557,6 +557,7 @@ def migrate_db():
     x_max INTEGER NOT NULL,
     y_max INTEGER NOT NULL,
     z_max INTEGER NOT NULL DEFAULT 0)""",
+            "ALTER TABLE species ADD COLUMN meat_value REAL",
         ]:
             try:
                 con.execute(stmt)

@@ -126,6 +126,10 @@ class Creature(
 
         # Size: from species default or override
         self.size = size or species_data.get('size', 'medium')
+        # Meat value: hunger restored when consumed. Auto-derived from size if not set.
+        _SIZE_MEAT = {'tiny': 0.05, 'small': 0.15, 'medium': 0.3,
+                      'large': 0.6, 'huge': 1.0, 'colossal': 1.5}
+        self.meat_value: float = species_data.get('meat_value', _SIZE_MEAT.get(self.size, 0.3))
         # Sentience: from species (non-sentient = crickets, deer, fish)
         self.sentient: bool = bool(species_data.get('sentient', True))
         # Prudishness: species default with per-creature override

@@ -783,6 +783,7 @@ class SqlTab(ttk.Frame):
             ('species', 'tile_scale'): 'Visual size multiplier on the tile grid',
             ('species', 'composite_name'): 'Composite sprite for multi-layer rendering',
             ('species', 'prudishness'): 'Default prudishness (0.0=uninhibited, 1.0=highly prudish)',
+            ('species', 'meat_value'): 'Hunger restored when consumed as food (NULL = auto from size)',
             ('species_stats', 'stat'): 'Stat name (strength, agility, etc.)',
             ('species_stats', 'value'): 'Base stat value for this species',
             # creatures
