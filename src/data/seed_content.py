@@ -1146,6 +1146,141 @@ def seed():
            mappo=20000, es_gens=15, es_vars=40, es_steps=2000, ppo=120000,
            resume=13, allowed_actions=_s12_actions, fatigue_enabled=True)
 
+    # ==================================================================
+    # MONSTER SPECIES (9 starter archetypes)
+    # ==================================================================
+
+    def _monster(name, **kwargs):
+        stats = kwargs.pop('stats', {})
+        cols = [
+            'name', 'sprite_name', 'composite_name', 'tile_scale', 'size',
+            'description', 'meat_value', 'diet', 'compatible_tile',
+            'split_size', 'territory_size', 'territory_scales',
+            'dominance_type', 'collapse_on_alpha_death', 'active_hours',
+            'swimming', 'ambush_tactics', 'protect_young',
+            'natural_weapon_key', 'egg_sprite',
+        ]
+        defaults = {
+            'sprite_name': None, 'composite_name': None, 'tile_scale': 1.0,
+            'size': 'medium', 'description': '', 'meat_value': None,
+            'diet': 'carnivore', 'compatible_tile': None, 'split_size': 4,
+            'territory_size': 8.0, 'territory_scales': True,
+            'dominance_type': 'contest', 'collapse_on_alpha_death': False,
+            'active_hours': 'diurnal', 'swimming': False,
+            'ambush_tactics': False, 'protect_young': True,
+            'natural_weapon_key': None, 'egg_sprite': None,
+        }
+        defaults.update(kwargs)
+        vals = [name] + [
+            int(defaults[k]) if isinstance(defaults[k], bool) else defaults[k]
+            for k in cols[1:]
+        ]
+        placeholders = ','.join(['?'] * len(cols))
+        con.execute(
+            f'INSERT OR REPLACE INTO monster_species ({",".join(cols)}) '
+            f'VALUES ({placeholders})', vals
+        )
+        con.execute('DELETE FROM monster_species_stats WHERE species_name=?',
+                    (name,))
+        for stat, val in stats.items():
+            con.execute(
+                'INSERT INTO monster_species_stats VALUES (?,?,?)',
+                (name, stat, val)
+            )
+
+    # Stats are (STR, AGL, PER, VIT, INT, CHR, LCK). CHR set to 10 (neutral)
+    # since monsters have no charisma but stat formulas still read it.
+
+    _monster('grey_wolf',
+             description='Pack predator. Coordinates ambushes at dawn/dusk.',
+             size='medium', diet='carnivore',
+             split_size=10, territory_size=8.0, territory_scales=True,
+             dominance_type='contest', collapse_on_alpha_death=False,
+             active_hours='crepuscular', protect_young=True,
+             stats={'strength': 14, 'agility': 16, 'perception': 14,
+                    'vitality': 12, 'intelligence': 8, 'charisma': 10,
+                    'luck': 10})
+
+    _monster('giant_rat',
+             description='Diseased swarm. Splits often, spreads fast.',
+             size='small', diet='omnivore', compatible_tile='garbage',
+             split_size=20, territory_size=5.0, territory_scales=True,
+             dominance_type='contest', collapse_on_alpha_death=False,
+             active_hours='nocturnal', swimming=True, ambush_tactics=True,
+             stats={'strength': 6, 'agility': 14, 'perception': 10,
+                    'vitality': 6, 'intelligence': 4, 'charisma': 10,
+                    'luck': 12})
+
+    _monster('cave_bear',
+             description='Apex solitary. Fiercely territorial when young are nearby.',
+             size='huge', diet='omnivore', compatible_tile='berry_bush',
+             split_size=2, territory_size=12.0, territory_scales=False,
+             dominance_type='none', collapse_on_alpha_death=False,
+             active_hours='diurnal', protect_young=True,
+             stats={'strength': 20, 'agility': 8, 'perception': 12,
+                    'vitality': 20, 'intelligence': 6, 'charisma': 10,
+                    'luck': 10})
+
+    _monster('spitter_lizard',
+             description='Ranged harasser. Skulks in cover and spits acid.',
+             size='small', diet='carnivore',
+             split_size=6, territory_size=6.0, territory_scales=True,
+             dominance_type='contest', collapse_on_alpha_death=False,
+             active_hours='diurnal', swimming=True, ambush_tactics=True,
+             stats={'strength': 8, 'agility': 14, 'perception': 16,
+                    'vitality': 8, 'intelligence': 6, 'charisma': 10,
+                    'luck': 10})
+
+    _monster('honey_bees',
+             description='Fixed-range colony. Queen stays at center; workers swarm intruders.',
+             size='tiny', diet='herbivore', compatible_tile='flower',
+             split_size=60, territory_size=5.0, territory_scales=False,
+             dominance_type='fixed', collapse_on_alpha_death=True,
+             active_hours='diurnal', protect_young=True,
+             stats={'strength': 2, 'agility': 18, 'perception': 10,
+                    'vitality': 2, 'intelligence': 2, 'charisma': 10,
+                    'luck': 8})
+
+    _monster('dire_orc',
+             description='Intelligent humanoid. Coordinated war parties with brutal politics.',
+             size='large', diet='omnivore',
+             split_size=8, territory_size=8.0, territory_scales=True,
+             dominance_type='contest', collapse_on_alpha_death=False,
+             active_hours='diurnal', ambush_tactics=True, protect_young=True,
+             stats={'strength': 18, 'agility': 10, 'perception': 12,
+                    'vitality': 16, 'intelligence': 10, 'charisma': 10,
+                    'luck': 8})
+
+    _monster('deep_crawler',
+             description='Ambush pair. Vast silent territory, deadly to lone travelers.',
+             size='medium', diet='carnivore',
+             split_size=3, territory_size=12.0, territory_scales=False,
+             dominance_type='contest', collapse_on_alpha_death=False,
+             active_hours='nocturnal', ambush_tactics=True,
+             stats={'strength': 16, 'agility': 12, 'perception': 18,
+                    'vitality': 12, 'intelligence': 8, 'charisma': 10,
+                    'luck': 12})
+
+    _monster('wild_boar',
+             description='Herbivore defender. Aggressive when young are nearby.',
+             size='medium', diet='herbivore', compatible_tile='forest_floor',
+             split_size=7, territory_size=7.0, territory_scales=True,
+             dominance_type='contest', collapse_on_alpha_death=False,
+             active_hours='diurnal', protect_young=True,
+             stats={'strength': 14, 'agility': 10, 'perception': 8,
+                    'vitality': 14, 'intelligence': 6, 'charisma': 10,
+                    'luck': 10})
+
+    _monster('army_ants',
+             description='Fixed swarm with queen. Kill the queen to collapse the threat.',
+             size='tiny', diet='carnivore',
+             split_size=50, territory_size=6.0, territory_scales=False,
+             dominance_type='fixed', collapse_on_alpha_death=True,
+             active_hours='diurnal', ambush_tactics=True,
+             stats={'strength': 2, 'agility': 16, 'perception': 8,
+                    'vitality': 2, 'intelligence': 2, 'charisma': 10,
+                    'luck': 6})
+
     con.commit()
     con.close()
 

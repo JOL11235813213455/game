@@ -46,6 +46,36 @@ CREATE TABLE IF NOT EXISTS species_stats (
     value        INTEGER NOT NULL,
     PRIMARY KEY (species_name, stat)
 );
+CREATE TABLE IF NOT EXISTS monster_species (
+    name                     TEXT PRIMARY KEY,
+    sprite_name              TEXT REFERENCES sprites(name),
+    composite_name           TEXT,
+    tile_scale               REAL NOT NULL DEFAULT 1.0,
+    size                     TEXT NOT NULL DEFAULT 'medium',
+    description              TEXT NOT NULL DEFAULT '',
+    meat_value               REAL,
+    diet                     TEXT NOT NULL DEFAULT 'carnivore',
+    compatible_tile          TEXT,
+    split_size               INTEGER NOT NULL DEFAULT 4,
+    territory_size           REAL NOT NULL DEFAULT 8.0,
+    territory_scales         INTEGER NOT NULL DEFAULT 1,
+    dominance_type           TEXT NOT NULL DEFAULT 'contest',
+    collapse_on_alpha_death  INTEGER NOT NULL DEFAULT 0,
+    active_hours             TEXT NOT NULL DEFAULT 'diurnal',
+    swimming                 INTEGER NOT NULL DEFAULT 0,
+    ambush_tactics           INTEGER NOT NULL DEFAULT 0,
+    protect_young            INTEGER NOT NULL DEFAULT 1,
+    natural_weapon_key       TEXT,
+    egg_sprite               TEXT REFERENCES sprites(name),
+    model_name               TEXT,
+    model_version            INTEGER
+);
+CREATE TABLE IF NOT EXISTS monster_species_stats (
+    species_name TEXT NOT NULL REFERENCES monster_species(name),
+    stat         TEXT NOT NULL,
+    value        INTEGER NOT NULL,
+    PRIMARY KEY (species_name, stat)
+);
 CREATE TABLE IF NOT EXISTS items (
     class                      TEXT NOT NULL DEFAULT 'Item',
     key                        TEXT PRIMARY KEY,

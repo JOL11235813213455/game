@@ -222,6 +222,39 @@ class Ammunition(Stackable):
         self.status_dc                 = status_dc      # DC for status resist
 
 
+class Meat(Consumable):
+    """Meat dropped from a killed creature or monster.
+
+    Carries the species tag of the deceased so consumers can detect
+    cannibalism. Spoils in 48 game-hours unless cooked (+48hr) or
+    preserved (permanent).
+    """
+
+    def __init__(self, *args,
+                 species: str = None,
+                 meat_value: float = 0.3,
+                 spoil_tick: int = 0,
+                 is_cooked: bool = False,
+                 is_preserved: bool = False,
+                 is_monster_meat: bool = False,
+                 **kwargs):
+        # Hunger restoration maps to Consumable's heal_amount conceptually,
+        # but we use meat_value directly when a creature eats meat.
+        kwargs.setdefault('is_food', True)
+        super().__init__(*args, **kwargs)
+        self.species = species
+        self.meat_value = meat_value
+        self.spoil_tick = spoil_tick
+        self.is_cooked = is_cooked
+        self.is_preserved = is_preserved
+        self.is_monster_meat = is_monster_meat
+
+    def is_spoiled(self, now: int) -> bool:
+        if self.is_preserved:
+            return False
+        return now >= self.spoil_tick
+
+
 class Equippable(Item):
 
     def __init__(

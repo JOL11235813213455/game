@@ -14,6 +14,7 @@ _loaded  = False
 SPECIES:     dict[str, dict] = {}
 PLAYABLE:    dict[str, dict] = {}
 NONPLAYABLE: dict[str, dict] = {}
+MONSTER_SPECIES: dict[str, dict] = {}
 CREATURES:   dict[str, dict] = {}
 DIALOGUE:    dict[int, dict] = {}      # id → dialogue node dict
 DIALOGUE_ROOTS: dict[str, list] = {}   # conversation → [root node ids]
@@ -500,6 +501,36 @@ def _migrate(con: sqlite3.Connection) -> None:
         "ALTER TABLE tile_templates ADD COLUMN bg_color TEXT",
         "ALTER TABLE tile_sets ADD COLUMN bg_color TEXT",
         "ALTER TABLE species ADD COLUMN meat_value REAL",
+        """CREATE TABLE IF NOT EXISTS monster_species (
+    name                     TEXT PRIMARY KEY,
+    sprite_name              TEXT,
+    composite_name           TEXT,
+    tile_scale               REAL NOT NULL DEFAULT 1.0,
+    size                     TEXT NOT NULL DEFAULT 'medium',
+    description              TEXT NOT NULL DEFAULT '',
+    meat_value               REAL,
+    diet                     TEXT NOT NULL DEFAULT 'carnivore',
+    compatible_tile          TEXT,
+    split_size               INTEGER NOT NULL DEFAULT 4,
+    territory_size           REAL NOT NULL DEFAULT 8.0,
+    territory_scales         INTEGER NOT NULL DEFAULT 1,
+    dominance_type           TEXT NOT NULL DEFAULT 'contest',
+    collapse_on_alpha_death  INTEGER NOT NULL DEFAULT 0,
+    active_hours             TEXT NOT NULL DEFAULT 'diurnal',
+    swimming                 INTEGER NOT NULL DEFAULT 0,
+    ambush_tactics           INTEGER NOT NULL DEFAULT 0,
+    protect_young            INTEGER NOT NULL DEFAULT 1,
+    natural_weapon_key       TEXT,
+    egg_sprite               TEXT,
+    model_name               TEXT,
+    model_version            INTEGER
+)""",
+        """CREATE TABLE IF NOT EXISTS monster_species_stats (
+    species_name TEXT NOT NULL REFERENCES monster_species(name),
+    stat         TEXT NOT NULL,
+    value        INTEGER NOT NULL,
+    PRIMARY KEY (species_name, stat)
+)""",
     ]:
         try:
             con.execute(stmt)
@@ -521,6 +552,7 @@ def load(db_path: Path = _DB_PATH) -> None:
     try:
         _migrate(con)
         _load_species(con)
+        _load_monster_species(con)
         # Schedules and jobs load BEFORE creatures so creature rows can
         # resolve their job_key into a live Job instance at load time.
         _load_schedules(con)
@@ -590,6 +622,52 @@ def _load_species(con: sqlite3.Connection) -> None:
             PLAYABLE[name] = block
         else:
             NONPLAYABLE[name] = block
+
+
+def _load_monster_species(con: sqlite3.Connection) -> None:
+    """Load monster species templates into MONSTER_SPECIES dict."""
+    try:
+        rows = con.execute('SELECT * FROM monster_species').fetchall()
+    except sqlite3.OperationalError:
+        return
+    try:
+        stat_rows = con.execute(
+            'SELECT species_name, stat, value FROM monster_species_stats'
+        ).fetchall()
+    except sqlite3.OperationalError:
+        stat_rows = []
+
+    stats_by_species: dict[str, dict] = {r['name']: {} for r in rows}
+    for r in stat_rows:
+        stats_by_species[r['species_name']][Stat(r['stat'])] = r['value']
+
+    _SIZE_MEAT = {'tiny': 0.05, 'small': 0.15, 'medium': 0.3,
+                  'large': 0.6, 'huge': 1.0, 'colossal': 1.5}
+
+    for r in rows:
+        name = r['name']
+        block = stats_by_species[name]
+        block['sprite_name'] = r['sprite_name']
+        block['composite_name'] = r['composite_name']
+        block['tile_scale'] = r['tile_scale'] if r['tile_scale'] is not None else 1.0
+        block['size'] = r['size'] or 'medium'
+        meat = r['meat_value']
+        block['meat_value'] = meat if meat is not None else _SIZE_MEAT.get(block['size'], 0.3)
+        block['diet'] = r['diet'] or 'carnivore'
+        block['compatible_tile'] = r['compatible_tile']
+        block['split_size'] = int(r['split_size'] or 4)
+        block['territory_size'] = float(r['territory_size'] or 8.0)
+        block['territory_scales'] = bool(r['territory_scales'])
+        block['dominance_type'] = r['dominance_type'] or 'contest'
+        block['collapse_on_alpha_death'] = bool(r['collapse_on_alpha_death'])
+        block['active_hours'] = r['active_hours'] or 'diurnal'
+        block['swimming'] = bool(r['swimming'])
+        block['ambush_tactics'] = bool(r['ambush_tactics'])
+        block['protect_young'] = bool(r['protect_young'])
+        block['natural_weapon_key'] = r['natural_weapon_key']
+        block['egg_sprite'] = r['egg_sprite']
+        block['description'] = r['description'] or ''
+        MONSTER_SPECIES[name] = block
 
 
 def _load_creatures(con: sqlite3.Connection) -> None:
