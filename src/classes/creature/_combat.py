@@ -184,9 +184,10 @@ class CombatMixin:
             result['reason'] = 'too_close'
             return result
 
-        # Ammo check
+        # Ammo check — natural weapons can have infinite_ammo (e.g. acid spit)
         ammo = None
-        if weapon.ammunition_type:
+        infinite = getattr(weapon, 'infinite_ammo', False)
+        if weapon.ammunition_type and not infinite:
             for item in self.inventory.items:
                 if isinstance(item, Ammunition) and item.name == weapon.ammunition_type and item.quantity > 0:
                     ammo = item

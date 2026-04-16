@@ -182,10 +182,24 @@ class Simulation:
                     item.tick_gestation(carried_by_mother=False)
                     eggs_seen.append((item, 'tile', tile, key))
 
-        # --- Phase 2: hatch ready eggs into live creatures ---
+        # --- Phase 2: hatch ready eggs into live creatures or monsters ---
         for egg, owner_kind, owner_ref, loc in eggs_seen:
             if not egg.ready_to_hatch:
                 continue
+            # Monster eggs use a separate hatch path
+            if getattr(egg, '_is_monster_egg', False):
+                from classes.monster_runtime import hatch_monster_egg
+                child_pack = hatch_monster_egg(egg, self.game_map, loc)
+                if child_pack is None:
+                    continue
+                child, pack = child_pack
+                if owner_kind == 'tile' and egg in owner_ref.inventory.items:
+                    owner_ref.inventory.items.remove(egg)
+                if pack not in self.packs:
+                    self.packs.append(pack)
+                self.monsters.append(child)
+                continue
+
             child = egg.hatch(self.game_map, loc)
             if child is None:
                 continue

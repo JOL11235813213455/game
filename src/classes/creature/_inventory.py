@@ -13,6 +13,26 @@ def _item_score(item) -> float:
     return score
 
 
+def _broadcast_cannibal_rumor(eater):
+    """Broadcast a wide negative sentiment adjustment when a creature
+    eats its own species. Every witness within hearing range records a
+    -15 sentiment hit against the eater.
+    """
+    from classes.relationship_graph import GRAPH
+    if eater.current_map is None:
+        return
+    ex, ey = eater.location.x, eater.location.y
+    # Witness radius = eater's sight range (conservative)
+    radius = eater.stats.active[Stat.SIGHT_RANGE]()
+    from classes.creature import Creature
+    for other in Creature.on_same_map(eater.current_map):
+        if other is eater or not other.is_alive:
+            continue
+        d = abs(other.location.x - ex) + abs(other.location.y - ey)
+        if d <= radius:
+            GRAPH.record_interaction(other.uid, eater.uid, -15.0)
+
+
 class InventoryMixin:
     """Equipment and inventory methods for Creature."""
 
@@ -208,11 +228,42 @@ class InventoryMixin:
         Applies buffs as timed stat mods (duration in seconds).
         Decrements quantity; removes from inventory when empty.
         Returns True if consumed.
+
+        Meat handling: if the item is Meat, apply hunger restoration from
+        meat_value, check spoilage (refuse if spoiled), detect cannibalism
+        (meat.species == self.species) and apply penalty signals for
+        reward tracking.
         """
         if not isinstance(item, Consumable) or item not in self.inventory.items:
             return False
         if item.quantity <= 0:
             return False
+
+        # Meat-specific handling (cannibalism + spoilage)
+        from classes.inventory import Meat
+        if isinstance(item, Meat):
+            now_ms = getattr(self, '_last_update_time', 0)
+            if item.is_spoiled(now_ms):
+                # Spoiled: HP penalty for creatures
+                hp = self.stats.base.get(Stat.HP_CURR, 0)
+                self.stats.base[Stat.HP_CURR] = max(1, hp - 3)
+                # Count as consumed but no benefit
+                self.inventory.items.remove(item)
+                return False
+            # Apply hunger restoration from meat_value
+            self.eat(item.meat_value)
+            # Cannibalism detection
+            if item.species and item.species == self.species:
+                # Flag for reward system
+                self._cannibalism_events = getattr(self, '_cannibalism_events', 0) + 1
+                # Broadcast rumor penalty via nearby witnesses
+                _broadcast_cannibal_rumor(self)
+                # Piety loss if devoted
+                if getattr(self, 'deity', None) is not None:
+                    self.piety = max(0.0, self.piety - 0.1)
+            # Remove consumed meat
+            self.inventory.items.remove(item)
+            return True
 
         # Apply buffs as stat mods with unique source key
         from classes.creature import Creature

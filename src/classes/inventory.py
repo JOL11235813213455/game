@@ -293,6 +293,8 @@ class Weapon(Equippable):
         ,stamina_cost: int = 0
         ,status_effect: str = None
         ,status_dc: int = 0
+        ,is_natural: bool = False
+        ,infinite_ammo: bool = False
         ,**kwargs
         ):
         super().__init__(*args, **kwargs)
@@ -309,6 +311,8 @@ class Weapon(Equippable):
         self.stamina_cost     = stamina_cost      # 0 = use default formula
         self.status_effect    = status_effect      # e.g. 'poison', 'bleed'
         self.status_dc        = status_dc          # DC for status resist
+        self.is_natural       = is_natural         # monster-origin (e.g. acid spit)
+        self.infinite_ammo    = infinite_ammo      # ranged natural weapons don't need ammo
 
 class Wearable(Equippable):
     pass

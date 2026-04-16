@@ -150,24 +150,32 @@ def _propagate_member_events(monster):
 
 
 def _pack_housekeeping(pack, all_packs: list, now: int):
-    """Per-tick pack maintenance: splits, merges, challenges."""
+    """Per-tick pack maintenance: splits, merges, challenges, combat."""
     # Split if size exceeds threshold
     if pack.size >= pack.split_size:
         _trigger_split(pack, all_packs)
 
-    # Merge check — look for compatible nearby packs
+    # Cross-pack interactions
     for other in all_packs:
         if other is pack or other.size == 0:
             continue
-        if not pack.can_merge_with(other):
-            continue
-        # Proximity check: any member of one pack within 2 tiles of any
-        # member of the other
-        if _packs_in_contact(pack, other):
-            _trigger_merge(pack, other, all_packs)
-            return  # this pack merged; stop iteration
+        # Merge (small + compatible + same species)
+        if pack.can_merge_with(other):
+            if _packs_in_contact(pack, other):
+                _trigger_merge(pack, other, all_packs)
+                return
+        # Hostile engagement (territory overlap, no merge)
+        elif pack.is_hostile_to(other):
+            if _packs_in_contact(pack, other):
+                _trigger_cross_pack_combat(pack, other, now)
 
-    # Pregnancy/egg laying (pregnant females drop eggs after gestation end)
+    # Intra-pack dominance challenges (contest-type only, small chance per tick)
+    if pack.dominance_type == 'contest' and pack.size >= 2:
+        import random as _rng
+        if _rng.random() < 0.002:  # ~1 challenge per 500 ticks on average
+            _trigger_dominance_challenge(pack, now)
+
+    # Pregnancy/egg laying
     for m in list(pack.members):
         if getattr(m, 'is_pregnant', False):
             gest_end = getattr(m, '_gestation_tick_end', None)
@@ -175,6 +183,74 @@ def _pack_housekeeping(pack, all_packs: list, now: int):
                 _lay_egg(m, pack, now)
                 m.is_pregnant = False
                 m._gestation_tick_end = None
+                m._eggs_laid = getattr(m, '_eggs_laid', 0) + 1
+
+
+def _trigger_cross_pack_combat(pack_a, pack_b, now):
+    """Monsters from hostile packs attack each other on sight.
+
+    Lightweight: pick one member from each that's in contact, apply
+    melee_attack. This fires per tick while both packs remain in
+    contact, producing attrition combat.
+    """
+    from classes.stats import Stat
+    # Find a pair in contact and make them fight
+    for ma in pack_a.members:
+        for mb in pack_b.members:
+            d = abs(ma.location.x - mb.location.x) + abs(ma.location.y - mb.location.y)
+            if d <= 1:
+                # Attack occurs; stronger side tends to win
+                ma.melee_attack(mb, now)
+                return
+
+
+def _trigger_dominance_challenge(pack, now):
+    """A lower-ranked member challenges the one above it. First-to-50%-HP loses."""
+    from classes.stats import Stat
+    from classes.monster import Monster
+
+    # Pick a sex bucket with at least 2 members
+    for bucket in (pack.members_m, pack.members_f):
+        if len(bucket) >= 2:
+            # Challenger picks a random non-alpha to challenge the one above
+            challenger_idx = None
+            import random as _rng
+            challenger_idx = _rng.randint(1, len(bucket) - 1)
+            challenger = Monster.by_uid(bucket[challenger_idx])
+            target = Monster.by_uid(bucket[challenger_idx - 1])
+            if challenger is None or target is None:
+                continue
+            # Simplified challenge: one melee exchange, winner swaps rank
+            # with loser. Tracks _dominance_wins for reward.
+            ch_hp_before = challenger.stats.active[Stat.HP_CURR]()
+            tg_hp_before = target.stats.active[Stat.HP_CURR]()
+            ch_hp_max = max(1, challenger.stats.active[Stat.HP_MAX]())
+            tg_hp_max = max(1, target.stats.active[Stat.HP_MAX]())
+
+            # Both hit each other once
+            challenger.melee_attack(target, now)
+            target.melee_attack(challenger, now)
+
+            ch_hp_after = challenger.stats.active[Stat.HP_CURR]()
+            tg_hp_after = target.stats.active[Stat.HP_CURR]()
+
+            ch_loss = ch_hp_before - ch_hp_after
+            tg_loss = tg_hp_before - tg_hp_after
+
+            # Whoever hit 50% first (or took more damage) loses
+            ch_ratio = ch_hp_after / ch_hp_max
+            tg_ratio = tg_hp_after / tg_hp_max
+
+            if ch_ratio < tg_ratio:
+                # Target won; no rank swap
+                target._dominance_wins = getattr(target, '_dominance_wins', 0) + 1
+            else:
+                # Challenger won; swap ranks
+                bucket[challenger_idx - 1], bucket[challenger_idx] = \
+                    bucket[challenger_idx], bucket[challenger_idx - 1]
+                challenger._dominance_wins = getattr(challenger, '_dominance_wins', 0) + 1
+                pack._update_alpha_flags()
+            return
 
 
 def _trigger_split(pack, all_packs: list):
@@ -279,7 +355,7 @@ def _lay_egg(female, pack, now: int):
     if tile is None:
         return
     egg = Egg(
-        creature=None,  # hatched later by _hatch_monster_egg
+        creature=None,
         mother_species=female.species,
         father_species=female.species,
         name=f'{female.species}_egg',
@@ -289,4 +365,38 @@ def _lay_egg(female, pack, now: int):
     )
     egg._pack_ref = pack
     egg._is_monster_egg = True
+    # Monster eggs use a fixed gestation period of 30 days (same default
+    # as creatures). Stored as a real-time tick target for the sim's
+    # daily lifecycle pass to advance via tick_gestation.
+    egg.gestation_period = 30
     tile.inventory.items.append(egg)
+
+
+def hatch_monster_egg(egg, game_map, location):
+    """Hatch a monster egg into a live Monster, placed in the pack
+    referenced by the egg. Returns the newborn Monster or None.
+
+    Called from the simulation's daily lifecycle pass for eggs with
+    _is_monster_egg=True (the creature lifecycle pass handles normal
+    creature eggs separately).
+    """
+    from classes.monster import Monster
+    from classes.pack import Pack
+    species = egg.mother_species or 'grey_wolf'
+    pack_ref = getattr(egg, '_pack_ref', None)
+    # Prefer the referenced pack; if it no longer exists, find or create
+    # a solitary pack at the hatch location.
+    if pack_ref is None or pack_ref.size == 0:
+        pack_ref = Pack(species=species, territory_center=location,
+                        game_map=game_map)
+    import random as _rng
+    sex = _rng.choice(('male', 'female'))
+    child = Monster(
+        current_map=game_map,
+        location=location,
+        species=species,
+        sex=sex,
+        age=0,
+    )
+    pack_ref.add_member(child)
+    return child, pack_ref
