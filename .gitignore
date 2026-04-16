@@ -7,4 +7,6 @@ __pycache__/
 .DS_Store
 *.pkl
 editor/training.db
+editor/runs/*
 *.jsonl
+editor/models/_live_state.json
