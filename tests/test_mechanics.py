@@ -1770,7 +1770,7 @@ m44 = make_map(cols=10, rows=10)
 actor = make_creature(m44, x=5, y=5, stats={Stat.STR: 14, Stat.AGL: 12}, name='Actor')
 dummy = make_creature(m44, x=6, y=5, stats={Stat.VIT: 12, Stat.PER: 10, Stat.LVL: 3}, name='Dummy')
 
-check(f"NUM_ACTIONS = {NUM_ACTIONS}", NUM_ACTIONS == 32)
+check(f"NUM_ACTIONS = {NUM_ACTIONS}", NUM_ACTIONS == 33)
 
 # Move via dispatch (auto-direction)
 ctx = {'cols': 10, 'rows': 10}
@@ -3557,7 +3557,7 @@ dfr = dispatch(disp_farm2, Action.FARM, {'cols': 8, 'rows': 8})
 check("dispatch FARM succeeds", dfr.get('success'))
 
 # Action counts
-check("NUM_ACTIONS is 32", NUM_ACTIONS == 32)
+check("NUM_ACTIONS is 33", NUM_ACTIONS == 33)
 
 # ==========================================================================
 # Processing recipes (cook / smelt)
@@ -5891,6 +5891,40 @@ _gatec.resolve_dying(_gate_sim, 'heal')
 _post_heal_mask = compute_dynamic_mask(_gatec)
 check("healed creature's mask restored",
       _post_heal_mask.sum() > 1)
+
+# ---- INVITE_TO_PARTY action + pack formation ----
+_ip_arena = generate_arena(cols=10, rows=10, num_creatures=2)
+_ip_sim = Simulation(_ip_arena)
+_host, _guest = _ip_sim.creatures[0], _ip_sim.creatures[1]
+
+# Fresh: no packs
+check("host has no pack initially", _host.pack is None)
+check("guest has no pack initially", _guest.pack is None)
+
+# Guest barely knows host → invite fails on rel_below_threshold
+_r = _host.invite_to_party(_guest, now=_ip_sim.now)
+check(f"low-rel invite fails ({_r['reason']})",
+      not _r['accepted'] and _r['reason'] == 'rel_below_threshold')
+
+# Build up guest's positive sentiment toward host
+GRAPH.record_interaction(_guest.uid, _host.uid, 15.0)
+# Boost host CHR + seed random for deterministic acceptance
+_host.stats.base[Stat.CHR] = 18
+_r2 = _host.invite_to_party(_guest, now=_ip_sim.now)
+# With rel=15 dc=5, CHR 18 gives +4 mod so roll 1-20+4 >= 5: always succeeds
+check(f"positive-rel invite accepted ({_r2['reason']}, "
+      f"accepted={_r2['accepted']})",
+      _r2['accepted'] is True)
+check("host now has a pack", _host.pack is not None)
+check("guest joined the host's pack", _guest.pack is _host.pack)
+check(f"pack size = 2 (was {_host.pack.size})",
+      _host.pack.size == 2)
+
+# Arousal gate: engaged host can't invite
+_host.arousal_on_combat(_ip_sim)
+_mask_engaged = compute_dynamic_mask(_host)
+check("INVITE_TO_PARTY blocked when engaged",
+      _mask_engaged[Action.INVITE_TO_PARTY] == 0)
 
 # ==========================================================================
 print("\n=== Game Mode FSM (Phase 5) ===")

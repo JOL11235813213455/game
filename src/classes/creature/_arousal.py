@@ -85,6 +85,9 @@ def _build_action_gates():
     # Calm-only: mating is deliberate + vulnerable (Q7.8 headline rule)
     if hasattr(Action, 'PAIR'):
         gates[Action.PAIR] = calm_only
+    # Calm-only: inviting to your crew isn't something you do mid-combat.
+    if hasattr(Action, 'INVITE_TO_PARTY'):
+        gates[Action.INVITE_TO_PARTY] = calm_only
     # Calm + recovering: deliberative actions
     for name in ('CRAFT', 'TRADE', 'SLEEP', 'PRAY'):
         if hasattr(Action, name):

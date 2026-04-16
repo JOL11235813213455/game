@@ -811,3 +811,97 @@ class SocialMixin:
             target.record_interaction(self, -0.5)
 
         return result
+
+    # ------------------------------------------------------------------
+    # Phase 4b: party / pack formation via invite
+    # ------------------------------------------------------------------
+    def invite_to_party(self, target, now: int = 0) -> dict:
+        """Invite a target creature to join/form a pack with self.
+
+        Acceptance rules (per project_creature_party_formation memory):
+          - Target's sentiment toward self must be >= INVITE_THRESHOLD
+            (default 5.0). Loved admirers accept; strangers/enemies don't.
+          - d20 contest with CHR-driven inviter mod vs a rel-weighted
+            target DC. Liked targets are more likely to say yes.
+          - If self has no pack, one is created on-the-fly with self as
+            the first member and the species' rank_formula. Target
+            becomes the second member.
+          - If self already has a pack and it's at split_size, reject.
+
+        Returns a dict: accepted (bool), reason (str), pack (Pack|None).
+        """
+        import random
+        from classes.relationship_graph import GRAPH
+        from classes.pack import Pack
+
+        INVITE_THRESHOLD = 5.0
+
+        result = {'accepted': False, 'reason': '', 'pack': None}
+
+        if target is self:
+            result['reason'] = 'self_target'
+            return result
+        if not hasattr(target, 'pack'):
+            result['reason'] = 'target_not_creature'
+            return result
+        if not target.is_alive or not self.is_alive:
+            result['reason'] = 'not_alive'
+            return result
+
+        edge = GRAPH.get_edge(target.uid, self.uid)
+        rel_val = edge[0] if edge else 0.0
+        if rel_val < INVITE_THRESHOLD:
+            result['reason'] = 'rel_below_threshold'
+            return result
+
+        # Already in the same pack?
+        if target.pack is not None and self.pack is target.pack:
+            result['reason'] = 'already_together'
+            return result
+
+        # CHR-driven contest: inviter's CHR mod + d20 vs rel-proportional DC.
+        # Strong positive rel lowers DC (happy to join); threshold is the
+        # floor (below = auto-reject above).
+        chr_mod = (self.stats.active[Stat.CHR]() - 10) // 2
+        dc = max(5, 15 - int(rel_val))
+        roll = random.randint(1, 20) + chr_mod
+        if roll < dc:
+            result['reason'] = 'declined'
+            self.record_interaction(target, -0.5)
+            return result
+
+        # Acceptance path: create pack if needed, then add target.
+        if self.pack is None:
+            self.pack = Pack(species=self.species,
+                             territory_center=self.location,
+                             game_map=self.current_map)
+            if self.sex == 'male':
+                self.pack.members_m = [self.uid]
+            else:
+                self.pack.members_f = [self.uid]
+            self.pack._pack_formed_at = now
+
+        pack = self.pack
+        if pack.size >= max(2, pack.split_size):
+            result['reason'] = 'pack_full'
+            return result
+
+        if target.sex == 'male':
+            if target.uid not in pack.members_m:
+                pack.members_m.append(target.uid)
+        else:
+            if target.uid not in pack.members_f:
+                pack.members_f.append(target.uid)
+        target.pack = pack
+
+        try:
+            pack.rank_members_by_formula()
+        except Exception:
+            pass
+
+        self.record_interaction(target, 1.5)
+        target.record_interaction(self, 1.5)
+
+        result['accepted'] = True
+        result['pack'] = pack
+        return result

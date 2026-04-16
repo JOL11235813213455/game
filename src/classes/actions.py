@@ -64,6 +64,9 @@ class Action(IntEnum):
     # Debt
     REPAY_LOAN = 31
 
+    # Social / pack formation (Phase 4b)
+    INVITE_TO_PARTY = 32
+
 
 NUM_ACTIONS = len(Action)
 
@@ -718,5 +721,16 @@ def _dispatch_inner(creature, action: int, context: dict) -> dict:
         if lender is None:
             return {'success': False, 'reason': 'lender_gone'}
         return creature.repay_loan(lender, creature.gold, now)
+
+    if action == Action.INVITE_TO_PARTY:
+        if target is None:
+            target = next(
+                (o for o in creature.nearby(max_dist=2, include_ghosts=False)
+                 if hasattr(o, 'pack')),
+                None
+            )
+            if target is None:
+                return {'success': False, 'reason': 'no_target'}
+        return creature.invite_to_party(target, now)
 
     return {'success': False, 'reason': 'unknown_action'}
