@@ -1843,12 +1843,27 @@ def train_curriculum_stage(stage_number: int, model_name: str,
             parent_version = row_info['version']
             print(f'  Resumed from: {rname} v{parent_version}')
             try:
-                import json as _json
-                _ps = _json.loads(row_info.get('training_stats') or '{}')
+                # _load_model_from_db already json.loads the training_stats
+                # blob at src/editor/simulation/train.py:275, so row_info
+                # holds a dict. Tolerate either dict or legacy JSON string
+                # so this keeps working if the loader changes again.
+                _ps_raw = row_info.get('training_stats')
+                if isinstance(_ps_raw, str):
+                    import json as _json
+                    _ps = _json.loads(_ps_raw or '{}')
+                elif isinstance(_ps_raw, dict):
+                    _ps = _ps_raw
+                else:
+                    _ps = {}
                 parent_final_reward = _ps.get('final_reward_avg')
                 parent_phase_used = _ps.get('final_reward_phase')
-            except Exception:
-                pass
+                if parent_final_reward is not None:
+                    print(f'  Parent final_reward_avg: {parent_final_reward:.4f} '
+                          f'(from {parent_phase_used} phase) — '
+                          f'regression check armed')
+            except Exception as _e:
+                # Print so silent failures are visible in the training log.
+                print(f'  (parent stats lookup failed: {_e!r})')
         except Exception as e:
             print(f'  Resume failed ({e}) — starting fresh')
 
