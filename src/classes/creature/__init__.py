@@ -607,6 +607,36 @@ class Creature(
         self._rows = rows
         self.process_ticks(now)
 
+        # Phase 7 arousal: if a hostile is in sight, nudge the
+        # arousal FSM. calm → alert; alert/engaged are unaffected
+        # (already responding). Throttled to once every 500ms via
+        # the _last_hostile_check gate to avoid per-tick O(nearby)
+        # cost when the creature's already alert.
+        _sim = getattr(self, '_active_sim', None)
+        if _sim is not None and self.is_alive:
+            _last = getattr(self, '_last_hostile_check', 0)
+            if now - _last >= 500:
+                self._last_hostile_check = now
+                if self.arousal_state == 'calm':
+                    if self._any_hostile_in_sight():
+                        self.arousal_on_hostile_seen(_sim)
+
+    def _any_hostile_in_sight(self) -> bool:
+        """True iff at least one nearby creature has negative rel (< -5).
+
+        Matches the convention used by _check_work_interrupt — same
+        threshold, consistent "this is a threat" definition.
+        """
+        if self.current_map is None:
+            return False
+        from classes.relationship_graph import GRAPH
+        rels = GRAPH.edges_from(self.uid)
+        for obj in self.nearby():
+            rel = rels.get(obj.uid)
+            if rel and rel[0] < -5:
+                return True
+        return False
+
     def _do_behavior(self, _now: int):
         """Behavior think tick."""
         if self.behavior is not None:
