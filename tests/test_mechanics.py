@@ -1422,6 +1422,174 @@ npc_b = make_creature(m40, x=5, y=0, stats={Stat.PER: 12}, name='NPCB')
 npc_roots = npc_a.start_conversation(npc_b, 'greeting')
 check("NPC-to-NPC conversation works", len(npc_roots) >= 1)
 
+# ---- Extended guards (rel/has_item/lifecycle/profession/level_max) ----
+# Use a fresh conversation name so these don't contaminate the above tests.
+DIALOGUE[20] = {
+    'id': 20, 'conversation': 'guards', 'species': None,
+    'creature_key': None, 'parent_id': None, 'speaker': 'npc',
+    'text': 'Good to see you, friend.',
+    'char_conditions': {'rel_min': 5.0},
+    'world_conditions': {}, 'quest_conditions': {},
+    'behavior': None, 'effects': {}, 'sort_order': 0,
+    'children': [],
+}
+DIALOGUE[21] = {
+    'id': 21, 'conversation': 'guards', 'species': None,
+    'creature_key': None, 'parent_id': None, 'speaker': 'npc',
+    'text': 'You again.',
+    'char_conditions': {'rel_max': -5.0},
+    'world_conditions': {}, 'quest_conditions': {},
+    'behavior': None, 'effects': {}, 'sort_order': 0,
+    'children': [],
+}
+DIALOGUE[22] = {
+    'id': 22, 'conversation': 'guards', 'species': None,
+    'creature_key': None, 'parent_id': None, 'speaker': 'npc',
+    'text': 'Welcome, keyholder.',
+    'char_conditions': {'has_item': 'KeyOfTheCity'},
+    'world_conditions': {}, 'quest_conditions': {},
+    'behavior': None, 'effects': {}, 'sort_order': 0,
+    'children': [],
+}
+DIALOGUE[23] = {
+    'id': 23, 'conversation': 'guards', 'species': None,
+    'creature_key': None, 'parent_id': None, 'speaker': 'npc',
+    'text': 'Move along, recruit.',
+    'char_conditions': {'level_max': 2},
+    'world_conditions': {}, 'quest_conditions': {},
+    'behavior': None, 'effects': {}, 'sort_order': 0,
+    'children': [],
+}
+DIALOGUE_ROOTS['guards'] = [20, 21, 22, 23]
+
+from classes.relationship_graph import GRAPH
+from classes.inventory import Item
+
+# rel_min: friend-only line hidden at neutral
+neutral_p = make_creature(m40, x=6, y=0, stats={Stat.PER: 12, Stat.LVL: 5},
+                          name='NeutralP')
+neutral_n = make_creature(m40, x=7, y=0, stats={Stat.PER: 12}, name='NeutralN')
+neutral_roots = neutral_p.start_conversation(neutral_n, 'guards')
+check("rel_min line hidden at neutral rel",
+      not any(n['text'] == 'Good to see you, friend.' for n in neutral_roots))
+check("rel_max line hidden at neutral rel",
+      not any(n['text'] == 'You again.' for n in neutral_roots))
+neutral_p.end_conversation()
+
+# Bump rel high, friend line appears
+GRAPH.record_interaction(neutral_p.uid, neutral_n.uid, 10.0)
+friend_roots = neutral_p.start_conversation(neutral_n, 'guards')
+check("rel_min line appears when rel >= threshold",
+      any(n['text'] == 'Good to see you, friend.' for n in friend_roots))
+neutral_p.end_conversation()
+
+# rel_max: enemy line appears when rel is deeply negative
+enemy_p = make_creature(m40, x=8, y=0, stats={Stat.PER: 12, Stat.LVL: 5},
+                        name='EnemyP')
+enemy_n = make_creature(m40, x=9, y=0, stats={Stat.PER: 12}, name='EnemyN')
+GRAPH.record_interaction(enemy_p.uid, enemy_n.uid, -10.0)
+enemy_roots = enemy_p.start_conversation(enemy_n, 'guards')
+check("rel_max line appears when rel <= threshold",
+      any(n['text'] == 'You again.' for n in enemy_roots))
+enemy_p.end_conversation()
+
+# has_item: keyholder line gated on inventory
+key_p = make_creature(m40, x=10, y=0, stats={Stat.PER: 12, Stat.LVL: 5},
+                      name='KeyP')
+key_n = make_creature(m40, x=11, y=0, stats={Stat.PER: 12}, name='KeyN')
+no_key_roots = key_p.start_conversation(key_n, 'guards')
+check("has_item guard blocks when item absent",
+      not any(n['text'] == 'Welcome, keyholder.' for n in no_key_roots))
+key_p.end_conversation()
+key_p.inventory.items.append(Item(name='KeyOfTheCity', weight=0.1, value=0.0))
+with_key_roots = key_p.start_conversation(key_n, 'guards')
+check("has_item guard passes when item present",
+      any(n['text'] == 'Welcome, keyholder.' for n in with_key_roots))
+key_p.end_conversation()
+
+# level_max: recruit line hidden for high-level character
+high_p = make_creature(m40, x=12, y=0, stats={Stat.PER: 12, Stat.LVL: 10},
+                       name='HighP')
+high_n = make_creature(m40, x=13, y=0, stats={Stat.PER: 12}, name='HighN')
+high_roots = high_p.start_conversation(high_n, 'guards')
+check("level_max line hidden for high level",
+      not any(n['text'] == 'Move along, recruit.' for n in high_roots))
+high_p.end_conversation()
+
+low_p = make_creature(m40, x=14, y=0, stats={Stat.PER: 12, Stat.LVL: 1},
+                      name='LowP')
+low_n = make_creature(m40, x=15, y=0, stats={Stat.PER: 12}, name='LowN')
+low_roots = low_p.start_conversation(low_n, 'guards')
+check("level_max line shown for low level",
+      any(n['text'] == 'Move along, recruit.' for n in low_roots))
+low_p.end_conversation()
+
+# ---- Branch node (auto_advance) ----
+DIALOGUE[30] = {
+    'id': 30, 'conversation': 'branching', 'species': None,
+    'creature_key': None, 'parent_id': None, 'speaker': 'npc',
+    'text': '<branch>',
+    'char_conditions': {}, 'world_conditions': {}, 'quest_conditions': {},
+    'behavior': None, 'effects': {'auto_advance': True},
+    'sort_order': 0, 'children': [31],
+}
+DIALOGUE[31] = {
+    'id': 31, 'conversation': 'branching', 'species': None,
+    'creature_key': None, 'parent_id': 30, 'speaker': 'npc',
+    'text': 'Landed here automatically.',
+    'char_conditions': {}, 'world_conditions': {}, 'quest_conditions': {},
+    'behavior': None, 'effects': {}, 'sort_order': 0, 'children': [32],
+}
+DIALOGUE[32] = {
+    'id': 32, 'conversation': 'branching', 'species': None,
+    'creature_key': None, 'parent_id': 31, 'speaker': 'player',
+    'text': 'OK.',
+    'char_conditions': {}, 'world_conditions': {}, 'quest_conditions': {},
+    'behavior': None, 'effects': {}, 'sort_order': 0, 'children': [],
+}
+DIALOGUE_ROOTS['branching'] = [30]
+
+bp = make_creature(m40, x=16, y=0, stats={Stat.PER: 12}, name='BranchP')
+bn = make_creature(m40, x=17, y=0, stats={Stat.PER: 12}, name='BranchN')
+branch_roots = bp.start_conversation(bn, 'branching')
+check(f"Branch root found: {len(branch_roots)}", len(branch_roots) == 1)
+returned = bp.advance_dialogue(30, bn)
+check("Branch auto-advanced past node 30",
+      bp.dialogue is not None and bp.dialogue['current_node_id'] == 31)
+check(f"Branch returned target's children: {[c['id'] for c in returned]}",
+      len(returned) == 1 and returned[0]['id'] == 32)
+bp.end_conversation()
+
+# ---- Goto (cross-conversation jump) ----
+DIALOGUE[40] = {
+    'id': 40, 'conversation': 'entry', 'species': None,
+    'creature_key': None, 'parent_id': None, 'speaker': 'npc',
+    'text': 'Ask the barkeep.',
+    'char_conditions': {}, 'world_conditions': {}, 'quest_conditions': {},
+    'behavior': None, 'effects': {'goto': 'barkeep'},
+    'sort_order': 0, 'children': [],
+}
+DIALOGUE[41] = {
+    'id': 41, 'conversation': 'barkeep', 'species': None,
+    'creature_key': None, 'parent_id': None, 'speaker': 'npc',
+    'text': 'What can I get you?',
+    'char_conditions': {}, 'world_conditions': {}, 'quest_conditions': {},
+    'behavior': None, 'effects': {}, 'sort_order': 0, 'children': [],
+}
+DIALOGUE_ROOTS['entry'] = [40]
+DIALOGUE_ROOTS['barkeep'] = [41]
+
+gp = make_creature(m40, x=18, y=0, stats={Stat.PER: 12}, name='GotoP')
+gn = make_creature(m40, x=19, y=0, stats={Stat.PER: 12}, name='GotoN')
+goto_roots = gp.start_conversation(gn, 'entry')
+check(f"Goto entry root found: {len(goto_roots)}", len(goto_roots) == 1)
+new_roots = gp.advance_dialogue(40, gn)
+check(f"Goto returned target conversation roots: {[n['id'] for n in new_roots]}",
+      len(new_roots) == 1 and new_roots[0]['id'] == 41)
+check("Conversation name updated after goto",
+      gp.dialogue is not None and gp.dialogue['conversation'] == 'barkeep')
+gp.end_conversation()
+
 # Clean up test dialogue data
 DIALOGUE.clear()
 DIALOGUE_ROOTS.clear()

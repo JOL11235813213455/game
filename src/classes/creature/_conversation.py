@@ -48,10 +48,19 @@ class ConversationMixin:
     def advance_dialogue(self, node_id: int, target) -> list:
         """Select a dialogue node and get its children (next options).
 
-        Applies any effects/behavior from the selected node.
+        Applies any effects/behavior from the selected node. Handles
+        two special effects:
+
+          * ``goto``: jumps to a different conversation tree. Returns
+            the filtered roots of the target conversation.
+          * ``auto_advance``: marks this node as a branch (no UI
+            presentation). Automatically advances into the first
+            matching child and returns *that* node's children.
+            Chains through consecutive branch nodes.
+
         Returns list of available child node dicts.
         """
-        from data.db import DIALOGUE
+        from data.db import DIALOGUE, DIALOGUE_ROOTS
 
         node = DIALOGUE.get(node_id)
         if node is None:
@@ -64,12 +73,38 @@ class ConversationMixin:
         # Apply effects
         self._apply_dialogue_effects(node, target)
 
+        effects = node.get('effects', {})
+
+        # goto: jump to a different conversation's matching roots.
+        # Effect value is the target conversation name.
+        if 'goto' in effects:
+            target_conv = effects['goto']
+            root_ids = DIALOGUE_ROOTS.get(target_conv, [])
+            new_roots = []
+            for rid in root_ids:
+                r = DIALOGUE.get(rid)
+                if r and self._dialogue_matches(r, target):
+                    new_roots.append(r)
+            if new_roots:
+                if self.dialogue:
+                    self.dialogue['conversation'] = target_conv
+                return new_roots
+            # No valid roots in target conversation = end
+            self.end_conversation()
+            return []
+
         # Get filtered children
         children = []
         for child_id in node['children']:
             child = DIALOGUE.get(child_id)
             if child and self._dialogue_matches(child, target):
                 children.append(child)
+
+        # auto_advance: branch node — skip straight into the first
+        # matching child. Recurses so a chain of branches collapses
+        # into the first presentable node's children.
+        if effects.get('auto_advance') and children:
+            return self.advance_dialogue(children[0]['id'], target)
 
         # No children = end of conversation
         if not children:
@@ -94,17 +129,62 @@ class ConversationMixin:
         if node['creature_key'] and node['creature_key'] != target.name:
             return False
 
-        # Character conditions (checked against the initiator/player)
+        # Character conditions (checked against the initiator/player,
+        # plus a handful that reference the target creature or
+        # relationship state between the two).
         from classes.stats import Stat
         for key, val in node['char_conditions'].items():
             if key == 'level_min':
                 if self.stats.base.get(Stat.LVL, 0) < val:
+                    return False
+            elif key == 'level_max':
+                if self.stats.base.get(Stat.LVL, 0) > val:
                     return False
             elif key == 'sex':
                 if self.sex != val:
                     return False
             elif key == 'species':
                 if self.species != val:
+                    return False
+            elif key == 'rel_min':
+                # Initiator's sentiment toward target must be >= val.
+                # Missing edge = 0.0 (neutral).
+                from classes.relationship_graph import GRAPH
+                edge = GRAPH.get_edge(self.uid, target.uid)
+                current = edge[0] if edge else 0.0
+                if current < val:
+                    return False
+            elif key == 'rel_max':
+                from classes.relationship_graph import GRAPH
+                edge = GRAPH.get_edge(self.uid, target.uid)
+                current = edge[0] if edge else 0.0
+                if current > val:
+                    return False
+            elif key == 'has_item':
+                # Initiator must carry an item whose name matches val.
+                if not any(getattr(i, 'name', '') == val
+                           for i in self.inventory.items):
+                    return False
+            elif key == 'lacks_item':
+                if any(getattr(i, 'name', '') == val
+                       for i in self.inventory.items):
+                    return False
+            elif key == 'profession':
+                # Target creature's job must match val. Forward-compat
+                # with future profession system; today job may be None.
+                if getattr(target, 'job', None) != val:
+                    return False
+            elif key == 'lifecycle_state':
+                # Target creature's lifecycle state must match val.
+                # Forward-compat with Phase 2 lifecycle FSM — today
+                # creatures have no explicit lifecycle attr so we
+                # default to 'adult' and let the guard be a no-op
+                # for pre-FSM creatures.
+                state = getattr(target, 'lifecycle_state', 'adult')
+                if state != val:
+                    return False
+            elif key == 'gold_min':
+                if self.gold < val:
                     return False
 
         # Quest conditions (checked against initiator's quest log)
