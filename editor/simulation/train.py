@@ -1341,6 +1341,18 @@ def _load_curriculum_stage(stage_number: int) -> dict:
         int(row['es_parallel']) if 'es_parallel' in cols else 1)
     stage['ppo_parallel'] = (
         int(row['ppo_parallel']) if 'ppo_parallel' in cols else 1)
+    # Per-stage arena size (0 = inherit from function arg).
+    stage['mappo_cols'] = (
+        int(row['mappo_cols']) if 'mappo_cols' in cols else 0)
+    stage['mappo_rows'] = (
+        int(row['mappo_rows']) if 'mappo_rows' in cols else 0)
+    stage['ppo_cols'] = (
+        int(row['ppo_cols']) if 'ppo_cols' in cols else 0)
+    stage['ppo_rows'] = (
+        int(row['ppo_rows']) if 'ppo_rows' in cols else 0)
+    # Optional custom arena map by name (empty = procedural).
+    stage['arena_map'] = (
+        row['arena_map'] if 'arena_map' in cols else '')
     return stage
 
 
@@ -1954,15 +1966,31 @@ def train_curriculum_stage(stage_number: int, model_name: str,
     _ppo_parallel = parallel if parallel > 1 else stage.get('ppo_parallel', 1)
     print(f'  Parallelism: ES={_es_parallel} workers, PPO={_ppo_parallel} workers')
     print(f'  Creatures: MAPPO={_mappo_n}, PPO={_ppo_n}')
+    # Arena size resolution (function arg > stage DB > arena_cols default)
+    _mappo_cols = (mappo_cols if mappo_cols is not None
+                   else (stage.get('mappo_cols') or arena_cols))
+    _mappo_rows = (mappo_rows if mappo_rows is not None
+                   else (stage.get('mappo_rows') or arena_rows))
+    _ppo_cols = (ppo_cols if ppo_cols is not None
+                 else (stage.get('ppo_cols') or arena_cols))
+    _ppo_rows = (ppo_rows if ppo_rows is not None
+                 else (stage.get('ppo_rows') or arena_rows))
+    # Optional custom arena map from maps table. When authored,
+    # generate_arena should load that named map instead of building
+    # one procedurally. Today the loader path is a TODO — flag it
+    # so the training run surfaces the intent.
+    _arena_map = stage.get('arena_map') or ''
+    if _arena_map:
+        print(f'  ⚠  stage authored arena_map="{_arena_map}" '
+              f'but custom-map loading is not yet wired — falling back '
+              f'to procedural generate_arena.')
     arena_kwargs_mappo = {
-        'cols': mappo_cols or arena_cols,
-        'rows': mappo_rows or arena_rows,
+        'cols': _mappo_cols, 'rows': _mappo_rows,
         'num_creatures': _mappo_n,
         'mask_probability': 0.0,
     }
     arena_kwargs_ppo = {
-        'cols': ppo_cols or arena_cols,
-        'rows': ppo_rows or arena_rows,
+        'cols': _ppo_cols, 'rows': _ppo_rows,
         'num_creatures': _ppo_n,
         'mask_probability': 0.0,
     }

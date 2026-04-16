@@ -219,7 +219,12 @@ CREATE TABLE IF NOT EXISTS curriculum_stages (
     mappo_creatures    INTEGER NOT NULL DEFAULT 0,
     ppo_creatures      INTEGER NOT NULL DEFAULT 0,
     es_parallel        INTEGER NOT NULL DEFAULT 1,
-    ppo_parallel       INTEGER NOT NULL DEFAULT 1
+    ppo_parallel       INTEGER NOT NULL DEFAULT 1,
+    mappo_cols         INTEGER NOT NULL DEFAULT 0,
+    mappo_rows         INTEGER NOT NULL DEFAULT 0,
+    ppo_cols           INTEGER NOT NULL DEFAULT 0,
+    ppo_rows           INTEGER NOT NULL DEFAULT 0,
+    arena_map          TEXT    NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS creature_stats (
     creature_key TEXT NOT NULL REFERENCES creatures(key),

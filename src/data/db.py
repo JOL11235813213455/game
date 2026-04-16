@@ -565,6 +565,17 @@ def _migrate(con: sqlite3.Connection) -> None:
         "ALTER TABLE curriculum_stages ADD COLUMN ppo_creatures   INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE curriculum_stages ADD COLUMN es_parallel     INTEGER NOT NULL DEFAULT 1",
         "ALTER TABLE curriculum_stages ADD COLUMN ppo_parallel    INTEGER NOT NULL DEFAULT 1",
+        # Per-stage arena size. 0 = use function-arg default.
+        "ALTER TABLE curriculum_stages ADD COLUMN mappo_cols INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE curriculum_stages ADD COLUMN mappo_rows INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE curriculum_stages ADD COLUMN ppo_cols   INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE curriculum_stages ADD COLUMN ppo_rows   INTEGER NOT NULL DEFAULT 0",
+        # Optional custom arena map name. When non-empty, looks up a
+        # row in the `maps` table by this name and uses that map as
+        # the arena base instead of generate_arena()'s procedural
+        # output. Lets specific stages train on hand-crafted layouts
+        # (boss arenas, river crossings, etc.). Empty = procedural.
+        "ALTER TABLE curriculum_stages ADD COLUMN arena_map TEXT NOT NULL DEFAULT ''",
         """CREATE TABLE IF NOT EXISTS training_pairs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,

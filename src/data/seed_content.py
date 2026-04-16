@@ -821,7 +821,9 @@ def seed():
                mappo, es_gens, es_vars, es_steps, ppo, lr=0.0003, ent=0.05,
                resume=None, allowed_actions=None, fatigue_enabled=True,
                mappo_creatures=0, ppo_creatures=0,
-               es_parallel=1, ppo_parallel=1):
+               es_parallel=1, ppo_parallel=1,
+               mappo_cols=0, mappo_rows=0, ppo_cols=0, ppo_rows=0,
+               arena_map=''):
         con.execute(
             'INSERT OR REPLACE INTO curriculum_stages '
             '(stage_number, name, description, active_signals, signal_scales, '
@@ -829,8 +831,9 @@ def seed():
             'mappo_steps, es_generations, es_variants, es_steps, ppo_steps, '
             'learning_rate, ent_coef, resume_from_stage, '
             'allowed_actions, fatigue_enabled, '
-            'mappo_creatures, ppo_creatures, es_parallel, ppo_parallel) '
-            'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+            'mappo_creatures, ppo_creatures, es_parallel, ppo_parallel, '
+            'mappo_cols, mappo_rows, ppo_cols, ppo_rows, arena_map) '
+            'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
             (num, name, desc,
              _json.dumps(list(signals.keys())),
              _json.dumps(signals),
@@ -838,7 +841,8 @@ def seed():
              mappo, es_gens, es_vars, es_steps, ppo, lr, ent, resume,
              _json.dumps(allowed_actions or []),
              1 if fatigue_enabled else 0,
-             mappo_creatures, ppo_creatures, es_parallel, ppo_parallel)
+             mappo_creatures, ppo_creatures, es_parallel, ppo_parallel,
+             mappo_cols, mappo_rows, ppo_cols, ppo_rows, arena_map)
         )
 
     # Stage 1: Wander — learn to move purposefully

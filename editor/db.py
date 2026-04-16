@@ -608,6 +608,12 @@ def migrate_db():
             "ALTER TABLE curriculum_stages ADD COLUMN ppo_creatures   INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE curriculum_stages ADD COLUMN es_parallel     INTEGER NOT NULL DEFAULT 1",
             "ALTER TABLE curriculum_stages ADD COLUMN ppo_parallel    INTEGER NOT NULL DEFAULT 1",
+            # Per-stage arena size + optional custom arena map name.
+            "ALTER TABLE curriculum_stages ADD COLUMN mappo_cols INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE curriculum_stages ADD COLUMN mappo_rows INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE curriculum_stages ADD COLUMN ppo_cols   INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE curriculum_stages ADD COLUMN ppo_rows   INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE curriculum_stages ADD COLUMN arena_map TEXT NOT NULL DEFAULT ''",
             """CREATE TABLE IF NOT EXISTS training_pairs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
