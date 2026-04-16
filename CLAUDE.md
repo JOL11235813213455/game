@@ -48,6 +48,7 @@ leaning towards apocalyptic
 - **Batch NN inference.** When multiple creatures need decisions the same frame, stack observations into one matrix and run a single forward pass via `BatchBehavior`. 3-5x faster than per-creature inference.
 - **Off-map reduced rate.** Creatures on non-active maps tick via `WorldManager` at reduced rate (once per 30 game-seconds) for hunger/fatigue only — no perception, no behavior.
 - **Observation caching caveat.** Do NOT cache full observations — they include census data from other creatures' positions. The per-tick perception cache (`_perception_cache_tick`) is the safe caching boundary.
+- **Event-driven over polling for inter-object communication.** Individual NN forward passes stay tick-driven (the NN must fire periodically — absence of events is itself information). But all data flow *between* objects — perception updates, pack signals, creature-to-creature sightings, damage notifications, relationship changes, inventory changes — should be event-driven. Objects emit events on state change; receivers latch the last value. Use dirty flags to invalidate cached computations (social topology, observation sub-vectors, spatial memory) so they only recompute when upstream state actually changed. Polling is reserved for things that genuinely need periodic re-evaluation (hunger drain, regen ticks). If you're scanning "did anything change?" every tick, it should be an event instead.
 
 ## Critical Architectural Knowledge
 

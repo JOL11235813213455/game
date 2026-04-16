@@ -53,8 +53,12 @@ class RegenMixin:
             self.stats.base[Stat.HP_CURR] = max(0, hp - int(drain))
             stam = self.stats.base.get(Stat.CUR_STAMINA, 0)
             self.stats.base[Stat.CUR_STAMINA] = max(0, stam - int(drain))
+            self._ensure_stamina_regen()
             mana = self.stats.base.get(Stat.CUR_MANA, 0)
             self.stats.base[Stat.CUR_MANA] = max(0, mana - int(drain))
+            self._ensure_mana_regen()
+            if 'hp_regen' not in self._timed_events:
+                self.register_tick('hp_regen', 1000, self._do_hp_regen)
             if self.stats.base.get(Stat.HP_CURR, 0) <= 0:
                 self.die()
 
@@ -72,6 +76,18 @@ class RegenMixin:
         self._regen_fib = (1, 1)
         if damage > self._max_hit_taken:
             self._max_hit_taken = damage
+        if 'hp_regen' not in self._timed_events:
+            self.register_tick('hp_regen', 1000, self._do_hp_regen)
+
+    def _ensure_stamina_regen(self):
+        """Re-register stamina regen tick after stamina was consumed."""
+        if 'stamina_regen' not in self._timed_events:
+            self.register_tick('stamina_regen', 1000, self._do_stamina_regen)
+
+    def _ensure_mana_regen(self):
+        """Re-register mana regen tick after mana was consumed."""
+        if 'mana_regen' not in self._timed_events:
+            self.register_tick('mana_regen', 1000, self._do_mana_regen)
 
     def _encumbrance_multiplier(self) -> float:
         """Return 1.0 (unencumbered) down to 0.0 (fully encumbered)."""
@@ -85,9 +101,10 @@ class RegenMixin:
         """Fibonacci HP regen, capped at 15% of HP_MAX per second."""
         if now < self._regen_start:
             return
-        hp_curr = self.stats.active[Stat.HP_CURR]()
+        hp_curr = self.stats.base.get(Stat.HP_CURR, 0)
         hp_max = self.stats.active[Stat.HP_MAX]()
         if hp_curr >= hp_max:
+            self.unregister_tick('hp_regen')
             return
         cap = max(1, int(hp_max * 0.15))
         heal = min(self._regen_fib[0], cap)
@@ -97,9 +114,10 @@ class RegenMixin:
 
     def _do_stamina_regen(self, _now: int):
         """Restore stamina per second based on STAM_REGEN."""
-        cur = self.stats.active[Stat.CUR_STAMINA]()
+        cur = self.stats.base.get(Stat.CUR_STAMINA, 0)
         mx = self.stats.active[Stat.MAX_STAMINA]()
         if cur >= mx:
+            self.unregister_tick('stamina_regen')
             return
         regen = self.stats.active[Stat.STAM_REGEN]()
         bonus = getattr(self, '_hunger_regen_bonus', 0.0)
@@ -108,9 +126,10 @@ class RegenMixin:
 
     def _do_mana_regen(self, _now: int):
         """Restore mana per second based on MANA_REGEN."""
-        cur = self.stats.active[Stat.CUR_MANA]()
+        cur = self.stats.base.get(Stat.CUR_MANA, 0)
         mx = self.stats.active[Stat.MAX_MANA]()
         if cur >= mx:
+            self.unregister_tick('mana_regen')
             return
         regen = self.stats.active[Stat.MANA_REGEN]()
         bonus = getattr(self, '_hunger_regen_bonus', 0.0)

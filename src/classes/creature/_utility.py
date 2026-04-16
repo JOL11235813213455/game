@@ -383,6 +383,7 @@ class UtilityMixin:
         if cur_stam < stam_cost:
             return False
         self.stats.base[Stat.CUR_STAMINA] = cur_stam - stam_cost
+        self._ensure_stamina_regen()
 
         # Add guard detection bonus if not already guarding
         if not hasattr(self, '_guarding') or not self._guarding:

@@ -220,6 +220,7 @@ class MovementMixin:
         if cur_stam < stam_cost:
             return False
         self.stats.base[Stat.CUR_STAMINA] = cur_stam - stam_cost
+        self._ensure_stamina_regen()
 
         # Pick direction away from threat
         dx = self.location.x - threat.location.x
@@ -263,6 +264,7 @@ class MovementMixin:
         if cur_stam < stam_cost:
             return False
         self.stats.base[Stat.CUR_STAMINA] = cur_stam - stam_cost
+        self._ensure_stamina_regen()
 
         old_loc = self.location
         self.move(dx, dy, cols, rows)
@@ -279,6 +281,7 @@ class MovementMixin:
         if cur_stam < stam_cost:
             return False
         self.stats.base[Stat.CUR_STAMINA] = cur_stam - stam_cost
+        self._ensure_stamina_regen()
 
         old_loc = self.location
         self.move(dx, dy, cols, rows)

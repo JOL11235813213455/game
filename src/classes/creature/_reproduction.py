@@ -196,6 +196,7 @@ class ReproductionMixin:
         self.stats.base[Stat.HP_CURR] = max(1, hp - max(1, hp // 10))
         stam = self.stats.active[Stat.CUR_STAMINA]()
         self.stats.base[Stat.CUR_STAMINA] = max(0, stam - max(1, stam // 5))
+        self._ensure_stamina_regen()
 
         # Cooldowns
         day_ms = 86_400_000  # 1 game day in ms (assuming 1 day = 1440 real seconds)

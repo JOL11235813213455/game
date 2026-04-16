@@ -78,6 +78,7 @@ class CombatMixin:
             result['reason'] = 'no_stamina'
             return result
         self.stats.base[Stat.CUR_STAMINA] = cur_stam - stamina_cost
+        self._ensure_stamina_regen()
 
         # Betrayal check: the ACT of attacking someone with positive history
         # triggers regardless of whether the attack hits
@@ -201,6 +202,7 @@ class CombatMixin:
             result['reason'] = 'no_stamina'
             return result
         self.stats.base[Stat.CUR_STAMINA] = cur_stam - stamina_cost
+        self._ensure_stamina_regen()
 
         # Betrayal check
         rel = self.get_relationship(target)
@@ -349,7 +351,9 @@ class CombatMixin:
 
         # Consume resources
         self.stats.base[Stat.CUR_MANA] = cur_mana - spell['mana_cost']
+        self._ensure_mana_regen()
         self.stats.base[Stat.CUR_STAMINA] = cur_stam - spell['stamina_cost']
+        self._ensure_stamina_regen()
 
         # Dodge contest (if dodgeable and target can see caster)
         if spell['dodgeable'] and target is not self:
@@ -474,6 +478,7 @@ class CombatMixin:
             result['reason'] = 'no_stamina'
             return result
         self.stats.base[Stat.CUR_STAMINA] = cur_stam - stamina_cost
+        self._ensure_stamina_regen()
 
         # Attacker: max(STR, AGL)
         atk_str = self.stats.active[Stat.STR]()

@@ -303,12 +303,17 @@ class Creature(
         # Mana regen
         self.register_tick('mana_regen', 1000, self._do_mana_regen)
 
-        # Water/flow tick — checks drowning and applies current
-        # 100ms for up to 10 TPS flow speed
-        self.register_tick('water', 100, self._do_water_tick)
+        # Water tick only active when in liquid — registered/unregistered
+        # by the location setter below
+        self._water_tick_active = False
 
-        # Spatial memory: learn locations of purpose zones each tick
-        self.register_tick('spatial_memory', 500, lambda now: self.update_spatial_memory(now))
+        # Spatial memory: triggered on movement (via location setter),
+        # not polled. Track last scan position to avoid redundant scans.
+        self._last_spatial_scan_loc = None
+
+        # Observation sub-section caches with dirty flags
+        self._obs_dirty = {'inventory': True, 'economy': True, 'spells': True}
+        self._obs_cache = {}  # section_name -> cached float list
 
     # -- Pickle migration for centralized relationship graph ---------------
     # Saves created before the graph refactor have ``relationships`` and
@@ -343,17 +348,36 @@ class Creature(
     @location.setter
     def location(self, new_loc):
         old = getattr(self, '_location', None)
-        # Unregister from old cell if we had one on the current map
         cm = getattr(self, '_current_map', None)
         if (old is not None and cm is not None
                 and hasattr(cm, 'unregister_creature_at')):
             cm.unregister_creature_at(self, old.x, old.y, old.z)
         self._location = new_loc
-        # Register at new cell if we're on a map
         if (new_loc is not None and cm is not None
                 and hasattr(cm, 'register_creature_at')):
             cm.register_creature_at(self, new_loc.x, new_loc.y, new_loc.z)
         self._perception_cache_tick = -1
+
+        # Spatial memory: scan on movement, not on a timer
+        if (new_loc is not None and cm is not None
+                and hasattr(self, 'stats')
+                and new_loc != getattr(self, '_last_spatial_scan_loc', None)):
+            self._last_spatial_scan_loc = new_loc
+            self.update_spatial_memory(0)
+
+        # Water tick: register only when on liquid, unregister when not
+        if (new_loc is not None and cm is not None
+                and hasattr(self, '_water_tick_active')):
+            tile = cm.tiles.get(new_loc)
+            in_liquid = tile is not None and getattr(tile, 'liquid', False)
+            if in_liquid and not self._water_tick_active:
+                self.register_tick('water', 100, self._do_water_tick)
+                self._water_tick_active = True
+            elif not in_liquid and self._water_tick_active:
+                self.unregister_tick('water')
+                self._water_tick_active = False
+                self.is_drowning = False
+                self._drown_ticks = 0
 
     # -- Perception cache ---------------------------------------------------
     #

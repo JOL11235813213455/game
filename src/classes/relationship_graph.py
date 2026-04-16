@@ -46,6 +46,7 @@ class RelationshipGraph(Trackable):
         self._edges: dict[int, dict[int, list]] = {}
         self._rumors: dict[int, dict[int, list]] = {}
         self._deceits: dict[int, dict[int, list]] = {}
+        self._generation: int = 0
 
     # ======================================================================
     # Forward-edge access (hot path)
@@ -88,6 +89,7 @@ class RelationshipGraph(Trackable):
         and by tests that need to reset state deterministically.
         """
         self._edges[uid] = edges
+        self._generation += 1
 
     # ======================================================================
     # Reverse-edge access (the capability the old shape lacked)
@@ -147,6 +149,7 @@ class RelationshipGraph(Trackable):
                 rel[3] = score
         else:
             d[to_uid] = [score, 1, score, score]
+        self._generation += 1
 
     # ======================================================================
     # Rumor access
@@ -271,12 +274,14 @@ class RelationshipGraph(Trackable):
             rumor_dict.pop(uid, None)
         for deceit_dict in self._deceits.values():
             deceit_dict.pop(uid, None)
+        self._generation += 1
 
     def clear(self):
         """Empty the entire graph. Used by load and test teardown."""
         self._edges.clear()
         self._rumors.clear()
         self._deceits.clear()
+        self._generation += 1
 
     # ======================================================================
     # Load support

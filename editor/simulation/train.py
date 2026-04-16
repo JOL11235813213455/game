@@ -298,27 +298,6 @@ def hunger_temperature(creature, base: float = 1.0) -> float:
     return base * (1.0 + desperation * 0.5)
 
 
-def _print_sentiment_grid(sim):
-    """Print end-of-episode sentiment matrix (first 10 creatures)."""
-    alive = [c for c in sim.creatures if c.is_alive][:10]
-    if len(alive) < 2:
-        return
-    names = [(c.name or f'#{c.uid}')[:8] for c in alive]
-    header = '         ' + ' '.join(f'{n:>6s}' for n in names)
-    print(f'  Sentiment grid ({len(alive)} creatures):')
-    print(header)
-    for i, c in enumerate(alive):
-        row_vals = []
-        for j, other in enumerate(alive):
-            if i == j:
-                row_vals.append('   -- ')
-            else:
-                edge = GRAPH.get_edge(c.uid, other.uid)
-                val = edge[0] if edge else 0.0
-                row_vals.append(f'{val:+5.0f} ')
-        print(f'  {names[i]:>8s}' + ''.join(row_vals))
-
-
 def _creature_final_state(c) -> dict:
     """Capture a creature's final state for analytics."""
     from classes.stats import Stat
@@ -638,9 +617,6 @@ def run_mappo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
                 _log(f'mappo/signal/{sname}', sval / max(1, ep_steps), step)
             ep_action_counts = {}
             ep_signal_totals = {}
-
-            # End-of-episode sentiment grid
-            _print_sentiment_grid(sim)
 
             if sink:
                 creature_finals = {}
@@ -1017,7 +993,6 @@ def run_ppo(net: TorchCreatureNet, ppo: PPO, steps: int = 100000,
             episode_rewards.append(total_reward)
             _log('ppo/episode_reward', total_reward, step)
             _log('ppo/alive_count', sim.alive_count, step)
-            _print_sentiment_grid(sim)
 
             if sink:
                 creature_finals = {}

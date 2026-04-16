@@ -109,7 +109,17 @@ def compute_social_topology(
     """Produce the 17-float social topology vector.
 
     Safe for any N >= 0 — returns zeros when there's nothing visible.
+    Caches result per creature; reuses when visible set and GRAPH
+    generation haven't changed.
     """
+    visible_uids = frozenset(c.uid for _, c in visible)
+    gen = GRAPH._generation
+    cache = getattr(self_creature, '_social_topo_cache', None)
+    if cache is not None:
+        c_gen, c_vis, c_result = cache
+        if c_gen == gen and c_vis == visible_uids:
+            return c_result
+
     result = []
 
     # Who is in the slots (for rest-of-crowd split)
@@ -237,4 +247,5 @@ def compute_social_topology(
     # Sanity check
     assert len(result) == SOCIAL_TOPOLOGY_SIZE, \
         f'social topology produced {len(result)} floats, expected {SOCIAL_TOPOLOGY_SIZE}'
+    self_creature._social_topo_cache = (gen, visible_uids, result)
     return result
