@@ -577,6 +577,23 @@ class CombatMixin:
 
         self._timed_events.clear()
 
+        # Clear any active conditions on death — scheduled sim.events
+        # tickets for those conditions will still fire but become no-ops
+        # (handlers check ``name in self.conditions``). Force the compound
+        # action_state to 'dead' so the FSM reflects reality. Phase 1 of
+        # the FSM adoption plan (see src/classes/conditions.py).
+        if getattr(self, 'conditions', None):
+            self.conditions.clear()
+            self.stats.mods = [m for m in self.stats.mods
+                               if not str(m.get('source', '')).startswith('condition:')]
+            self.stats._mod_cache = None
+        # Ensure the action_state FSM exists so observation + save
+        # reflect the dead state even if no stun/sleep had been applied.
+        if hasattr(self, '_ensure_action_state'):
+            self._ensure_action_state()
+        if getattr(self, 'action_state', None) is not None:
+            self.action_state.force('dead')
+
         # Permanently remove non-ghost dead creature from spatial registries.
         # Keep incoming relationship edges — survivors remember the dead.
         from classes.creature import Creature

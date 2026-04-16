@@ -593,6 +593,8 @@ def migrate_db():
             "ALTER TABLE curriculum_stages ADD COLUMN monster_trainable INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE curriculum_stages ADD COLUMN pack_trainable INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE curriculum_stages ADD COLUMN monster_species_subset TEXT NOT NULL DEFAULT '[]'",
+            # Phase 1 FSM: status-effect conditions (poison, stun, blessed, etc.)
+            "ALTER TABLE curriculum_stages ADD COLUMN conditions_enabled INTEGER NOT NULL DEFAULT 0",
             """CREATE TABLE IF NOT EXISTS training_pairs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,

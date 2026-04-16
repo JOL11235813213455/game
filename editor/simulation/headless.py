@@ -36,7 +36,8 @@ class Simulation:
                  hunger_drain_enabled: bool = True,
                  combat_enabled: bool = True,
                  gestation_enabled: bool = True,
-                 fatigue_enabled: bool = True):
+                 fatigue_enabled: bool = True,
+                 conditions_enabled: bool = True):
         """Initialize simulation from an arena dict.
 
         Args:
@@ -81,6 +82,7 @@ class Simulation:
         self.combat_enabled = combat_enabled
         self.gestation_enabled = gestation_enabled
         self.fatigue_enabled = fatigue_enabled
+        self.conditions_enabled = conditions_enabled
         if not hunger_drain_enabled:
             for c in self.creatures:
                 c._hunger_drain = 0.0
@@ -139,6 +141,11 @@ class Simulation:
         self.events = ScheduledEventQueue()
         self._event_handlers: dict[str, list] = {}
 
+        # Phase 1 status-effect plumbing: route condition tick/expiry
+        # events back to the creature that owns them via UID lookup.
+        self.subscribe_event('condition_tick', self._dispatch_condition_tick)
+        self.subscribe_event('condition_expired', self._dispatch_condition_expired)
+
         # Initialize snapshots
         for c in self.creatures:
             self._obs_snapshots[c.uid] = make_snapshot(c)
@@ -157,6 +164,24 @@ class Simulation:
         hs = self._event_handlers.get(tag, [])
         if handler in hs:
             hs.remove(handler)
+
+    def _dispatch_condition_tick(self, payload) -> None:
+        """Route a 'condition_tick' event back to its creature.
+
+        Payload: (creature_uid, condition_name).
+        """
+        uid, name = payload
+        from classes.creature import Creature as _C
+        c = _C.by_uid(uid)
+        if c is not None and c.is_alive:
+            c.on_condition_tick(self, name)
+
+    def _dispatch_condition_expired(self, payload) -> None:
+        uid, name = payload
+        from classes.creature import Creature as _C
+        c = _C.by_uid(uid)
+        if c is not None:
+            c.on_condition_expired(self, name)
 
     def _drain_scheduled_events(self) -> None:
         """Dispatch all events whose expiry has passed.

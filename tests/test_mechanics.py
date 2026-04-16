@@ -5222,6 +5222,171 @@ check("unsubscribed handler does not receive further events",
       delivered == ['hello'])
 
 # ==========================================================================
+print("\n=== Conditions (Phase 1) ===")
+from classes.conditions import (CONDITION_ORDER, CONDITION_SPECS,
+                                  damage_for_tick)
+
+# Fresh sim with two creatures
+_cond_arena = generate_arena(cols=8, rows=8, num_creatures=2)
+_csim = Simulation(_cond_arena)
+_victim, _attacker = _csim.creatures[0], _csim.creatures[1]
+
+# Guarantee VIT baseline so the resistance contest is predictable
+_victim.stats.base[Stat.VIT] = 10
+_attacker.stats.base[Stat.STR] = 10
+# Pump victim HP so poison ticks don't kill mid-test — we're verifying
+# the condition lifecycle (apply/stack/tick/expire), not death.
+_victim.stats.base[Stat.HP_MAX] = 200
+_victim.stats.base[Stat.HP_CURR] = 200
+
+# Apply Poisoned with skip_resist so we can observe the tick mechanic
+# cleanly without d20 variance.
+ok = _victim.apply_condition(_csim, 'poisoned', severity=2,
+                              applied_by_uid=_attacker.uid,
+                              duration_ms=10_000, skip_resist=True)
+check("apply_condition returns True", ok is True)
+check("victim has 'poisoned'", _victim.has_condition('poisoned'))
+_p = _victim.get_condition('poisoned')
+check("severity clamped to spec.max_severity", _p.severity == 2)
+check("applied_by_uid preserved", _p.applied_by_uid == _attacker.uid)
+check("expires_at set correctly",
+      _p.expires_at == _csim.now + 10_000)
+
+# Stacking: reapply at higher severity, duration refreshed + severity maxed
+_victim.apply_condition(_csim, 'poisoned', severity=3,
+                         applied_by_uid=_attacker.uid,
+                         duration_ms=15_000, skip_resist=True)
+_p2 = _victim.get_condition('poisoned')
+check("stacking took max severity (3)", _p2.severity == 3)
+check("stacking refreshed expiry",
+      _p2.expires_at == _csim.now + 15_000)
+
+# DoT tick via sim.events drain
+_hp_before = _victim.stats.active[Stat.HP_CURR]()
+# Advance the clock past the first tick interval
+_csim.now += CONDITION_SPECS['poisoned'].tick_interval_ms
+_csim._drain_scheduled_events()
+_hp_after = _victim.stats.active[Stat.HP_CURR]()
+expected_dmg = damage_for_tick(_p2)
+check(f"poison tick dealt {_hp_before - _hp_after} HP (expected {expected_dmg})",
+      _hp_before - _hp_after == expected_dmg)
+
+# Next tick should have been rescheduled automatically
+# Advance again; should see another tick
+_csim.now += CONDITION_SPECS['poisoned'].tick_interval_ms
+_csim._drain_scheduled_events()
+_hp_after2 = _victim.stats.active[Stat.HP_CURR]()
+check("poison rescheduled — second tick fired",
+      _hp_after - _hp_after2 == expected_dmg)
+
+# Natural expiry: fast-forward past expires_at
+_csim.now = _p2.expires_at + 500
+_csim._drain_scheduled_events()
+check("poison expired after its window",
+      not _victim.has_condition('poisoned'))
+
+# remove_condition: manually cancel a still-active condition
+_victim.apply_condition(_csim, 'bleeding', severity=1,
+                         duration_ms=5_000, skip_resist=True)
+check("bleeding applied", _victim.has_condition('bleeding'))
+_victim.remove_condition(_csim, 'bleeding')
+check("remove_condition clears condition",
+      not _victim.has_condition('bleeding'))
+
+# Stat mods: Afraid applies -STR, -AGL; removed on cure
+_str_before = _victim.stats.active[Stat.STR]()
+_victim.apply_condition(_csim, 'afraid', severity=2,
+                         duration_ms=5_000, skip_resist=True)
+_str_during = _victim.stats.active[Stat.STR]()
+check(f"afraid reduces STR ({_str_before} -> {_str_during})",
+      _str_during < _str_before)
+_victim.remove_condition(_csim, 'afraid')
+_str_after = _victim.stats.active[Stat.STR]()
+check("STR restored after afraid cured",
+      _str_after == _str_before)
+
+# Action gating: stun blocks action_state
+check("action_state defaults permit actions",
+      _victim.can_act() is True)
+_victim.apply_condition(_csim, 'stunned', severity=1,
+                         duration_ms=3_000, skip_resist=True)
+check("stunned drives action_state to 'stunned'",
+      _victim.action_state.current == 'stunned')
+check("can_act() False while stunned",
+      _victim.can_act() is False)
+_victim.remove_condition(_csim, 'stunned')
+check("unstun returns action_state to 'normal'",
+      _victim.action_state.current == 'normal')
+
+# Regenerating: tick HEALS instead of damages
+_victim.stats.base[Stat.HP_CURR] = 1
+_hp_low = _victim.stats.active[Stat.HP_CURR]()
+_victim.apply_condition(_csim, 'regenerating', severity=2,
+                         duration_ms=10_000, skip_resist=True)
+_csim.now += CONDITION_SPECS['regenerating'].tick_interval_ms
+_csim._drain_scheduled_events()
+_hp_healed = _victim.stats.active[Stat.HP_CURR]()
+check(f"regenerating heals ({_hp_low} -> {_hp_healed})",
+      _hp_healed > _hp_low)
+_victim.remove_condition(_csim, 'regenerating')
+
+# Observation slots: 17 new features exist and have sensible values
+from classes.observation import build_observation, OBSERVATION_SIZE
+_obs = build_observation(_victim, _csim.cols, _csim.rows)
+check(f"OBSERVATION_SIZE = {OBSERVATION_SIZE} (includes condition slots)",
+      OBSERVATION_SIZE > 1800)
+check("observation length matches OBSERVATION_SIZE",
+      len(_obs) == OBSERVATION_SIZE)
+# With no active conditions, the 17 condition slots should be 16 zeros + 1 action_state (0/3 = 0)
+# Find them by re-applying and checking before/after
+_victim.apply_condition(_csim, 'burning', severity=2,
+                         duration_ms=5_000, skip_resist=True)
+_obs2 = build_observation(_victim, _csim.cols, _csim.rows)
+_diffs = sum(1 for a, b in zip(_obs, _obs2) if abs(a - b) > 1e-6)
+check(f"condition application changes observation ({_diffs} slots differ)",
+      _diffs >= 2)  # is_active + severity_norm for burning
+_victim.remove_condition(_csim, 'burning')
+
+# Handler routes via UID to correct creature
+_victim.apply_condition(_csim, 'poisoned', severity=1,
+                         applied_by_uid=_attacker.uid,
+                         duration_ms=5_000, skip_resist=True)
+_hp_pre = _victim.stats.active[Stat.HP_CURR]()
+_csim.now += CONDITION_SPECS['poisoned'].tick_interval_ms
+_csim._drain_scheduled_events()
+_hp_post = _victim.stats.active[Stat.HP_CURR]()
+check("UID dispatch routed condition_tick to correct creature",
+      _hp_pre != _hp_post)
+_victim.remove_condition(_csim, 'poisoned')
+
+# Curriculum gate: a sim with conditions_enabled=False rejects apply
+_gated_arena = generate_arena(cols=10, rows=10, num_creatures=1)
+_gated_sim = Simulation(_gated_arena, conditions_enabled=False)
+_gated_creature = _gated_sim.creatures[0]
+ok_gated = _gated_creature.apply_condition(
+    _gated_sim, 'poisoned', severity=1, duration_ms=5_000, skip_resist=True)
+check("conditions_enabled=False blocks apply_condition",
+      ok_gated is False and not _gated_creature.has_condition('poisoned'))
+
+# Clean up on death: creature dying removes its conditions
+_death_arena = generate_arena(cols=10, rows=10, num_creatures=1)
+_death_sim = Simulation(_death_arena)
+_dying = _death_sim.creatures[0]
+_dying.stats.base[Stat.HP_MAX] = 100
+_dying.stats.base[Stat.HP_CURR] = 100
+_dying.apply_condition(_death_sim, 'poisoned', severity=1,
+                        duration_ms=5_000, skip_resist=True)
+_dying.apply_condition(_death_sim, 'afraid', severity=2,
+                        duration_ms=5_000, skip_resist=True)
+check("creature has 2 conditions before death",
+      len(_dying.conditions) == 2)
+_dying.die()
+check("conditions cleared on death",
+      len(_dying.conditions) == 0)
+check("action_state forced to 'dead' on death",
+      _dying.action_state is not None and _dying.action_state.current == 'dead')
+
+# ==========================================================================
 print(f"\n{'='*50}")
 print(f"Results: {PASS} passed, {FAIL} failed out of {PASS+FAIL} tests")
 if FAIL:

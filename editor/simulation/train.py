@@ -1316,6 +1316,11 @@ def _load_curriculum_stage(stage_number: int) -> dict:
     stage['monster_species_subset'] = (
         _json.loads(row['monster_species_subset'] or '[]')
         if 'monster_species_subset' in cols else [])
+    # Phase 1 FSM: status-effect conditions gate. Older DBs without
+    # this column default to False (disabled) — matches the new-column
+    # default and keeps early-stage runs clean.
+    stage['conditions_enabled'] = (
+        bool(row['conditions_enabled']) if 'conditions_enabled' in cols else False)
     return stage
 
 
@@ -1868,6 +1873,7 @@ def train_curriculum_stage(stage_number: int, model_name: str,
         'combat_enabled':       stage['combat_enabled'],
         'gestation_enabled':    stage['gestation_enabled'],
         'fatigue_enabled':      stage['fatigue_enabled'],
+        'conditions_enabled':   stage['conditions_enabled'],
     }
 
     _mappo_n = mappo_creatures or num_creatures
@@ -1977,6 +1983,7 @@ def train_curriculum_stage(stage_number: int, model_name: str,
         'combat_enabled': stage['combat_enabled'],
         'gestation_enabled': stage['gestation_enabled'],
         'fatigue_enabled': stage['fatigue_enabled'],
+        'conditions_enabled': stage['conditions_enabled'],
     }
     # Pick the terminal phase's final reward as the stage KPI. PPO
     # trumps MAPPO when both ran, since PPO is the refinement phase

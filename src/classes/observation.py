@@ -463,6 +463,31 @@ def build_observation(creature, cols: int, rows: int,
     obs.append(egg.gestation_days / 30.0 if egg else 0.0)
     obs.append(1.0 if egg and egg.is_abomination else 0.0)
 
+    # ==== SECTION 10a2: CONDITIONS (Phase 1 FSM) — 17 floats ====
+    # For each of the 8 canonical conditions: (is_active, severity_norm).
+    # Plus one float for the compound action_state index, normalized.
+    # Keeps the NN aware of poison/stun/sleep/blessing etc. without
+    # requiring per-condition one-hot (2 dense features per condition).
+    _section_starts['self_conditions'] = len(obs)
+    from classes.conditions import CONDITION_ORDER, CONDITION_SPECS
+    conds = getattr(creature, 'conditions', None) or {}
+    for _cname in CONDITION_ORDER:
+        _c = conds.get(_cname)
+        if _c is None:
+            obs.append(0.0)
+            obs.append(0.0)
+        else:
+            _spec = CONDITION_SPECS[_cname]
+            obs.append(1.0)
+            obs.append(_c.severity / max(1, _spec.max_severity))
+    # Compound action-state index: normal=0, stunned=1, sleeping=2, dead=3.
+    # Normalized to 0..1 for NN-friendliness. When the FSM hasn't been
+    # built yet (no conditions ever applied), default to 'normal'.
+    _ACTION_STATE_IDX = {'normal': 0, 'stunned': 1, 'sleeping': 2, 'dead': 3}
+    _ast = getattr(creature, 'action_state', None)
+    _astate_name = _ast.current if _ast is not None else 'normal'
+    obs.append(_ACTION_STATE_IDX.get(_astate_name, 0) / 3.0)
+
     # ==== SECTION 10b: SELF HUNGER (6) ====
     hunger = getattr(creature, 'hunger', 0.0)
     obs.append(hunger)                                           # raw: -1 to 1

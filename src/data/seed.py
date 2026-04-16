@@ -211,7 +211,8 @@ CREATE TABLE IF NOT EXISTS curriculum_stages (
     ppo_steps          INTEGER NOT NULL DEFAULT 50000,
     learning_rate      REAL NOT NULL DEFAULT 0.0003,
     ent_coef           REAL NOT NULL DEFAULT 0.05,
-    resume_from_stage  INTEGER
+    resume_from_stage  INTEGER,
+    conditions_enabled INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS creature_stats (
     creature_key TEXT NOT NULL REFERENCES creatures(key),

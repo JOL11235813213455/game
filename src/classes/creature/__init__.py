@@ -15,6 +15,7 @@ from classes.creature._inventory import InventoryMixin
 from classes.creature._reproduction import ReproductionMixin
 from classes.creature._relationships import RelationshipsMixin
 from classes.creature._conversation import ConversationMixin
+from classes.creature._conditions import ConditionsMixin
 from classes.creature._utility import UtilityMixin
 from classes.creature._goals import GoalMixin
 from classes.creature._regen import RegenMixin
@@ -31,6 +32,7 @@ class Creature(
     ReproductionMixin,
     RelationshipsMixin,
     ConversationMixin,
+    ConditionsMixin,
     UtilityMixin,
     GoalMixin,
     RegenMixin,
@@ -258,6 +260,18 @@ class Creature(
 
         # Active conversation state: {target_uid, conversation, current_node_id}
         self.dialogue = None  # None = not in conversation
+
+        # Status effect conditions (Phase 1 of FSM adoption).
+        # Parallel FSMs: each key in this dict is an active condition
+        # applied to this creature. Paired with the compound
+        # ``action_state`` StateMachine below, which is the exclusive
+        # "can I act at all?" state and lives on top of the parallel
+        # conditions. See src/classes/conditions.py and src/classes/fsm.py.
+        self.conditions: dict = {}
+        # Compound action-state FSM: normal / stunned / sleeping / dead.
+        # Built lazily by _ensure_action_state() so Creature construction
+        # stays pickle-safe (StateMachine callables are owner-bound).
+        self.action_state = None
 
         # Relationships and rumors live in the centralized
         # RelationshipGraph (src/classes/relationship_graph.py).
