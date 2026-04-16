@@ -1357,7 +1357,7 @@ def seed():
                 'mappo_cols = 20, mappo_rows = 20, '
                 'ppo_cols = 25, ppo_rows = 25, '
                 'mappo_creatures = 10, ppo_creatures = 16, '
-                'es_parallel = 1, ppo_parallel = 4 '
+                'es_parallel = 4, ppo_parallel = 4 '
                 'WHERE stage_number BETWEEN 1 AND 3')
 
     # Mid creature curriculum (4-10, Purpose / Harvest / Process / Jobs /
@@ -1366,7 +1366,7 @@ def seed():
                 'mappo_cols = 25, mappo_rows = 25, '
                 'ppo_cols = 30, ppo_rows = 30, '
                 'mappo_creatures = 12, ppo_creatures = 20, '
-                'es_parallel = 1, ppo_parallel = 4 '
+                'es_parallel = 4, ppo_parallel = 4 '
                 'WHERE stage_number BETWEEN 4 AND 10')
 
     # Late creature stages (11-14, Combat / Lifecycle / Religion / Mastery):
@@ -1377,7 +1377,7 @@ def seed():
                 'mappo_cols = 30, mappo_rows = 30, '
                 'ppo_cols = 40, ppo_rows = 40, '
                 'mappo_creatures = 16, ppo_creatures = 24, '
-                'es_parallel = 2, ppo_parallel = 4 '
+                'es_parallel = 4, ppo_parallel = 4 '
                 'WHERE stage_number BETWEEN 11 AND 14')
 
     # Monster curriculum (15-25): bigger world, higher density — pack
@@ -1387,7 +1387,7 @@ def seed():
                 'mappo_cols = 40, mappo_rows = 40, '
                 'ppo_cols = 50, ppo_rows = 50, '
                 'mappo_creatures = 20, ppo_creatures = 30, '
-                'es_parallel = 1, ppo_parallel = 4 '
+                'es_parallel = 4, ppo_parallel = 4 '
                 'WHERE stage_number >= 15')
 
     # ------------------------------------------------------------------
