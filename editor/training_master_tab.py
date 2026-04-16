@@ -32,11 +32,14 @@ class TrainingMasterTab(ttk.Frame):
         from editor.training_tab import TrainingStandardTab
         from editor.training_curriculum_tab import TrainingCurriculumTab
         from editor.training_models_tab import TrainingModelsTab
+        from editor.training_pairs_tab import TrainingPairsTab
 
         self.standard = TrainingStandardTab(nb)
         self.curriculum = TrainingCurriculumTab(nb)
         self.models = TrainingModelsTab(nb)
+        self.pairs = TrainingPairsTab(nb)
 
         nb.add(self.standard,   text='  Standard  ')
         nb.add(self.curriculum, text='  Curriculum  ')
         nb.add(self.models,     text='  Models  ')
+        nb.add(self.pairs,      text='  Pairs  ')

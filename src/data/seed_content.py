@@ -1147,6 +1147,176 @@ def seed():
            resume=13, allowed_actions=_s12_actions, fatigue_enabled=True)
 
     # ==================================================================
+    # MONSTER CURRICULUM (stages 15-25)
+    # Creatures frozen during 15-20 (monster bootstrap + society).
+    # Monsters frozen during 21-22 (creature adaptation).
+    # Both unfrozen during 23-25 (co-evolution).
+    # ==================================================================
+
+    def _mstage(num, name, desc, signals, *,
+                mappo=20000, es_gens=10, es_vars=30, es_steps=1500,
+                ppo=60000, lr=0.0003, ent=0.05, resume=None,
+                allowed_actions=None, fatigue_enabled=True,
+                hunger=True, combat=True, gestation=True,
+                monsters_enabled=True, creature_frozen=False,
+                monster_trainable=False, pack_trainable=False,
+                monster_species_subset=None):
+        con.execute(
+            'INSERT OR REPLACE INTO curriculum_stages '
+            '(stage_number, name, description, active_signals, signal_scales, '
+            'hunger_drain, combat_enabled, gestation_enabled, '
+            'mappo_steps, es_generations, es_variants, es_steps, ppo_steps, '
+            'learning_rate, ent_coef, resume_from_stage, '
+            'allowed_actions, fatigue_enabled, '
+            'monsters_enabled, creature_frozen, monster_trainable, '
+            'pack_trainable, monster_species_subset) '
+            'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+            (num, name, desc,
+             _json.dumps(list(signals.keys())),
+             _json.dumps(signals),
+             1 if hunger else 0, 1 if combat else 0, 1 if gestation else 0,
+             mappo, es_gens, es_vars, es_steps, ppo, lr, ent, resume,
+             _json.dumps(allowed_actions or _s12_actions),
+             1 if fatigue_enabled else 0,
+             1 if monsters_enabled else 0,
+             1 if creature_frozen else 0,
+             1 if monster_trainable else 0,
+             1 if pack_trainable else 0,
+             _json.dumps(monster_species_subset or []))
+        )
+
+    # Phase 1: Monster bootstrap (creatures frozen)
+    _mstage(15, 'M_Survive',
+            'Solo monsters, no creatures. Learn hunger management and '
+            'territory navigation. Baseline for predator NN.',
+            {'m_hunger': 1.0, 'm_territory_stay': 0.5,
+             'm_failed_actions': 0.3},
+            creature_frozen=True, monster_trainable=True,
+            monster_species_subset=['giant_rat', 'spitter_lizard',
+                                    'wild_boar'],
+            resume=14, ppo=50000)
+
+    _mstage(16, 'M_Eat',
+            'Meat items + passive grazing for low-INT, active HARVEST '
+            'for INT >= 4 herbivores/omnivores.',
+            {'m_hunger': 1.0, 'm_eat': 1.0, 'm_graze': 0.7,
+             'm_territory_stay': 0.3, 'm_failed_actions': 0.3},
+            creature_frozen=True, monster_trainable=True,
+            monster_species_subset=['giant_rat', 'spitter_lizard',
+                                    'wild_boar', 'honey_bees'],
+            resume=15, ppo=50000)
+
+    _mstage(17, 'M_Hunt',
+            'Frozen weak creatures added. Chase fleeing prey, attack, '
+            'eat corpses. Predation reward active.',
+            {'m_kills': 1.0, 'm_damage_dealt': 0.7, 'm_chase': 0.8,
+             'm_hunger': 0.7, 'm_eat': 0.7, 'm_hp': 0.5,
+             'm_territory_stay': 0.3},
+            creature_frozen=True, monster_trainable=True,
+            monster_species_subset=['grey_wolf', 'giant_rat',
+                                    'spitter_lizard', 'wild_boar'],
+            resume=16, ppo=80000)
+
+    _mstage(18, 'M_Pack',
+            'Multi-monster packs, PackNet activated. Cohesion, '
+            'territory holding, group sleep, role assignment.',
+            {'m_kills': 0.7, 'm_pack_cohesion': 1.0,
+             'm_territory_hold': 1.0, 'm_sleep_sync': 0.7,
+             'm_hunger': 0.5, 'm_hp': 0.5},
+            creature_frozen=True, monster_trainable=True,
+            pack_trainable=True,
+            monster_species_subset=['grey_wolf', 'giant_rat',
+                                    'honey_bees', 'army_ants'],
+            resume=17, ppo=80000)
+
+    # Phase 2: Monster society
+    _mstage(19, 'M_Dominance',
+            'Challenges for contest-type species, pairing-by-rank. '
+            'Fixed hierarchies (bees/ants) handle queen mechanics.',
+            {'m_kills': 0.5, 'm_pack_cohesion': 0.7,
+             'm_dominance_wins': 1.0, 'm_pair_success': 0.7,
+             'm_territory_hold': 0.7, 'm_hp': 0.5},
+            creature_frozen=True, monster_trainable=True,
+            pack_trainable=True, resume=18, ppo=60000)
+
+    _mstage(20, 'M_Lifecycle',
+            'Eggs, gestation, splits, merges, alpha death collapse. '
+            'Full pack population dynamics.',
+            {'m_reproduction': 1.0, 'm_pack_cohesion': 0.7,
+             'm_territory_hold': 0.7, 'm_kills': 0.5,
+             'm_egg_protect': 0.7, 'm_hp': 0.5},
+            creature_frozen=True, monster_trainable=True,
+            pack_trainable=True, resume=19, ppo=80000)
+
+    # Phase 3: Creature adaptation (monsters frozen)
+    _mstage(21, 'C_Predation',
+            'Monsters in world (frozen). Creatures learn flee/fight/'
+            'avoid. Cannibalism penalty active.',
+            {'exploration': 0.2, 'hp': 0.7, 'kills': 0.7,
+             'allies': 0.7, 'life_goals': 0.7, 'piety': 0.5,
+             'm_avoid_threat': 1.0, 'm_cannibal_penalty': 1.0,
+             'failed_actions': 1.0, 'water_danger': 0.5},
+            creature_frozen=False, monster_trainable=False,
+            pack_trainable=False,
+            monster_species_subset=['giant_rat', 'spitter_lizard',
+                                    'wild_boar'],
+            resume=14,
+            allowed_actions=_s12_actions, ppo=80000)
+
+    _mstage(22, 'C_Ecosystem',
+            'Full monster variety. Queen-targeting, territory rumor '
+            'sharing, multi-species threat assessment.',
+            {'exploration': 0.2, 'hp': 0.7, 'kills': 0.7,
+             'allies': 0.7, 'life_goals': 0.7, 'piety': 0.5,
+             'm_avoid_threat': 0.7, 'm_cannibal_penalty': 0.7,
+             'm_queen_kill_bonus': 1.0, 'm_territory_rumor': 0.5,
+             'failed_actions': 1.0, 'water_danger': 0.5},
+            creature_frozen=False, monster_trainable=False,
+            pack_trainable=False,
+            monster_species_subset=[],  # all species
+            resume=21,
+            allowed_actions=_s12_actions, ppo=80000)
+
+    # Phase 4: Co-evolution
+    _mstage(23, 'Coevo_A',
+            'Alternating epochs: 500 steps creatures only, 500 steps '
+            'monsters only, repeat. Both populations converge against '
+            'a frozen-opponent loop.',
+            {'exploration': 0.2, 'hp': 0.5, 'kills': 0.7,
+             'life_goals': 1.0, 'm_kills': 0.7,
+             'm_pack_cohesion': 0.7, 'm_territory_hold': 0.5},
+            creature_frozen=False, monster_trainable=True,
+            pack_trainable=True,
+            monster_species_subset=[],
+            resume=22,
+            allowed_actions=_s12_actions, ppo=120000)
+
+    _mstage(24, 'Coevo_B',
+            'League training with past policy snapshots. Engage only '
+            'if Coevo_A shows strategy oscillation.',
+            {'exploration': 0.2, 'hp': 0.5, 'kills': 0.7,
+             'life_goals': 1.0, 'm_kills': 0.7,
+             'm_pack_cohesion': 0.7, 'm_territory_hold': 0.5},
+            creature_frozen=False, monster_trainable=True,
+            pack_trainable=True,
+            monster_species_subset=[],
+            resume=23,
+            allowed_actions=_s12_actions, ppo=120000)
+
+    _mstage(25, 'Final',
+            'Both populations unfrozen simultaneously at reduced LR. '
+            'Long-tail refinement and equilibrium.',
+            {'exploration': 0.2, 'hp': 0.5, 'kills': 0.7,
+             'life_goals': 1.0, 'm_kills': 0.7,
+             'm_pack_cohesion': 0.7, 'm_territory_hold': 0.5},
+            creature_frozen=False, monster_trainable=True,
+            pack_trainable=True,
+            monster_species_subset=[],
+            resume=24,
+            lr=0.0001,  # half the default
+            allowed_actions=_s12_actions, ppo=200000)
+
+    # ==================================================================
     # MONSTER SPECIES (9 starter archetypes)
     # ==================================================================
 
@@ -1302,9 +1472,15 @@ def seed():
     print('  1 tool (shovel)')
     print('  7 jobs (farmer, miner, crafter, trader, hunter, healer, guard)')
     print('  9 processing recipes (bake, cook, jam, roast, dry, stew, smelt×2, charcoal)')
-    print('  14 curriculum stages (wander -> pickup -> hunger -> purpose -> harvest ->')
-    print('                          process -> jobs -> trade -> schedule -> reputation ->')
-    print('                          combat -> lifecycle -> religion -> mastery)')
+    print('  14 creature curriculum stages (wander -> pickup -> hunger -> purpose ->')
+    print('                          harvest -> process -> jobs -> trade -> schedule ->')
+    print('                          reputation -> combat -> lifecycle -> religion -> mastery)')
+    print('  11 monster/coevo curriculum stages (M_Survive -> M_Eat -> M_Hunt -> M_Pack ->')
+    print('                          M_Dominance -> M_Lifecycle -> C_Predation ->')
+    print('                          C_Ecosystem -> Coevo_A -> Coevo_B -> Final)')
+    print('  9 monster species (grey_wolf, giant_rat, cave_bear, spitter_lizard,')
+    print('                          honey_bees, dire_orc, deep_crawler, wild_boar,')
+    print('                          army_ants)')
 
 
 if __name__ == '__main__':

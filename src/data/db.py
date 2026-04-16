@@ -531,6 +531,26 @@ def _migrate(con: sqlite3.Connection) -> None:
     value        INTEGER NOT NULL,
     PRIMARY KEY (species_name, stat)
 )""",
+        "ALTER TABLE curriculum_stages ADD COLUMN monsters_enabled INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE curriculum_stages ADD COLUMN creature_frozen INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE curriculum_stages ADD COLUMN monster_trainable INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE curriculum_stages ADD COLUMN pack_trainable INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE curriculum_stages ADD COLUMN monster_species_subset TEXT NOT NULL DEFAULT '[]'",
+        """CREATE TABLE IF NOT EXISTS training_pairs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    creature_model_name TEXT,
+    creature_model_version INTEGER,
+    goal_model_name TEXT,
+    goal_model_version INTEGER,
+    monster_model_name TEXT,
+    monster_model_version INTEGER,
+    pack_model_name TEXT,
+    pack_model_version INTEGER,
+    current_stage INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT '',
+    notes TEXT NOT NULL DEFAULT ''
+)""",
     ]:
         try:
             con.execute(stmt)

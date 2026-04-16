@@ -642,13 +642,21 @@ class CreaturesMasterTab(ttk.Frame):
 
         self.species_tab = _SpeciesSubTab(nb)
         self.npc_tab = _NPCSubTab(nb)
+        # Monster species live alongside creature species in the same
+        # master tab — the subtab knows the separate monster_species
+        # table.
+        from editor.monster_species_tab import MonsterSpeciesTab
+        self.monster_species_tab = MonsterSpeciesTab(nb)
 
         nb.add(self.species_tab, text='  Species  ')
         nb.add(self.npc_tab, text='  NPCs  ')
+        nb.add(self.monster_species_tab, text='  Monster Species  ')
 
     def refresh_list(self):
         self.species_tab.refresh_list()
         self.npc_tab.refresh_list()
+        if hasattr(self, 'monster_species_tab'):
+            self.monster_species_tab.refresh_list()
 
     def refresh_sprite_dropdown(self):
         self.species_tab.refresh_sprite_dropdown()
