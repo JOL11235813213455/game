@@ -1051,6 +1051,21 @@ def run_imitation(net: TorchCreatureNet,
             sim.step_count += 1
             sim.game_clock.update(1.0)
 
+        # Write a "collecting" state so the viewer shows progress during
+        # the rollout phase before the supervised update.
+        from editor.simulation.train_state import write_parallel_state
+        write_parallel_state(
+            [{'worker_id': 0, 'alive': 0, 'total': 0,
+              'avg_reward': 0, 'samples': len(obs_buf),
+              'status': f'epoch {epoch+1}/{epochs} collecting...'}],
+            phase='IMITATION', step=epoch + 1,
+            info={
+                'progress_pct': round(100.0 * epoch / max(1, epochs), 1),
+                'steps_done': epoch,
+                'steps_total': epochs,
+                'status': f'collecting rollouts for epoch {epoch+1}...',
+            })
+
         if not obs_buf:
             print(f'  Epoch {epoch+1}: no labeled samples, skipping update')
             continue
@@ -1094,6 +1109,31 @@ def run_imitation(net: TorchCreatureNet,
         _log('imitation/accuracy', accuracy, epoch)
         print(f'  Epoch {epoch+1}/{epochs}: '
               f'labeled={n}, loss={avg_loss:.4f}, accuracy={accuracy*100:.1f}%')
+
+        # Live viewer update — reuse the parallel-state mechanism so
+        # the progress bar + stats render in the viewer. Fake a single
+        # "worker" whose stats are the epoch's summary.
+        from editor.simulation.train_state import write_parallel_state
+        pct = 100.0 * (epoch + 1) / max(1, epochs)
+        write_parallel_state(
+            [{'worker_id': 0, 'alive': n, 'total': n,
+              'avg_reward': accuracy, 'samples': n,
+              'deaths': 0, 'mean_ep_len': 0, 'min_ep_len': 0,
+              'max_ep_len': 0, 'in_flight': 0,
+              'status': f'epoch {epoch+1}/{epochs}'}],
+            phase='IMITATION',
+            step=epoch + 1,
+            info={
+                'progress_pct': round(pct, 1),
+                'steps_done': epoch + 1,
+                'steps_total': epochs,
+                'eta_text': '--',
+                'avg_reward': round(accuracy, 4),
+                'loss': round(avg_loss, 4),
+                'status': f'epoch {epoch+1}/{epochs}  '
+                          f'loss={avg_loss:.4f}  '
+                          f'acc={accuracy*100:.1f}%',
+            })
 
     if out_metrics is not None:
         out_metrics.update({
