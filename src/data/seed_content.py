@@ -1417,6 +1417,24 @@ def seed():
     # against it would regress the NN.
     # (default run_order='mappo,es,ppo' is inherited here)
 
+    # ------------------------------------------------------------------
+    # Episode length — how long a creature lives per training episode.
+    # Short episodes (500 steps) are fine for motor skills. Complex
+    # behaviors (trade chains, pack formation, condition lifecycles,
+    # mourning) need thousands of steps to produce observable
+    # cause→effect within one episode.
+    # ------------------------------------------------------------------
+    con.execute('UPDATE curriculum_stages SET episode_len = 1000 '
+                'WHERE stage_number BETWEEN 1 AND 3')
+    con.execute('UPDATE curriculum_stages SET episode_len = 2000 '
+                'WHERE stage_number BETWEEN 4 AND 7')
+    con.execute('UPDATE curriculum_stages SET episode_len = 5000 '
+                'WHERE stage_number BETWEEN 8 AND 10')
+    con.execute('UPDATE curriculum_stages SET episode_len = 10000 '
+                'WHERE stage_number BETWEEN 11 AND 14')
+    con.execute('UPDATE curriculum_stages SET episode_len = 10000 '
+                'WHERE stage_number >= 15')
+
     # ==================================================================
     # MONSTER SPECIES (9 starter archetypes)
     # ==================================================================

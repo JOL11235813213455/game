@@ -1632,6 +1632,11 @@ def _load_curriculum_stage(stage_number: int) -> dict:
     stage['offline_replay_epochs'] = (
         int(row['offline_replay_epochs']) if 'offline_replay_epochs' in cols else 0)
 
+    # Episode length — how many steps a single creature lives before
+    # the sim resets. 0 = legacy default.
+    stage['episode_len'] = (
+        int(row['episode_len']) if 'episode_len' in cols else 0)
+
     return stage
 
 
@@ -1755,7 +1760,8 @@ def _run_mappo_parallel(net, ppo, steps, arena_kwargs, signal_scales,
 def _run_ppo_parallel(net, ppo, steps, arena_kwargs, signal_scales,
                       sim_kwargs, action_mask, n_workers, viewer_extra=None,
                       adaptive_hparams: bool = True,
-                      out_metrics: dict = None):
+                      out_metrics: dict = None,
+                      **kwargs):
     """Parallel PPO: N workers run independent agent episodes.
 
     See run_ppo for semantics of ``adaptive_hparams`` and
@@ -1770,7 +1776,14 @@ def _run_ppo_parallel(net, ppo, steps, arena_kwargs, signal_scales,
     # Total sample budget = stage.ppo_steps × n_workers (each worker
     # contributes its own budget), so 3 workers with ppo_steps=30_000
     # produces 90k samples across the run.
-    rollout_per_worker = max(256, 2048 // n_workers)
+    # Episode length: use the stage's episode_len if provided (>0),
+    # otherwise default to a sensible minimum. The rollout_per_worker
+    # is set to the episode_len so the worker collects one full
+    # episode per collection cycle. This means longer episodes =
+    # fewer PPO updates per total_steps budget, but each update has
+    # richer credit-assignment horizon.
+    _ep_len = kwargs.get('episode_len', 0)
+    rollout_per_worker = _ep_len if _ep_len > 0 else max(256, 2048 // n_workers)
     target_total = steps * n_workers
     total_collected = 0
     config = {
@@ -2343,7 +2356,8 @@ def train_curriculum_stage(stage_number: int, model_name: str,
                 action_mask=stage['action_mask'],
                 n_workers=_ppo_parallel,
                 viewer_extra=_viewer_extra,
-                out_metrics=ppo_metrics)
+                out_metrics=ppo_metrics,
+                episode_len=stage.get('episode_len', 0))
         else:
             net = run_ppo(net, ppo, steps=stage['ppo_steps'],
                           checkpoint_dir=SAVE_DIR,

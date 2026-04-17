@@ -603,6 +603,12 @@ def _migrate(con: sqlite3.Connection) -> None:
         # Offline replay (train on saved trajectories — stub).
         "ALTER TABLE curriculum_stages ADD COLUMN offline_replay_path   TEXT    NOT NULL DEFAULT ''",
         "ALTER TABLE curriculum_stages ADD COLUMN offline_replay_epochs INTEGER NOT NULL DEFAULT 0",
+        # Episode length — how many ticks a creature lives before the
+        # sim resets. 0 = use legacy defaults (512 for parallel PPO,
+        # 5000 for sequential PPO). Longer episodes let the NN observe
+        # long-horizon cause→effect (trade chains, pack formation,
+        # condition lifecycles, mourning, arousal decay).
+        "ALTER TABLE curriculum_stages ADD COLUMN episode_len INTEGER NOT NULL DEFAULT 0",
         """CREATE TABLE IF NOT EXISTS training_pairs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,

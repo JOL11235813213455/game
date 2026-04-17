@@ -239,7 +239,8 @@ CREATE TABLE IF NOT EXISTS curriculum_stages (
     curiosity_weight       REAL    NOT NULL DEFAULT 0.0,
     curiosity_hidden       INTEGER NOT NULL DEFAULT 64,
     offline_replay_path    TEXT    NOT NULL DEFAULT '',
-    offline_replay_epochs  INTEGER NOT NULL DEFAULT 0
+    offline_replay_epochs  INTEGER NOT NULL DEFAULT 0,
+    episode_len            INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS creature_stats (
     creature_key TEXT NOT NULL REFERENCES creatures(key),
