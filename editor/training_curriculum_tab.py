@@ -156,41 +156,65 @@ class TrainingCurriculumTab(ttk.Frame):
         add_tooltip(cb4, 'When off, creatures never accumulate sleep debt or fatigue')
         row += 1
 
-        # Pipeline — JSON dict editor. Each key is a phase name; each
-        # value is a dict of that phase's parameters. Much cleaner to
-        # scan and edit than the previous 16-row grid with misaligned
-        # columns across phases. Phases with all-default/zero params
-        # can be omitted from the JSON (they'll use DB defaults).
+        # Allowed actions — moved above pipeline so it sits right after
+        # env toggles (both are "what's enabled" settings for the stage).
         ttk.Separator(f, orient=tk.HORIZONTAL).grid(
             row=row, column=0, columnspan=2, sticky='ew', pady=6)
         row += 1
-        ttk.Label(f, text='Pipeline (JSON)', font=('TkDefaultFont', 9, 'bold')
+        ttk.Label(f, text='Allowed actions (mask)', font=('TkDefaultFont', 9, 'bold')
                   ).grid(row=row, column=0, columnspan=2, sticky='w', padx=6, pady=2)
         row += 1
-        ttk.Label(f, text='Phases execute in run_order; params here override DB defaults.',
-                  foreground='gray').grid(row=row, column=0, columnspan=2,
-                                           sticky='w', padx=6)
+        self.actions_text = tk.Text(f, width=50, height=2, wrap=tk.NONE,
+                                     font=('monospace', 9))
+        self.actions_text.grid(row=row, column=0, columnspan=2,
+                                sticky='ew', padx=6, pady=2)
+        add_tooltip(self.actions_text,
+                    'JSON list of allowed action indices (empty = all). '
+                    'e.g. [0,1,2,3,4,5,6,7,38,40]')
         row += 1
 
-        self.pipeline_text = tk.Text(f, width=60, height=28, wrap=tk.NONE,
-                                      font=('monospace', 9))
-        self.pipeline_text.grid(row=row, column=0, columnspan=2,
-                                 sticky='ew', padx=6, pady=2)
-        add_tooltip(self.pipeline_text,
-                    'JSON dict of phase params. Keys: imitation, mappo, es, ppo, '
-                    'league, pbt, curiosity, offline_replay.\n\n'
-                    'Example:\n'
-                    '{\n'
-                    '  "imitation": {"epochs": 3, "teacher": "StatWeighted"},\n'
-                    '  "mappo": {"steps": 20000, "creatures": 10, "cols": 20},\n'
-                    '  "es": {"gens": 0, "variants": 20, "steps": 1000, "parallel": 4},\n'
-                    '  "ppo": {"steps": 20000, "parallel": 4, "creatures": 16, "cols": 25}\n'
-                    '}')
+        # Pipeline (left) + Signal scales (right) — side by side.
+        ttk.Separator(f, orient=tk.HORIZONTAL).grid(
+            row=row, column=0, columnspan=2, sticky='ew', pady=6)
         row += 1
+
+        dual_frame = ttk.Frame(f)
+        dual_frame.grid(row=row, column=0, columnspan=2, sticky='nsew', padx=6, pady=2)
+        dual_frame.columnconfigure(0, weight=1)
+        dual_frame.columnconfigure(1, weight=1)
+        row += 1
+
+        # --- Left: Pipeline JSON ---
+        pipe_frame = ttk.LabelFrame(dual_frame, text='Pipeline (JSON)')
+        pipe_frame.grid(row=0, column=0, sticky='nsew', padx=(0, 3), pady=0)
+        _pipe_sb = ttk.Scrollbar(pipe_frame, orient=tk.VERTICAL)
+        self.pipeline_text = tk.Text(pipe_frame, width=32, height=18, wrap=tk.NONE,
+                                      font=('monospace', 9),
+                                      yscrollcommand=_pipe_sb.set)
+        _pipe_sb.config(command=self.pipeline_text.yview)
+        self.pipeline_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        _pipe_sb.pack(side=tk.RIGHT, fill=tk.Y)
+        add_tooltip(self.pipeline_text,
+                    'JSON dict of per-phase params. Edit directly; '
+                    'save persists to flat DB columns.')
+
+        # --- Right: Signal scales JSON ---
+        sig_frame = ttk.LabelFrame(dual_frame, text='Reward signal scales')
+        sig_frame.grid(row=0, column=1, sticky='nsew', padx=(3, 0), pady=0)
+        _sig_sb = ttk.Scrollbar(sig_frame, orient=tk.VERTICAL)
+        self.scales_text = tk.Text(sig_frame, width=32, height=18, wrap=tk.NONE,
+                                    font=('monospace', 9),
+                                    yscrollcommand=_sig_sb.set)
+        _sig_sb.config(command=self.scales_text.yview)
+        self.scales_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        _sig_sb.pack(side=tk.RIGHT, fill=tk.Y)
+        add_tooltip(self.scales_text,
+                    'JSON dict: signal → scale. 0 = silenced; '
+                    'soft fade keeps old signals at 0.3-0.5.')
 
         # Run order + global hparams
         hp = ttk.Frame(f)
-        hp.grid(row=row, column=0, columnspan=2, sticky='w', padx=6, pady=(2, 4))
+        hp.grid(row=row, column=0, columnspan=2, sticky='w', padx=6, pady=(4, 2))
         row += 1
         ttk.Label(hp, text='Run order:').pack(side=tk.LEFT)
         self.v_run_order = tk.StringVar(value='mappo,es,ppo')
@@ -207,59 +231,15 @@ class TrainingCurriculumTab(ttk.Frame):
         self.v_lr = tk.StringVar()
         self.v_ent = tk.StringVar()
         self.v_resume = tk.StringVar()
-        self.v_episode_len = tk.StringVar(value='0')
         for lbl, var, w, tip in [
             ('LR:', self.v_lr, 8, 'Learning rate (Adam)'),
-            ('Entropy:', self.v_ent, 8, 'Entropy bonus coefficient'),
-            ('Episode len:', self.v_episode_len, 7, 'Creature lifespan per episode (0=legacy)'),
-            ('Resume:', self.v_resume, 5, 'Resume from stage N (blank=no auto-resume)'),
+            ('Ent:', self.v_ent, 8, 'Entropy bonus coefficient'),
+            ('Resume:', self.v_resume, 5, 'Resume from stage N (blank=auto)'),
         ]:
             ttk.Label(hp2, text=lbl).pack(side=tk.LEFT)
             e = ttk.Entry(hp2, textvariable=var, width=w)
-            e.pack(side=tk.LEFT, padx=(2, 8))
+            e.pack(side=tk.LEFT, padx=(2, 6))
             add_tooltip(e, tip)
-
-        # Signals
-        ttk.Separator(f, orient=tk.HORIZONTAL).grid(
-            row=row, column=0, columnspan=2, sticky='ew', pady=6)
-        row += 1
-        ttk.Label(f, text='Reward signal scales', font=('TkDefaultFont', 9, 'bold')
-                  ).grid(row=row, column=0, columnspan=2, sticky='w', padx=6, pady=2)
-        row += 1
-        ttk.Label(f, text='(0 = silenced; soft fade keeps old signals at 0.3-0.5)',
-                  foreground='gray').grid(row=row, column=0, columnspan=2,
-                                           sticky='w', padx=6)
-        row += 1
-
-        # Single Text widget for the JSON dict — simplest editable form
-        self.scales_text = tk.Text(f, width=50, height=4, wrap=tk.NONE,
-                                    font=('monospace', 9))
-        self.scales_text.grid(row=row, column=0, columnspan=2,
-                               sticky='ew', padx=6, pady=2)
-        add_tooltip(self.scales_text,
-                    'JSON dict mapping signal name to scale, e.g. {"exploration": 1.0, "hp": 0.5}')
-        row += 1
-
-        # Allowed actions (progressive action masking)
-        ttk.Separator(f, orient=tk.HORIZONTAL).grid(
-            row=row, column=0, columnspan=2, sticky='ew', pady=6)
-        row += 1
-        ttk.Label(f, text='Allowed actions (mask)', font=('TkDefaultFont', 9, 'bold')
-                  ).grid(row=row, column=0, columnspan=2, sticky='w', padx=6, pady=2)
-        row += 1
-        ttk.Label(f, text='(JSON list of action indices, empty = all allowed)',
-                  foreground='gray').grid(row=row, column=0, columnspan=2,
-                                           sticky='w', padx=6)
-        row += 1
-
-        self.actions_text = tk.Text(f, width=50, height=2, wrap=tk.NONE,
-                                     font=('monospace', 9))
-        self.actions_text.grid(row=row, column=0, columnspan=2,
-                                sticky='ew', padx=6, pady=2)
-        add_tooltip(self.actions_text,
-                    'JSON list of allowed action indices, e.g. [0,1,2,3,4,5,6,7,38,40]. '
-                    'Empty list [] means all actions are allowed.')
-        row += 1
 
         # Action buttons
         ttk.Separator(f, orient=tk.HORIZONTAL).grid(
@@ -373,6 +353,7 @@ class TrainingCurriculumTab(ttk.Frame):
                 'epochs': _g('offline_replay_epochs', 0),
             },
             'arena_map': _g('arena_map', ''),
+            'episode_len': _g('episode_len', 0),
         }
         return json.dumps(d, indent=2)
 
@@ -425,6 +406,7 @@ class TrainingCurriculumTab(ttk.Frame):
         flat['offline_replay_epochs'] = int(off.get('epochs', 0))
 
         flat['arena_map'] = d.get('arena_map', '')
+        flat['episode_len'] = int(d.get('episode_len', 0))
         return flat
 
     def refresh_list(self):
@@ -479,8 +461,6 @@ class TrainingCurriculumTab(ttk.Frame):
         _cols = set(r.keys())
         self.v_run_order.set(
             r['run_order'] if 'run_order' in _cols and r['run_order'] else 'mappo,es,ppo')
-        self.v_episode_len.set(
-            str(r['episode_len']) if 'episode_len' in _cols and r['episode_len'] is not None else '0')
         # Pretty-print signal scales for editing
         try:
             scales = json.loads(r['signal_scales'] or '{}')
@@ -519,7 +499,7 @@ class TrainingCurriculumTab(ttk.Frame):
             resume_str = self.v_resume.get().strip()
             resume = int(resume_str) if resume_str else None
             run_order = (self.v_run_order.get().strip() or 'mappo,es,ppo')
-            episode_len = int(self.v_episode_len.get() or 0)
+            episode_len = int(p.get('episode_len', 0))
         except (ValueError, json.JSONDecodeError) as e:
             messagebox.showerror('Validation', f'Invalid input: {e}')
             return
