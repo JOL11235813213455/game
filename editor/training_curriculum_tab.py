@@ -172,7 +172,7 @@ class TrainingCurriculumTab(ttk.Frame):
                                            sticky='w', padx=6)
         row += 1
 
-        self.pipeline_text = tk.Text(f, width=60, height=14, wrap=tk.NONE,
+        self.pipeline_text = tk.Text(f, width=60, height=28, wrap=tk.NONE,
                                       font=('monospace', 9))
         self.pipeline_text.grid(row=row, column=0, columnspan=2,
                                  sticky='ew', padx=6, pady=2)
@@ -319,72 +319,61 @@ class TrainingCurriculumTab(ttk.Frame):
     # ------------------------------------------------------------------
     @staticmethod
     def _row_to_pipeline_json(r) -> str:
-        """Build a pretty-printed JSON dict from flat curriculum_stages row."""
+        """Build a pretty-printed JSON dict from flat curriculum_stages row.
+
+        All phases are always included with all their parameters, even
+        when at defaults — the user wants full visibility of every knob.
+        """
         _cols = set(r.keys()) if hasattr(r, 'keys') else set()
         def _g(key, default=0):
             return r[key] if key in _cols and r[key] is not None else default
 
-        d = {}
-        # Only include phases that have non-zero/non-default params
-        imit = {}
-        if _g('imitation_epochs'):
-            imit['epochs'] = _g('imitation_epochs')
-            imit['batch_size'] = _g('imitation_batch_size', 256)
-            imit['teacher'] = _g('imitation_teacher', 'StatWeighted')
-        if imit:
-            d['imitation'] = imit
-
-        mappo = {}
-        if _g('mappo_steps'):
-            mappo['steps'] = _g('mappo_steps')
-        if _g('mappo_creatures'):
-            mappo['creatures'] = _g('mappo_creatures')
-        if _g('mappo_cols'):
-            mappo['cols'] = _g('mappo_cols')
-        if _g('mappo_rows'):
-            mappo['rows'] = _g('mappo_rows')
-        if mappo:
-            d['mappo'] = mappo
-
-        es = {}
-        if _g('es_generations'):
-            es['gens'] = _g('es_generations')
-        es['variants'] = _g('es_variants', 20)
-        es['steps'] = _g('es_steps', 1000)
-        if _g('es_parallel', 1) > 1:
-            es['parallel'] = _g('es_parallel', 1)
-        if es.get('gens'):
-            d['es'] = es
-
-        ppo = {}
-        if _g('ppo_steps'):
-            ppo['steps'] = _g('ppo_steps')
-        if _g('ppo_parallel', 1) > 1:
-            ppo['parallel'] = _g('ppo_parallel', 1)
-        if _g('ppo_creatures'):
-            ppo['creatures'] = _g('ppo_creatures')
-        if _g('ppo_cols'):
-            ppo['cols'] = _g('ppo_cols')
-        if _g('ppo_rows'):
-            ppo['rows'] = _g('ppo_rows')
-        if ppo:
-            d['ppo'] = ppo
-
-        # Stubs — only include if non-default
-        if _g('league_iterations'):
-            d['league'] = {'iterations': _g('league_iterations'),
-                           'pool_size': _g('league_pool_size', 4)}
-        if _g('pbt_population'):
-            d['pbt'] = {'population': _g('pbt_population'),
-                        'mutation_rate': float(_g('pbt_mutation_rate', 0.2))}
-        if float(_g('curiosity_weight', 0)) > 0:
-            d['curiosity'] = {'weight': float(_g('curiosity_weight')),
-                              'hidden': _g('curiosity_hidden', 64)}
-
-        arena_map = _g('arena_map', '')
-        if arena_map:
-            d['arena_map'] = arena_map
-
+        d = {
+            'imitation': {
+                'epochs':     _g('imitation_epochs', 0),
+                'batch_size': _g('imitation_batch_size', 256),
+                'teacher':    _g('imitation_teacher', 'StatWeighted'),
+                'parallel':   _g('imitation_parallel', 1),
+            },
+            'mappo': {
+                'steps':     _g('mappo_steps', 0),
+                'creatures': _g('mappo_creatures', 0),
+                'cols':      _g('mappo_cols', 0),
+                'rows':      _g('mappo_rows', 0),
+            },
+            'es': {
+                'gens':     _g('es_generations', 0),
+                'variants': _g('es_variants', 20),
+                'steps':    _g('es_steps', 1000),
+                'parallel': _g('es_parallel', 1),
+            },
+            'ppo': {
+                'steps':     _g('ppo_steps', 0),
+                'parallel':  _g('ppo_parallel', 1),
+                'creatures': _g('ppo_creatures', 0),
+                'cols':      _g('ppo_cols', 0),
+                'rows':      _g('ppo_rows', 0),
+            },
+            'league': {
+                'iterations': _g('league_iterations', 0),
+                'pool_size':  _g('league_pool_size', 4),
+                'parallel':   _g('league_parallel', 1),
+            },
+            'pbt': {
+                'population':        _g('pbt_population', 0),
+                'mutation_rate':     float(_g('pbt_mutation_rate', 0.2)),
+                'exploit_threshold': float(_g('pbt_exploit_threshold', 0.25)),
+            },
+            'curiosity': {
+                'weight': float(_g('curiosity_weight', 0.0)),
+                'hidden': _g('curiosity_hidden', 64),
+            },
+            'offline_replay': {
+                'path':   _g('offline_replay_path', ''),
+                'epochs': _g('offline_replay_epochs', 0),
+            },
+            'arena_map': _g('arena_map', ''),
+        }
         return json.dumps(d, indent=2)
 
     @staticmethod
